@@ -1,0 +1,1064 @@
+{
+  "schema_version": "1.0",
+  "id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0G03",
+  "version": 1,
+  "status": "draft",
+  "overlay": {
+    "id": "example-org",
+    "version": 1,
+    "hash": "19de9ee023c55588dad1db54e99a4bce5da8c60563f0394334cb56f57a02427d"
+  },
+  "title": "Check-in training for coordinators",
+  "request": {
+    "original_text": "Create project: train coordinators on the new event check-in process and get the Program Director's sign-off.",
+    "restatement": "Write the check-in guide page, build and dry-run training slides, run one session, check a coordinator can do it from the guide alone, and get sign-off.",
+    "clarifications": [
+      {
+        "id": "C-1",
+        "question": "Is the check-in screen already on staging?",
+        "answer": "Yes, it ships next month.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
+      },
+      {
+        "id": "C-2",
+        "question": "Live session or recording?",
+        "answer": "One live session; slides kept for later.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
+      }
+    ]
+  },
+  "scope": {
+    "in": [
+      "Guide page",
+      "Training slides, dry run and one session",
+      "Guide-only check and sign-off"
+    ],
+    "out": [
+      "Changes to the check-in screen",
+      "A recorded video"
+    ],
+    "assumptions": [
+      {
+        "text": "The guide ships with each deploy because the app serves docs at /help.",
+        "basis": "ev-github-gh-950546b8"
+      }
+    ]
+  },
+  "epic": {
+    "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:epic",
+    "tracker_ref": null,
+    "title": "Check-in training for coordinators",
+    "summary": "Coordinators are trained on the new event check-in steps from a written guide, with a dry run, a session, a guide-only check, and the Program Director's sign-off.",
+    "links": []
+  },
+  "executor": {
+    "profile": "junior_no_context",
+    "working_day_hours": 6
+  },
+  "open_questions": [],
+  "coverage": [
+    {
+      "system": "github",
+      "instance": "gh",
+      "skill": "groundwork-system-github",
+      "skill_version": "1.0.0",
+      "surface": "claude-code-local",
+      "status": "inspected",
+      "read_only": "enforced",
+      "inspected": [
+        "repo settings",
+        "workflows",
+        "environments",
+        "source files",
+        "tags"
+      ],
+      "not_inspected": [
+        "release and announcements channels"
+      ],
+      "reason": ""
+    },
+    {
+      "system": "jira",
+      "instance": "main",
+      "skill": "groundwork-tracker-jira",
+      "skill_version": "1.0.0",
+      "surface": "claude-code-local",
+      "status": "partial",
+      "read_only": "enforced",
+      "inspected": [
+        "project VOL configuration"
+      ],
+      "not_inspected": [
+        "issues"
+      ],
+      "reason": "Configuration only; issues are not needed for planning."
+    }
+  ],
+  "access_list": [
+    {
+      "id": "A1",
+      "role_key": "developer",
+      "system": "github",
+      "instance": "gh",
+      "level": "write on example-org/volunteer-portal (docs pull request)",
+      "needed_by": [
+        "P1-T01"
+      ]
+    },
+    {
+      "id": "A2",
+      "role_key": "comms",
+      "system": "files",
+      "instance": "training-folder",
+      "level": "edit in the shared training folder",
+      "needed_by": [
+        "P1-T02",
+        "P1-T04",
+        "P2-T05"
+      ]
+    },
+    {
+      "id": "A3",
+      "role_key": "comms",
+      "system": "github",
+      "instance": "gh",
+      "level": "coordinator login on staging and post in the announcements channel",
+      "needed_by": [
+        "P1-T03",
+        "P2-T01",
+        "P2-T03"
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "id": "P0",
+      "order": 0,
+      "name": "Setup",
+      "goal": "Every access request is in.",
+      "state": "drafted",
+      "depends_on": [],
+      "task_ids": [
+        "P0-T01"
+      ]
+    },
+    {
+      "id": "P1",
+      "order": 1,
+      "name": "Material and dry run",
+      "goal": "The guide page is merged and the slides are revised after a dry run.",
+      "state": "drafted",
+      "depends_on": [
+        "P0"
+      ],
+      "task_ids": [
+        "P1-T01",
+        "P1-T02",
+        "P1-T03",
+        "P1-T04"
+      ]
+    },
+    {
+      "id": "P2",
+      "order": 2,
+      "name": "Train and sign off",
+      "goal": "Coordinators are trained, one passes a guide-only check, and the Program Director signs off.",
+      "state": "drafted",
+      "depends_on": [
+        "P1"
+      ],
+      "task_ids": [
+        "P2-T01",
+        "P2-T02",
+        "P2-T03",
+        "P2-T04",
+        "P2-T05"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "P0-T01",
+      "order": 1,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P0-T01",
+      "phase": "P0",
+      "title": "Request access for every role in this plan",
+      "kind": "setup",
+      "role_key": "comms",
+      "points": 1,
+      "estimate_hours": 1,
+      "parallel_group": null,
+      "depends_on": [],
+      "waits_on": [],
+      "access": [],
+      "evidence_refs": [],
+      "produces": [
+        {
+          "type": "access_request",
+          "name": "A1"
+        },
+        {
+          "type": "access_request",
+          "name": "A2"
+        },
+        {
+          "type": "access_request",
+          "name": "A3"
+        }
+      ],
+      "instructions": {
+        "purpose": "Get every account and permission this plan needs requested on day one.",
+        "prerequisites": [],
+        "steps": [
+          {
+            "text": "Open the Access list table in the epic description. It has three lines, A1 to A3.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Open the access request link in the epic description and submit one request per line, naming the person the epic's role-holders list gives for that role. Paste this task's key into the reason.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "If the form says the person already has that access, note 'already granted' for that line.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Post one comment on this task with three lines: the access id, then the request reference or 'already granted'.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "All three lines have a request reference or 'already granted'."
+        ],
+        "verify": [
+          "The comment on this task has three lines, A1 to A3."
+        ],
+        "done_today": "The comment is posted. Waiting for grants is tracked on the tasks that need them."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Comment listing A1 to A3 with request references"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.access-request",
+        "rules_checked": []
+      }
+    },
+    {
+      "id": "P1-T01",
+      "order": 2,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P1-T01",
+      "phase": "P1",
+      "title": "Write the check-in section of the coordinator guide",
+      "kind": "docs",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 4,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P0-T01",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Portal Maintainer code owner review",
+          "kind": "review",
+          "owner_role_key": "maintainer"
+        }
+      ],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-950546b8",
+        "ev-github-gh-0f86b0c8"
+      ],
+      "produces": [
+        {
+          "type": "doc",
+          "name": "check-in guide page"
+        }
+      ],
+      "instructions": {
+        "purpose": "Coordinators need one written place to learn the new check-in steps.",
+        "prerequisites": [
+          "A1 is granted."
+        ],
+        "steps": [
+          {
+            "text": "Run git checkout main, git pull, then git checkout -b docs/check-in-guide.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Open docs/user-guide/coordinators/ and add check-in.md: how to open an event's check-in list, mark a volunteer arrived, and undo a mistaken check-in.",
+            "refs": [
+              "ev-github-gh-950546b8"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Link the new page from the coordinators index page.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Push, open a pull request to main with the template sections and this task's key, and link it here.",
+            "refs": [
+              "ev-github-gh-0f86b0c8"
+            ],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The guide has a check-in page linked from the index.",
+          "The ci check is green."
+        ],
+        "verify": [
+          "Preview the Markdown on the pull request and check every step reads in order."
+        ],
+        "done_today": "The pull request is open with green CI and review requested, linked on this task."
+      },
+      "visible_result": {
+        "type": "pr_opened",
+        "text": "PR opened, CI green"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "github.docs-change",
+        "rules_checked": []
+      }
+    },
+    {
+      "id": "P1-T02",
+      "order": 3,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P1-T02",
+      "phase": "P1",
+      "title": "Build the check-in training slides",
+      "kind": "training",
+      "role_key": "comms",
+      "points": 1,
+      "estimate_hours": 5,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P1-T01",
+          "satisfied_by": "merged"
+        }
+      ],
+      "waits_on": [],
+      "access": [
+        "A2"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-950546b8"
+      ],
+      "produces": [
+        {
+          "type": "doc",
+          "name": "training slides"
+        }
+      ],
+      "instructions": {
+        "purpose": "A 20-minute session needs slides that match the guide exactly.",
+        "prerequisites": [
+          "P1-T01 is merged.",
+          "A2 is granted."
+        ],
+        "steps": [
+          {
+            "text": "Make a copy of the team's slide template in the shared training folder and name it 'Check-in training'.",
+            "refs": [
+              "A2"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Make one slide per step of the check-in guide page, in the same order.",
+            "refs": [
+              "check-in guide page"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Add a last slide with the help link /help and who to ask in the announcements channel.",
+            "refs": [
+              "ev-github-gh-950546b8"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Share the deck link in a comment on this task.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "One slide per guide step, in order, plus a help slide."
+        ],
+        "verify": [
+          "Open the deck and the guide side by side; every guide step has its slide."
+        ],
+        "done_today": "The deck link is posted on this task."
+      },
+      "visible_result": {
+        "type": "doc_submitted",
+        "text": "Training deck shared"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.training-material",
+        "rules_checked": []
+      }
+    },
+    {
+      "id": "P1-T03",
+      "order": 4,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P1-T03",
+      "phase": "P1",
+      "title": "Dry-run the training with two coordinators",
+      "kind": "test",
+      "role_key": "business_user",
+      "points": 1,
+      "estimate_hours": 2,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P1-T02",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Two coordinators free for an hour",
+          "kind": "availability",
+          "owner_role_key": "business_user"
+        },
+        {
+          "what": "A3 granted (staging coordinator login)",
+          "kind": "access",
+          "owner_role_key": "admin"
+        }
+      ],
+      "access": [
+        "A3"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86"
+      ],
+      "produces": [
+        {
+          "type": "note",
+          "name": "dry-run notes"
+        }
+      ],
+      "instructions": {
+        "purpose": "Find the confusing parts before the real session.",
+        "prerequisites": [
+          "A3 is granted."
+        ],
+        "steps": [
+          {
+            "text": "Book an hour with two coordinators who have not seen the new check-in screen.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Present the training slides, then have each coordinator check in a test volunteer on staging using only the guide.",
+            "refs": [
+              "training slides",
+              "check-in guide page",
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Write down every place either of them hesitated or asked a question.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Post the list as a comment on this task.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "Both coordinators finished a check-in on staging.",
+          "Every hesitation is listed."
+        ],
+        "verify": [
+          "The comment names both coordinators' roles and lists the hesitations."
+        ],
+        "done_today": "The dry-run notes are posted on this task."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Dry-run notes posted"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.dry-run",
+        "rules_checked": []
+      }
+    },
+    {
+      "id": "P1-T04",
+      "order": 5,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P1-T04",
+      "phase": "P1",
+      "title": "Revise the slides and guide from the dry run",
+      "kind": "docs",
+      "role_key": "comms",
+      "points": 1,
+      "estimate_hours": 3,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P1-T03",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [],
+      "access": [
+        "A2"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-0f86b0c8"
+      ],
+      "produces": [
+        {
+          "type": "doc",
+          "name": "final training slides"
+        }
+      ],
+      "instructions": {
+        "purpose": "Fix what confused people before the real session.",
+        "prerequisites": [],
+        "steps": [
+          {
+            "text": "Open the dry-run notes and the training slides.",
+            "refs": [
+              "dry-run notes",
+              "training slides"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Change each slide the notes point at, and reply under each note with what changed.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Where the guide itself was unclear, open a small pull request to the guide page and link it here.",
+            "refs": [
+              "check-in guide page",
+              "ev-github-gh-0f86b0c8"
+            ],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "Every dry-run note has a reply saying what changed or why not."
+        ],
+        "verify": [
+          "Re-read the changed slides against the notes."
+        ],
+        "done_today": "The revised deck is shared and every note is answered."
+      },
+      "visible_result": {
+        "type": "doc_submitted",
+        "text": "Revised deck shared"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.revise-material",
+        "rules_checked": []
+      }
+    },
+    {
+      "id": "P2-T01",
+      "order": 6,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P2-T01",
+      "phase": "P2",
+      "title": "Schedule the training session and invite coordinators",
+      "kind": "comms",
+      "role_key": "comms",
+      "points": 1,
+      "estimate_hours": 1,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P1-T04",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [],
+      "access": [
+        "A3"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-950546b8"
+      ],
+      "produces": [
+        {
+          "type": "message",
+          "name": "training invitation"
+        }
+      ],
+      "instructions": {
+        "purpose": "Coordinators need the date and link well before the session.",
+        "prerequisites": [],
+        "steps": [
+          {
+            "text": "Pick a 30-minute slot in the next two weeks that the coordinator lead agrees to.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Post the invitation in the announcements channel with the date, time, call link and the help link /help.",
+            "refs": [
+              "A3",
+              "ev-github-gh-950546b8"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Paste the message link into a comment on this task.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The invitation is posted with date, time, call link and help link."
+        ],
+        "verify": [
+          "Open the posted message and check every detail is there."
+        ],
+        "done_today": "The invitation is posted and linked here."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Invitation link posted"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.announce",
+        "rules_checked": []
+      }
+    },
+    {
+      "id": "P2-T02",
+      "order": 7,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P2-T02",
+      "phase": "P2",
+      "title": "Run the training session",
+      "kind": "training",
+      "role_key": "comms",
+      "points": 1,
+      "estimate_hours": 2,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P2-T01",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Coordinators attend the session",
+          "kind": "availability",
+          "owner_role_key": "business_user"
+        }
+      ],
+      "access": [],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86"
+      ],
+      "produces": [
+        {
+          "type": "note",
+          "name": "session notes"
+        }
+      ],
+      "instructions": {
+        "purpose": "Coordinators learn the new check-in steps together, with time to try them.",
+        "prerequisites": [],
+        "steps": [
+          {
+            "text": "Open the call five minutes early and share the final training slides.",
+            "refs": [
+              "final training slides"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Walk through each slide, then have attendees check in a test volunteer on staging while you watch.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Post a comment on this task with the number of attendees and any question you could not answer.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The session ran and every attendee tried a check-in."
+        ],
+        "verify": [
+          "The comment has the attendee count and open questions."
+        ],
+        "done_today": "Attendance and open questions are posted here."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Attendance posted"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.training-session",
+        "rules_checked": []
+      }
+    },
+    {
+      "id": "P2-T03",
+      "order": 8,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P2-T03",
+      "phase": "P2",
+      "title": "Check in a test volunteer on staging using only the guide",
+      "kind": "uat",
+      "role_key": "business_user",
+      "points": 1,
+      "estimate_hours": 1,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P2-T02",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [],
+      "access": [
+        "A3"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86"
+      ],
+      "produces": [],
+      "instructions": {
+        "purpose": "Prove a coordinator can do it from the written guide alone.",
+        "prerequisites": [
+          "A3 is granted."
+        ],
+        "steps": [
+          {
+            "text": "Sign in to staging with your coordinator login and open event 1's check-in list.",
+            "refs": [
+              "A3",
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Follow the check-in guide page alone, without the slides, to check in and then undo one test volunteer.",
+            "refs": [
+              "check-in guide page"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Comment on this task 'passed' or the step where you got stuck.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "A coordinator checked in and undid a test volunteer from the guide alone."
+        ],
+        "verify": [
+          "The comment says 'passed' or names the step."
+        ],
+        "done_today": "The result is posted on this task."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "UAT result posted"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.uat",
+        "rules_checked": []
+      }
+    },
+    {
+      "id": "P2-T04",
+      "order": 9,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P2-T04",
+      "phase": "P2",
+      "title": "Prepare the sign-off packet for the Program Director",
+      "kind": "signoff_prep",
+      "role_key": "comms",
+      "points": 1,
+      "estimate_hours": 2,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P2-T03",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Program Director sign-off",
+          "kind": "approval",
+          "owner_role_key": "approver"
+        }
+      ],
+      "access": [],
+      "evidence_refs": [],
+      "produces": [
+        {
+          "type": "doc",
+          "name": "sign-off packet"
+        }
+      ],
+      "instructions": {
+        "purpose": "The Program Director signs off from one page, not five links in different places.",
+        "prerequisites": [],
+        "steps": [
+          {
+            "text": "Make one page with links to the guide page, the final training slides, the session notes and the UAT result.",
+            "refs": [
+              "check-in guide page",
+              "final training slides",
+              "session notes"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Add one line: 'Approve check-in training as complete?'",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Attach the page to this task and mention the Program Director.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The page links all four items and asks one question."
+        ],
+        "verify": [
+          "Open every link on the page."
+        ],
+        "done_today": "The packet is attached and the Program Director is asked."
+      },
+      "visible_result": {
+        "type": "doc_submitted",
+        "text": "Sign-off packet attached"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.signoff",
+        "rules_checked": []
+      }
+    },
+    {
+      "id": "P2-T05",
+      "order": 10,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G03:P2-T05",
+      "phase": "P2",
+      "title": "Hand the training material to the coordinator lead",
+      "kind": "handoff",
+      "role_key": "comms",
+      "points": 1,
+      "estimate_hours": 1,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P2-T04",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [],
+      "access": [
+        "A2"
+      ],
+      "evidence_refs": [],
+      "produces": [],
+      "instructions": {
+        "purpose": "The coordinator lead owns the material for the next new coordinator.",
+        "prerequisites": [],
+        "steps": [
+          {
+            "text": "Move the final training slides into the coordinators' shared folder.",
+            "refs": [
+              "final training slides",
+              "A2"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Comment on this task with where the slides, guide page and sign-off packet live, and mention the coordinator lead.",
+            "refs": [
+              "sign-off packet",
+              "check-in guide page"
+            ],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The coordinator lead has acknowledged the handoff on this task."
+        ],
+        "verify": [
+          "The comment names all three locations."
+        ],
+        "done_today": "The handoff comment is posted."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Handoff comment posted"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.handoff",
+        "rules_checked": []
+      }
+    }
+  ],
+  "standard_work": [
+    {
+      "kind": "test",
+      "tasks": [
+        "P1-T03"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "uat",
+      "tasks": [
+        "P2-T03"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "cutover",
+      "tasks": [],
+      "not_applicable_reason": "Nothing is switched over; the guide ships with the next regular deploy."
+    },
+    {
+      "kind": "rollback",
+      "tasks": [],
+      "not_applicable_reason": "This project changes no production system or data."
+    },
+    {
+      "kind": "docs",
+      "tasks": [
+        "P1-T01",
+        "P1-T04"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "handoff",
+      "tasks": [
+        "P2-T05"
+      ],
+      "not_applicable_reason": null
+    }
+  ],
+  "review": {
+    "validator": null,
+    "reviewer": null
+  },
+  "approvals": [],
+  "stamps": {
+    "release": "unreleased",
+    "core": "groundwork-core@1.0.0",
+    "contract": "1.0",
+    "plan_format": "1.0",
+    "skills": [
+      {
+        "name": "groundwork-system-github",
+        "version": "1.0.0",
+        "verified": "unverified"
+      },
+      {
+        "name": "groundwork-tracker-jira",
+        "version": "1.0.0",
+        "verified": "unverified"
+      }
+    ],
+    "overlay": {
+      "id": "example-org",
+      "version": 1,
+      "hash": "19de9ee023c55588dad1db54e99a4bce5da8c60563f0394334cb56f57a02427d",
+      "format": "1.0"
+    },
+    "validator": "1.0.0",
+    "surface": "claude-code-local",
+    "model": "unknown",
+    "compat": []
+  },
+  "history": [
+    {
+      "version": 1,
+      "at": "2026-11-14T19:02:11Z",
+      "change": "drafted",
+      "by": "groundwork-core"
+    }
+  ]
+}

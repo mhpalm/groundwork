@@ -10,3 +10,13 @@ These were settled while building v1 against spec draft 0.3. Each is a candidate
 6. The GitHub Issues plan store is a repo path only (`repo_path`); Jira uses issue attachments.
 7. One-day exceptions are approved with approval records of `kind: exception` on the exception gate; a phase-release record cannot accept an exception.
 8. `role_holders` entries carry the tracker `account_id`, which is what approval and lock checks compare against.
+
+## Added while building golden projects G2 to G9
+
+9. Intake identity is checked by a script, `check_identity.py`. Each connect report's URL and identity facts must match the overlay instance. A system that doesn't match stops and is recorded as not inspected; a tracker that doesn't match stops the run. A missing report counts as a mismatch.
+10. Run bundles are made and checked by `run_bundle.py`. Import refuses a bundle from another overlay id or overlay hash, a changed file or bundle, a path that leaves the run folder, evidence collected under another overlay, and an existing run folder.
+11. Revise mode's diff is computed by `revise_diff.py`. When a person changed a plan-owned field, the revised plan must carry exactly the tracker's text, or the diff is refused. A done task can't be edited or removed; the change becomes a follow-up task.
+12. GR-18 now also blocks a task that needs access to a system nobody inspected (an unsupported system, or a coverage row marked not inspected), unless an open question parks it.
+13. Preflight stops a task in the phase being written when it depends on a task a person deleted by hand. The split recommendation for a task whose points a person raised is posted once, whatever phase is being written, and recorded in the manifest (`split_comment`).
+14. Offering an outline phase is refused at every stage, not only at Proposal.
+15. G2 details P0 to P3 and leaves P4 and P5 as outline, because the shared G1 base puts its release in P3. The spec's "P0 to P2" is read as an example of the rule, not a fixed count.

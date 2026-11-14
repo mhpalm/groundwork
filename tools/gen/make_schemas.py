@@ -156,7 +156,9 @@ manifest = {
         "prev_hash": nullable(HEX), "written_at": TS, "run_id": STR,
         "relies_on": arr(obj({"ref": STR, "hash": HEX})),
         "items": arr(obj({"key": STR, "tracker_id": STR, "owned_hash": HEX,
-                          "links": arr(obj({"type": STR, "to_key": STR})), "not_ready": {"type": "boolean"}})),
+                          "links": arr(obj({"type": STR, "to_key": STR})), "not_ready": {"type": "boolean"},
+                          "split_comment": {"type": "boolean"}},
+                         required=["key", "tracker_id", "owned_hash", "links", "not_ready"])),
         "hash": HEX,
     }),
 }

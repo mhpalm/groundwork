@@ -1,0 +1,25 @@
+{
+  "connect-ok.json": {
+    "run": "continue",
+    "stopped": []
+  },
+  "connect-wrong-org.json": {
+    "run": "continue",
+    "stopped": [
+      "groundwork-system-github/gh"
+    ]
+  },
+  "connect-wrong-tracker.json": {
+    "run": "stop",
+    "stopped": [
+      "groundwork-tracker-jira/main"
+    ]
+  },
+  "foreign-bundle.json": {
+    "import": "refused",
+    "reason_contains": "CR-12"
+  },
+  "foreign-evidence.json": {
+    "validator_check": "CR-12"
+  }
+}

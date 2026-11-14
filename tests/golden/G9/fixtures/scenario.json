@@ -1,0 +1,62 @@
+{
+  "written_phases": [
+    "P0",
+    "P1"
+  ],
+  "release_phase": "P2",
+  "human_changes": {
+    "status": {
+      "P0-T01": "done",
+      "P0-T02": "done",
+      "P1-T01": "in_progress"
+    },
+    "ticked_steps": {
+      "P0-T02": [
+        1,
+        2,
+        3
+      ]
+    },
+    "notes_outside_markers": {
+      "P1-T02": "Coordinator lead: please keep the button grey."
+    },
+    "points": {
+      "P1-T03": 3
+    },
+    "deleted": [
+      "P1-T05"
+    ]
+  },
+  "expected_first_release": {
+    "ok": false,
+    "stops": [
+      "P2-T01"
+    ],
+    "warnings_include": [
+      "P1-T05"
+    ],
+    "no_drift": true,
+    "comment_split": [
+      "P1-T03"
+    ]
+  },
+  "revise_then_release": {
+    "repoint": {
+      "P2-T01": {
+        "from": "P1-T05",
+        "to": "P1-T04"
+      }
+    },
+    "expected": {
+      "ok": true,
+      "created_phase": "P2",
+      "points_kept": {
+        "P1-T03": 3
+      },
+      "split_comments": {
+        "P1-T03": 1
+      },
+      "recreated": []
+    }
+  }
+}

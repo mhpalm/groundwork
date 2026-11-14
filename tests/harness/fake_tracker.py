@@ -72,6 +72,10 @@ class FakeTracker:
         self.comments.append(c)
         return c
 
+    def comment_item(self, tid, account, body):
+        self._write()
+        self.items[tid].setdefault("comments", []).append({"author_account_id": account, "body": body})
+
     def put(self, name, obj):
         self._write()
         if name in self.store:
@@ -101,8 +105,9 @@ def planned_items(plan, overlay, phases):
     for t in sorted(plan["tasks"], key=lambda t: t["order"]):
         body = task_body(plan, overlay, t)
         fields = {"title": t["title"], "body_owned": body, "role_key": t["role_key"], "phase": t["phase"], "key": t["key"]}
+        deps = [f"gw:{plan['id']}:{d['task']}" for d in t["depends_on"]]
         out.append({"key": t["key"], "phase": t["phase"], "owned_hash": owned_hash(fields), "points": 1,
-                    "task": t, "body": body})
+                    "depends_on": deps, "task": t, "body": body})
     return out
 
 
@@ -112,7 +117,7 @@ def latest_manifest(tr, plan_id):
     latest, probs = verify_chain(ms)
     if probs:
         raise RuntimeError("; ".join(probs))
-    return latest
+    return copy.deepcopy(latest)
 
 
 def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic="VOL-1", hard_crash=False):
@@ -132,7 +137,8 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
             found.append({"key": h["key"], "tracker_id": h["tracker_id"], "owned_hash": owned_hash(tr.normalize(h)),
                           "under_epic": h["key"] in children, "points": h["points"]})
     manifest = latest_manifest(tr, plan["id"])
-    pf = create_steps.preflight([{k: p[k] for k in ("key", "phase", "owned_hash", "points")} for p in planned], found, manifest, phases)
+    pf = create_steps.preflight([{k: p[k] for k in ("key", "phase", "owned_hash", "points", "depends_on")} for p in planned],
+                                found, manifest, phases)
     if not pf["ok"]:
         tr.comment(account, create_steps.lock_line("release", run, account, tr.clock))
         return pf
@@ -157,6 +163,11 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
                 t = p["task"]
                 tid = tr.create_item(t["key"], t["title"], p["body"], t["role_key"], t["phase"])
                 items[t["key"]] = {"key": t["key"], "tracker_id": tid, "owned_hash": p["owned_hash"], "links": [], "not_ready": True}
+                pending += 1
+            elif a["action"] == "comment_split":
+                tr.comment_item(a["tracker_id"], account, "Groundwork: this task now carries more than 1 point. "
+                                "The points are kept; consider splitting it into one-day tasks in a revise run.")
+                items[a["key"]]["split_comment"] = True
                 pending += 1
             elif a["action"] == "adopt":
                 items[a["key"]] = {"key": a["key"], "tracker_id": a["tracker_id"], "owned_hash": p["owned_hash"], "links": [], "not_ready": True}

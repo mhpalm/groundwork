@@ -13,7 +13,7 @@ Usage:
 
 LOCK_COMMENTS: [{ref, author_account_id, created_at, body}] where body holds
   a gw-lock line: "gw-lock claim|renew|release run=<id> account=<id> expires=<ts>".
-PLANNED: [{key, phase, owned_hash, points}]   (owned_hash from check_hashes.py owned)
+PLANNED: [{key, phase, owned_hash, points, depends_on?: [keys]}]   (owned_hash from check_hashes.py owned)
 FOUND:   [{key, tracker_id, owned_hash, under_epic, points}]   (find_by_key across the project, cross-checked by list_children)
 """
 
@@ -99,6 +99,7 @@ def preflight(planned, found, manifest, phases):
             dupes.add(f["key"])
         found_by_key[f["key"]] = f
     actions, stops, warnings = [], [], []
+    deleted = {p["key"] for p in planned if p["key"] not in found_by_key and p["key"] in written}
     for p in planned:
         key = p["key"]
         in_scope = p["phase"] in phases
@@ -113,6 +114,11 @@ def preflight(planned, found, manifest, phases):
         if key in dupes:
             report("stop", "more than one item carries this key")
             continue
+        gone = sorted(set(p.get("depends_on", [])) & deleted)
+        if in_scope and gone:
+            report("stop", f"depends on {', '.join(gone)}, which was written and then deleted by hand; "
+                           "never recreated silently, so revise the plan first")
+            continue
         if f is None and w is None:
             if in_scope:
                 actions.append({"key": key, "action": "create"})
@@ -120,9 +126,6 @@ def preflight(planned, found, manifest, phases):
         if f is None and w is not None:
             report("stop", "manifest says written but no item has this key: deleted or moved; never recreated silently")
             continue
-        extra = []
-        if f.get("points", 1) > 1:
-            extra.append({"key": key, "action": "comment_split", "why": f"a person set {f['points']} points; keep them and recommend a split"})
         if w is None:
             if f["owned_hash"] == p["owned_hash"]:
                 if in_scope:
@@ -138,8 +141,11 @@ def preflight(planned, found, manifest, phases):
             actions.append({"key": key, "action": "skip", "tracker_id": f["tracker_id"]})
         if in_scope and not f.get("under_epic", True):
             actions.append({"key": key, "action": "link_parent", "tracker_id": f["tracker_id"], "why": "found outside the epic"})
-        if in_scope:
-            actions.extend(extra)
+        if f.get("points", 1) > 1 and w is not None and not w.get("split_comment"):
+            # A comment, not a change: posted once, whatever phase is being written, and recorded in the manifest.
+            # Points a person set are never changed.
+            actions.append({"key": key, "action": "comment_split", "tracker_id": f["tracker_id"],
+                            "why": f"a person set {f['points']} points; keep them and recommend a split"})
     return {"ok": not stops, "actions": actions, "stops": stops, "warnings": warnings}
 
 

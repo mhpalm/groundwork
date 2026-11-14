@@ -1,0 +1,37 @@
+{
+  "added": [
+    "P1-T06"
+  ],
+  "close": [
+    "P3-T03"
+  ],
+  "drift": [
+    "P1-T04"
+  ],
+  "deps_changed": {
+    "P1-T02": {
+      "added": [
+        "P1-T06"
+      ],
+      "removed": []
+    },
+    "P3-T04": {
+      "added": [
+        "P3-T02"
+      ],
+      "removed": [
+        "P3-T03"
+      ]
+    }
+  },
+  "changed_include": [
+    "P1-T05"
+  ],
+  "changed_exclude": [
+    "P0-T01",
+    "P0-T02",
+    "P1-T01",
+    "P1-T04"
+  ],
+  "refused": []
+}

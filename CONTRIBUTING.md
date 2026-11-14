@@ -27,6 +27,9 @@ Python 3.10 or later, standard library only:
 python3 tools/run_checks.py
 ```
 
+Golden projects are generated, never edited by hand. After changing a generator or anything G1 is built from, run
+`python3 tools/gen/make_g1.py` and then `python3 tools/gen/make_goldens.py` (G2 to G9 are variants of G1), and commit the result.
+
 ## Review
 
 The maintainer reviews and merges every change (see `GOVERNANCE.md`).

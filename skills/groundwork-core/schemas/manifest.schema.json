@@ -95,6 +95,9 @@
           },
           "not_ready": {
             "type": "boolean"
+          },
+          "split_comment": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,

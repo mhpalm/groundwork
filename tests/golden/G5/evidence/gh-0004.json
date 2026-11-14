@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-1abaef86",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0G05",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read workflow deploy.yml and environments",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": true,
+  "subject": {
+    "type": "workflow",
+    "name": "example-org/volunteer-portal:.github/workflows/deploy.yml@main"
+  },
+  "facts": {
+    "push_main_deploys": "staging",
+    "tag_pattern_deploys": {
+      "pattern": "v*",
+      "environment": "production"
+    },
+    "environments": {
+      "staging": {
+        "url": "https://staging.portal.example.org",
+        "required_reviewers": 0
+      },
+      "production": {
+        "url": "https://portal.example.org",
+        "required_reviewers": 1
+      }
+    },
+    "run_summary_shows_sha": true,
+    "workflow_dispatch_inputs": [
+      "ref",
+      "environment"
+    ]
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "d3f970913dd435cf30ef86c3f8d70b4df2f8c01a6612e32e9ce86d0eb53d5777"
+}
