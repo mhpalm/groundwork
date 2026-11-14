@@ -1,0 +1,132 @@
+# Golden project G4 overlay (same fictional org as G1)
+schema_version: "1.0"
+overlay_format: "1.0"
+id: example-org
+version: 1
+hash: "7a950008121621b1c1dc858e1a1d8882be04deb36734a5023da58ef6f87c83da"
+org_name: Example Org
+admins:
+  - account_id: acct-program-director
+    name: Program Director
+skills:
+  core: ">=1.0.0 <2.0.0"
+  systems:
+    - skill: groundwork-system-github
+      version: ">=1.0.0 <2.0.0"
+      instances:
+        - id: gh
+          url: "https://github.com/example-org"
+          expected_identity:
+            org: example-org
+      expectations:
+        - id: default-branch-protected
+          check: github.branch-protection-required
+          confirmed_value: true
+      readiness:
+        - check: github.required-ci-check
+          status: ok
+          note: ci
+  unsupported_systems:
+    - name: mailing-list
+      note: "The coordinators' mailing list tool has no Groundwork skill yet."
+  tracker:
+    skill: groundwork-tracker-jira
+    version: ">=1.0.0 <2.0.0"
+    instance:
+      id: main
+      url: "https://example-org.atlassian.net"
+      project: VOL
+    field_map:
+      key:
+        slot: label
+      points: Story Points
+      hours: Original Estimate
+      phase: label
+      blocked: Flagged
+      depends_on: Blocks
+      not_ready: label
+      role: label
+working_day_hours: 6
+assumed_executor: junior_no_context
+roles:
+  - key: developer
+    name: Developer
+  - key: maintainer
+    name: Portal Maintainer
+  - key: admin
+    name: Portal Admin
+  - key: business_user
+    name: Volunteer Coordinator
+  - key: comms
+    name: Comms Lead
+  - key: approver
+    name: Program Director
+task_hierarchy:
+  task_to_epic: parent
+  steps_as: checklist
+approval_gates:
+  - id: phase-release
+    applies_to: all_phases
+    approvers:
+      - account_id: acct-program-director
+        name: Program Director
+    min_approvers: 1
+  - id: exception
+    applies_to: one_day_exceptions
+    approvers:
+      - account_id: acct-program-director
+        name: Program Director
+  - id: overlay
+    applies_to: overlay_changes
+    approvers:
+      - account_id: acct-program-director
+        name: Program Director
+evidence_max_age_days: 7
+create_window_days: 3
+anchor:
+  tracker_ref: VOL-1
+role_holders:
+  - role_key: developer
+    display: Portal developers
+    handle: "@portal-devs"
+  - role_key: maintainer
+    display: Portal maintainers
+    handle: "@example-org/portal-maintainers"
+  - role_key: admin
+    display: Portal admin
+    handle: "@portal-admin"
+  - role_key: business_user
+    display: Volunteer coordinators
+    handle: "@coordinators"
+  - role_key: comms
+    display: Comms lead
+    handle: "@comms"
+  - role_key: approver
+    display: Program director
+    handle: "@program-director"
+tracker_access_assumed: true
+environments:
+  - name: staging
+    shared: true
+  - name: production
+    shared: true
+labels:
+  draft: gw-draft
+  not_ready: gw-not-ready
+plan_store:
+  mode: attachments
+  repo: null
+  path: null
+naming:
+  epic: "{title}"
+  task: "{verb} {object}"
+  label: groundwork
+access_requests:
+  how: "Use the IT access form; any team member may request for any role."
+  link: "https://example.org/access"
+  on_behalf_allowed: true
+channels:
+  release: "#portal-releases"
+  announcements: "#coordinators"
+run_storage:
+  claude-code-local: "~/groundwork/runs"

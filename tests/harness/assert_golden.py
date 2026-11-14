@@ -26,7 +26,8 @@ def assert_plan(project, plan):
     overlay = gw_yaml.load(os.path.join(d, "overlay", "overlay.yaml"))
     evidence = validate_plan.load_evidence(os.path.join(d, "evidence"))
     fails = []
-    R = validate_plan.check(plan, overlay, evidence, now=NOW)
+    offered = a.get("proposable_phases")
+    R = validate_plan.check(plan, overlay, evidence, offered_arg=offered, now=NOW)
     if len(R.blocking()) > a.get("validator_blockers", 0):
         fails += [f"validator: {f['check']} {f['target']}: {f['what']}" for f in R.blocking()]
     for f in R.items:
@@ -56,6 +57,31 @@ def assert_plan(project, plan):
         for t in plan["tasks"]:
             if forbidden.lower() in json.dumps(t["instructions"]).lower():
                 fails.append(f"{t['id']} contains planted directive text '{forbidden}'")
+    phases = {p["id"]: p for p in plan["phases"]}
+    for pid in a.get("outline_phases", []):
+        p = phases.get(pid)
+        if not p or p["state"] != "outline" or p["task_ids"]:
+            fails.append(f"{pid} should be an outline phase with no tasks")
+    for pid in a.get("unproposable_phases", []):
+        if not validate_plan.check(plan, overlay, evidence, offered_arg=[pid], now=NOW).blocking():
+            fails.append(f"offering {pid} should be blocked")
+    if "blocked_tasks" in a:
+        got = sorted({f["target"] for f in R.items if f["check"] == "GR-04"})
+        if got != sorted(a["blocked_tasks"]):
+            fails.append(f"open questions block {got}, expected {sorted(a['blocked_tasks'])}")
+    if "production_change_tasks_max" in a and sum(t["production_change"] for t in plan["tasks"]) > a["production_change_tasks_max"]:
+        fails.append("too many production-change tasks")
+    sw = {s["kind"]: s for s in plan["standard_work"]}
+    for k in a.get("standard_work_not_applicable", []):
+        if k not in sw or sw[k]["tasks"] or not (sw[k]["not_applicable_reason"] or "").strip():
+            fails.append(f"standard work {k} should be marked not applicable with a reason")
+    if "non_dev_share_min" in a:
+        share = sum(t["kind"] not in ("build", "config", "data") for t in plan["tasks"]) / max(1, len(plan["tasks"]))
+        if share < a["non_dev_share_min"]:
+            fails.append(f"only {share:.0%} of tasks are non-development work")
+    for sysname in a.get("coverage_not_inspected", []):
+        if not any(c["system"] == sysname and c["status"] == "not_inspected" and c["reason"].strip() for c in plan["coverage"]):
+            fails.append(f"coverage should show {sysname} as not inspected, with a reason")
     return fails
 
 

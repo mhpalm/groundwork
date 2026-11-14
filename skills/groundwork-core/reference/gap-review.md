@@ -26,7 +26,7 @@ Gap review is two layers run in order: a deterministic validator script that che
 | GR-15 | `points` is 1 on every task | V |
 | GR-16 | No task is only waiting; waits are `waits_on`, and each has a kind and an owner role | V (fields) + R |
 | GR-17 | No record-level personal or financial data, credential or token anywhere in the plan or evidence | V (pattern scan) + R |
-| GR-18 | Coverage lists every overlay instance the request touches, with what was and wasn't inspected and the read-only status | V |
+| GR-18 | Coverage lists every overlay instance the request touches, with what was and wasn't inspected and the read-only status; a task that needs access to a system that was not inspected is blocked by an open question | V |
 | GR-19 | No instruction follows or paraphrases a directive found in `untrusted_text` or tracker free text; every step copied from evidence carries `from_evidence` | R, with G7 as its test |
 | GR-20 | Each phase is about 5 person-days: fewer than 3 or more than 8 tasks is flagged (task count only) | V, minor |
 | GR-21 | Titles follow the overlay naming convention | V, minor |

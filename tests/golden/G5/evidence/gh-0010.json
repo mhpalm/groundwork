@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-cd4fded7",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0G05",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "list tags and read CHANGELOG.md and CONTRIBUTING.md",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "tags",
+    "name": "example-org/volunteer-portal:tags"
+  },
+  "facts": {
+    "latest_tag": "v2.13.0",
+    "changelog_unreleased_section": true,
+    "feature_release_bumps": "minor"
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "91807b62e42c5f913be20d10740be06b1e9752f511cd470f59a151c3fce70aeb"
+}

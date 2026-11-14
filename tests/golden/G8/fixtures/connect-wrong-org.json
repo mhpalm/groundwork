@@ -1,0 +1,20 @@
+[
+  {
+    "skill": "groundwork-system-github",
+    "instance": "gh",
+    "url": "https://github.com/second-org",
+    "account": "dev-login",
+    "identity": {
+      "org": "second-org"
+    }
+  },
+  {
+    "skill": "groundwork-tracker-jira",
+    "instance": "main",
+    "url": "https://example-org.atlassian.net",
+    "account": "acct-dev",
+    "identity": {
+      "project": "VOL"
+    }
+  }
+]

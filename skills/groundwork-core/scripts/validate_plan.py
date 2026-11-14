@@ -346,6 +346,16 @@ def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", pr
         R.add("GR-04", "blocker", tid, "an open question blocks this task", "Answer the question or leave this phase out of the offer",
               phase=tasks[tid]["phase"])
 
+    # GR-18: a task that relies on a system nobody inspected waits behind an open question
+    uninspected = {u["name"] for u in overlay.get("skills", {}).get("unsupported_systems", [])}
+    uninspected |= {c["system"] for c in plan["coverage"] if c["status"] == "not_inspected"}
+    lines = {a["id"]: a for a in plan["access_list"]}
+    for tid, t in tasks.items():
+        relied = sorted({lines[a]["system"] for a in t["access"] if a in lines and lines[a]["system"] in uninspected})
+        if relied and tid not in blocked:
+            R.add("GR-18", "blocker", tid, f"relies on {', '.join(relied)}, which was not inspected",
+                  "Park it behind an open question until that system is inspected or the question is answered", phase=t["phase"])
+
     # GR-09
     by_kind = {s["kind"]: s for s in plan["standard_work"]}
     for k in STANDARD_KINDS:
@@ -485,8 +495,9 @@ def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", pr
                     continue
                 R.add("REVIEW", "blocker", f["target"], f"reviewer blocker {f['id']} ({f['check']}) is {f['resolution']}",
                       "Resolve it in stage 6", phase=tasks[f["target"]]["phase"] if f["target"] in tasks else (f["target"] if f["target"] in phases else None))
-        if any(p["state"] == "outline" for p in plan["phases"] if p["id"] in offered):
-            R.add("OFFER", "blocker", None, "an outline phase cannot be offered", "Plan it in a later run")
+    for pid in sorted(offered):
+        if phases.get(pid, {}).get("state") == "outline":
+            R.add("OFFER", "blocker", pid, "an outline phase cannot be offered", "Plan it in a later run", phase=pid)
     return R
 
 
