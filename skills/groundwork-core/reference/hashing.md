@@ -1,0 +1,24 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+# What is hashed
+
+Hashes are SHA-256 over RFC 8785 canonical JSON, computed by `check_hashes.py`. The hashed subset is normative and listed below and defined by `scripts/gw_hash.py`:
+
+- `phase_hash`: the phase's id, name, goal, order, `depends_on` and `task_ids`, plus every field of each of its tasks (role by `role_key`, evidence by id). It excludes phase `state`, plan `status` and `version`, `stamps`, `review`, `history`, `coverage`, `epic.tracker_ref` and approvals, so moving a phase through its states never changes it.
+- `plan_hash`: every `phase_hash`, plus `scope`, `epic.title`, `epic.summary`, `open_questions` and `access_list`.
+- `proposal_hash`: the bytes of `proposal.md` as rendered from the plan by `render_proposal.py`; create re-renders and compares.
+- `write_list_hash`: the numbered write list, which names every write including lock comments, plan store files, manifest updates and labels.
+
+Evidence ids are derived from the subject (`ev-<platform>-<instance>-<8 hex of subject>`), so re-reading the same subject keeps its id and an approval survives a refresh that finds the same facts. Mutation tests confirm that a state change leaves `phase_hash` alone and any task edit changes it.
+
+## Exact fields
+
+The scripts in `scripts/gw_hash.py` are the definition; this list mirrors them.
+
+- `phase_hash` covers `{phase: {id, name, goal, order, depends_on, task_ids}, tasks: [every field of each task in the phase, sorted by id]}`.
+- `plan_hash` covers `{phase_hashes, scope, epic: {title, summary}, open_questions, access_list}`.
+- `write_list_hash` covers the whole write list rendered by `render_proposal.py write-list`.
+- `proposal_hash` is SHA-256 of the UTF-8 bytes of `proposal.md` exactly as rendered.
+- `view_hash` covers the reviewer bundle `{schema_version, plan: reviewer view, evidence (sorted by id), checklist_version, rules (sorted by id)}`.
+- `review_hash` covers `{findings, view_hash}` of the reviewer's output.
+- Evidence, manifest and overlay hashes cover the record without its own `hash` field.
+- The plan-owned hash of a tracker item covers `{title (whitespace collapsed), body_owned (the text between the groundwork owned markers, trailing spaces trimmed), role_key, phase, key}` as the tracker skill's `normalize` reads them back.

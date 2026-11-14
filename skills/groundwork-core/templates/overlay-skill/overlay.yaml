@@ -1,0 +1,27 @@
+# Filled in by Groundwork setup mode. See the core's reference/setup-mode.md.
+schema_version: "1.0"
+overlay_format: "1.0"
+id: ORG_SLUG
+version: 1
+hash: null
+org_name: ORG_NAME
+admins: []
+skills:
+  core: ">=1.0.0 <2.0.0"
+  systems: []
+  unsupported_systems: []
+  tracker: null
+working_day_hours: 6
+assumed_executor: junior_no_context
+roles: []
+task_hierarchy: {task_to_epic: parent, steps_as: checklist}
+approval_gates: []
+evidence_max_age_days: 7
+create_window_days: 3
+anchor: {tracker_ref: null}
+role_holders: []
+tracker_access_assumed: false
+environments: []
+labels: {draft: gw-draft, not_ready: gw-not-ready}
+plan_store: {mode: attachments}
+naming: {epic: "{title}", task: "{verb} {object}", label: groundwork}
