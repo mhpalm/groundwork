@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "groundwork/skill-manifest/1.0",
+  "title": "groundwork.yaml",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "kind": {
+      "enum": [
+        "core",
+        "system",
+        "tracker"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^groundwork-[a-z0-9-]+$",
+      "maxLength": 64
+    },
+    "platform": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "release": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contract": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "surfaces": {
+      "type": "object",
+      "properties": {
+        "claude-code-local": {
+          "type": "object",
+          "properties": {
+            "connect": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "coverage": {
+              "enum": [
+                "full",
+                "partial",
+                "none"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "connect",
+            "coverage"
+          ]
+        },
+        "claude-code-cloud": {
+          "type": "object",
+          "properties": {
+            "connect": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "coverage": {
+              "enum": [
+                "full",
+                "partial",
+                "none"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "connect",
+            "coverage"
+          ]
+        },
+        "claude-app": {
+          "type": "object",
+          "properties": {
+            "connect": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "coverage": {
+              "enum": [
+                "full",
+                "partial",
+                "none"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "connect",
+            "coverage"
+          ]
+        }
+      },
+      "required": [
+        "claude-code-local",
+        "claude-code-cloud",
+        "claude-app"
+      ],
+      "additionalProperties": false
+    },
+    "rule_prefix": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "name",
+    "platform",
+    "version",
+    "release",
+    "contract",
+    "surfaces",
+    "rule_prefix",
+    "sections"
+  ]
+}

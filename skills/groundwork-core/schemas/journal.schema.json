@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "groundwork/journal/1.0",
+  "title": "Groundwork journal line",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "event": {
+      "enum": [
+        "stage_started",
+        "stage_done",
+        "stopped",
+        "write_done",
+        "write_failed",
+        "handshake",
+        "resumed"
+      ]
+    },
+    "write_no": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "detail": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "at",
+    "run_id",
+    "stage",
+    "event",
+    "write_no",
+    "detail"
+  ]
+}

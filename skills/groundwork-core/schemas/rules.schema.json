@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "groundwork/rules/1.0",
+  "title": "Skill correctness rules",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*\\.[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "applies_when": {
+            "type": "string",
+            "minLength": 1
+          },
+          "check": {
+            "type": "string",
+            "minLength": 1
+          },
+          "severity": {
+            "enum": [
+              "blocker",
+              "minor"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^https://"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "applies_when",
+          "check",
+          "severity",
+          "source"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "rules"
+  ]
+}

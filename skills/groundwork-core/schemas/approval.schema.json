@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "groundwork/approval/1.0",
+  "title": "Groundwork approval record",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^A-\\d+$"
+    },
+    "kind": {
+      "enum": [
+        "initial",
+        "release",
+        "revision",
+        "exception"
+      ]
+    },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^gw-[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "plan_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "plan_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "plan_store_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^P\\d+$"
+      }
+    },
+    "phase_hashes": {
+      "type": "object",
+      "patternProperties": {
+        "^P\\d+$": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "write_list_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "proposal_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "review_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "view_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "accept_unverified_writer": {
+      "type": "boolean"
+    },
+    "gate": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approver": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "account_id",
+        "name"
+      ]
+    },
+    "minors_accepted": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "exceptions_accepted": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "artifact": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "tracker_comment_ref": {
+              "type": "string",
+              "minLength": 1
+            },
+            "author_account_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "verified_at": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "tracker_comment_ref",
+            "author_account_id",
+            "verified_at"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "kind",
+    "plan_id",
+    "plan_version",
+    "plan_hash",
+    "plan_store_ref",
+    "phases",
+    "phase_hashes",
+    "write_list_hash",
+    "proposal_hash",
+    "review_hash",
+    "view_hash",
+    "accept_unverified_writer",
+    "gate",
+    "approver",
+    "minors_accepted",
+    "exceptions_accepted",
+    "artifact"
+  ]
+}

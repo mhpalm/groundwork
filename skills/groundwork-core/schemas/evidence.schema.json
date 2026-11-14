@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "groundwork/evidence/1.0",
+  "title": "Groundwork evidence item",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^ev-[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{8}$"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^gw-[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "overlay_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "system": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "instance": {
+      "type": "string",
+      "minLength": 1
+    },
+    "skill": {
+      "type": "string",
+      "pattern": "^groundwork-[a-z0-9-]+@\\d+\\.\\d+\\.\\d+$"
+    },
+    "surface": {
+      "enum": [
+        "claude-code-local",
+        "claude-code-cloud",
+        "claude-app"
+      ]
+    },
+    "method": {
+      "type": "string",
+      "minLength": 1
+    },
+    "collected_at": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+    },
+    "recheck": {
+      "type": "boolean"
+    },
+    "subject": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name"
+      ]
+    },
+    "facts": {
+      "type": "object"
+    },
+    "untrusted_text": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "text"
+        ]
+      }
+    },
+    "sensitivity": {
+      "enum": [
+        "structure",
+        "config",
+        "count",
+        "restricted"
+      ]
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "run_id",
+    "overlay_id",
+    "system",
+    "instance",
+    "skill",
+    "surface",
+    "method",
+    "collected_at",
+    "recheck",
+    "subject",
+    "facts",
+    "untrusted_text",
+    "sensitivity",
+    "hash"
+  ]
+}

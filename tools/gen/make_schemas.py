@@ -1,0 +1,260 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Micah Palmquist, micah.palmquist@gmail.com
+"""Source of truth for the core JSON Schemas. Run to regenerate skills/groundwork-core/schemas/."""
+import json, os
+
+S = lambda **k: k
+STR = {"type": "string", "minLength": 1}
+ANYSTR = {"type": "string"}
+HEX = {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+TS = {"type": "string", "pattern": r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$"}
+SEMVER = {"type": "string", "pattern": r"^\d+\.\d+\.\d+$"}
+MAJMIN = {"type": "string", "pattern": r"^\d+\.\d+$"}
+PLAN_ID = {"type": "string", "pattern": "^gw-[0-9A-HJKMNP-TV-Z]{26}$"}
+TASK_ID = {"type": "string", "pattern": r"^P\d+-T\d{2,}$"}
+PHASE_ID = {"type": "string", "pattern": r"^P\d+$"}
+EV_ID = {"type": "string", "pattern": r"^ev-[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{8}$"}
+ROLE_KEYS = ["developer", "admin", "analyst", "qa", "business_user", "trainer", "comms", "maintainer", "approver"]
+SURFACES = ["claude-code-local", "claude-code-cloud", "claude-app"]
+SLUG = {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"}
+
+def obj(props, required=None, extra=False):
+    o = {"type": "object", "properties": props, "additionalProperties": extra}
+    o["required"] = list(props) if required is None else required
+    return o
+
+def arr(items, **k):
+    return {"type": "array", "items": items, **k}
+
+def nullable(s):
+    return {"anyOf": [s, {"type": "null"}]}
+
+stamps = obj({
+    "release": STR, "core": STR, "contract": MAJMIN, "plan_format": MAJMIN,
+    "skills": arr(obj({"name": STR, "version": SEMVER, "verified": {"enum": ["verified", "unverified", "mismatch"]}})),
+    "overlay": obj({"id": SLUG, "version": {"type": "integer", "minimum": 1}, "hash": HEX, "format": MAJMIN}),
+    "validator": SEMVER, "surface": {"enum": SURFACES}, "model": STR,
+    "compat": arr({"$ref": "#/$defs/compat"}),
+})
+compat = obj({"skill": STR, "result": {"enum": ["accepted", "accepted_with_note", "refused"]},
+              "verified": {"enum": ["verified", "unverified", "mismatch"]}, "notes": arr(ANYSTR)})
+
+step = obj({"text": STR, "refs": arr(STR), "from_evidence": nullable(EV_ID)})
+finding = obj({
+    "id": STR, "check": STR, "severity": {"enum": ["blocker", "minor"]},
+    "target": nullable(STR), "what": STR, "evidence_ids": arr(EV_ID), "suggested_fix": ANYSTR,
+    "resolution": {"enum": ["open", "fixed", "accepted_minor", "exception_requested", "needs_person"]},
+}, required=["id", "check", "severity", "target", "what", "evidence_ids", "suggested_fix", "resolution"])
+
+task = obj({
+    "id": TASK_ID, "order": {"type": "integer", "minimum": 1},
+    "key": {"type": "string", "pattern": r"^gw:gw-[0-9A-HJKMNP-TV-Z]{26}:P\d+-T\d{2,}$"},
+    "phase": PHASE_ID, "title": STR,
+    "kind": {"enum": ["setup", "design", "build", "config", "data", "test", "uat", "cutover", "rollback", "docs", "training", "comms", "signoff_prep", "handoff"]},
+    "role_key": {"enum": ROLE_KEYS}, "points": {"const": 1},
+    "estimate_hours": {"type": "number", "exclusiveMinimum": 0},
+    "parallel_group": nullable(ANYSTR),
+    "depends_on": arr(obj({"task": TASK_ID, "satisfied_by": {"enum": ["done", "merged", "deployed"]}})),
+    "waits_on": arr(obj({"what": STR, "kind": {"enum": ["approval", "review", "merge", "vendor", "job", "access", "availability"]}, "owner_role_key": {"enum": ROLE_KEYS}})),
+    "access": arr({"type": "string", "pattern": r"^A\d+$"}),
+    "evidence_refs": arr(EV_ID),
+    "produces": arr(obj({"type": STR, "name": STR})),
+    "instructions": obj({
+        "purpose": STR, "prerequisites": arr(STR), "steps": arr(step),
+        "acceptance_criteria": arr(STR), "verify": arr(STR), "done_today": STR,
+    }),
+    "visible_result": obj({"type": {"enum": ["pr_opened", "merged_pr", "deployed_change", "record_created", "record_updated", "doc_submitted", "comment_posted"]}, "text": STR}),
+    "production_change": {"type": "boolean"}, "data_change": {"type": "boolean"},
+    "test_tasks": arr(TASK_ID), "rollback_task": nullable(TASK_ID),
+    "exception": nullable(obj({"id": STR, "reason": STR, "days": {"type": "integer", "minimum": 2},
+                               "checkpoints": arr(obj({"day": {"type": "integer", "minimum": 1}, "visible_result": STR}))})),
+    "origin": obj({"pattern": nullable(STR), "rules_checked": arr(STR)}),
+})
+
+plan = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "groundwork/plan/1.0",
+    "title": "Groundwork plan",
+    "$defs": {"compat": compat, "finding": finding, "task": task, "stamps": stamps},
+    **obj({
+        "schema_version": {"const": "1.0"},
+        "id": PLAN_ID,
+        "version": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["draft", "in_review", "proposed", "active", "revising", "complete"]},
+        "overlay": obj({"id": SLUG, "version": {"type": "integer", "minimum": 1}, "hash": HEX}),
+        "title": STR,
+        "request": obj({"original_text": STR, "restatement": STR,
+                        "clarifications": arr(obj({"id": STR, "question": STR, "answer": STR, "answered_by": STR, "at": TS}))}),
+        "scope": obj({"in": arr(STR), "out": arr(STR),
+                      "assumptions": arr(obj({"text": STR, "basis": STR}))}),
+        "epic": obj({"key": {"type": "string", "pattern": r"^gw:gw-[0-9A-HJKMNP-TV-Z]{26}:epic$"},
+                     "tracker_ref": nullable(STR), "title": STR, "summary": STR,
+                     "links": arr(obj({"relation": {"enum": ["precedes", "follows", "relates"]}, "epic_ref": STR}))}),
+        "executor": obj({"profile": {"enum": ["junior_no_context", "junior_with_context", "mid_no_context"]},
+                         "working_day_hours": {"type": "number", "minimum": 1, "maximum": 8}}),
+        "open_questions": arr(obj({"id": {"type": "string", "pattern": r"^Q-\d+$"}, "text": STR,
+                                   "blocks": arr(STR), "status": {"enum": ["open", "answered"]},
+                                   "answer": nullable(ANYSTR), "answered_by": nullable(ANYSTR), "at": nullable(TS)})),
+        "coverage": arr(obj({"system": STR, "instance": STR, "skill": nullable(STR), "skill_version": nullable(STR),
+                             "surface": {"enum": SURFACES},
+                             "status": {"enum": ["inspected", "partial", "not_inspected"]},
+                             "read_only": {"enum": ["enforced", "instructed_only", "not_applicable"]},
+                             "inspected": arr(ANYSTR), "not_inspected": arr(ANYSTR), "reason": ANYSTR})),
+        "access_list": arr(obj({"id": {"type": "string", "pattern": r"^A\d+$"}, "role_key": {"enum": ROLE_KEYS},
+                                "system": STR, "instance": STR, "level": STR, "needed_by": arr(TASK_ID, minItems=1)})),
+        "phases": arr(obj({"id": PHASE_ID, "order": {"type": "integer", "minimum": 0}, "name": STR, "goal": STR,
+                           "state": {"enum": ["outline", "drafted", "reviewed", "approved", "writing", "released"]},
+                           "depends_on": arr(PHASE_ID), "task_ids": arr(TASK_ID),
+                           "carries_questions": arr(STR)},
+                          required=["id", "order", "name", "goal", "state", "depends_on", "task_ids"]), minItems=1),
+        "tasks": arr({"$ref": "#/$defs/task"}),
+        "standard_work": arr(obj({"kind": {"enum": ["test", "uat", "cutover", "rollback", "docs", "handoff"]},
+                                  "tasks": arr(TASK_ID), "not_applicable_reason": nullable(ANYSTR)})),
+        "review": obj({
+            "validator": nullable(obj({"version": SEMVER, "passed": {"type": "boolean"}, "results": arr({"$ref": "#/$defs/finding"})})),
+            "reviewer": nullable(obj({"surface": {"enum": SURFACES}, "model": STR, "view_hash": HEX, "independent": {"type": "boolean"},
+                                      "mode": {"enum": ["subagent", "fresh_conversation"]},
+                                      "findings": arr({"$ref": "#/$defs/finding"}), "not_performed": arr(ANYSTR)})),
+        }),
+        "approvals": arr(STR),
+        "stamps": {"$ref": "#/$defs/stamps"},
+        "history": arr(obj({"version": {"type": "integer", "minimum": 1}, "at": TS, "change": STR, "by": STR})),
+    }),
+}
+
+evidence = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/evidence/1.0", "title": "Groundwork evidence item",
+    **obj({
+        "schema_version": {"const": "1.0"}, "id": EV_ID, "run_id": PLAN_ID, "overlay_id": SLUG,
+        "system": SLUG, "instance": STR, "skill": {"type": "string", "pattern": r"^groundwork-[a-z0-9-]+@\d+\.\d+\.\d+$"},
+        "surface": {"enum": SURFACES}, "method": STR, "collected_at": TS, "recheck": {"type": "boolean"},
+        "subject": obj({"type": SLUG, "name": STR}), "facts": {"type": "object"},
+        "untrusted_text": arr(obj({"field": STR, "text": ANYSTR})),
+        "sensitivity": {"enum": ["structure", "config", "count", "restricted"]}, "hash": HEX,
+    }),
+}
+
+approval = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/approval/1.0", "title": "Groundwork approval record",
+    **obj({
+        "schema_version": {"const": "1.0"}, "id": {"type": "string", "pattern": r"^A-\d+$"},
+        "kind": {"enum": ["initial", "release", "revision", "exception"]},
+        "plan_id": PLAN_ID, "plan_version": {"type": "integer", "minimum": 1}, "plan_hash": HEX,
+        "plan_store_ref": STR, "phases": arr(PHASE_ID), "phase_hashes": {"type": "object", "patternProperties": {r"^P\d+$": HEX}, "additionalProperties": False},
+        "write_list_hash": HEX, "proposal_hash": HEX, "review_hash": HEX, "view_hash": HEX,
+        "accept_unverified_writer": {"type": "boolean"}, "gate": STR,
+        "approver": obj({"account_id": STR, "name": STR}),
+        "minors_accepted": arr(STR), "exceptions_accepted": arr(STR),
+        "artifact": nullable(obj({"tracker_comment_ref": STR, "author_account_id": STR, "verified_at": TS})),
+    }),
+}
+
+manifest = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/manifest/1.0", "title": "Groundwork create manifest",
+    **obj({
+        "schema_version": {"const": "1.0"}, "plan_id": PLAN_ID, "seq": {"type": "integer", "minimum": 1},
+        "prev_hash": nullable(HEX), "written_at": TS, "run_id": STR,
+        "relies_on": arr(obj({"ref": STR, "hash": HEX})),
+        "items": arr(obj({"key": STR, "tracker_id": STR, "owned_hash": HEX,
+                          "links": arr(obj({"type": STR, "to_key": STR})), "not_ready": {"type": "boolean"}})),
+        "hash": HEX,
+    }),
+}
+
+journal = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/journal/1.0", "title": "Groundwork journal line",
+    **obj({
+        "schema_version": {"const": "1.0"}, "at": TS, "run_id": STR, "stage": {"type": "integer", "minimum": 1, "maximum": 10},
+        "event": {"enum": ["stage_started", "stage_done", "stopped", "write_done", "write_failed", "handshake", "resumed"]},
+        "write_no": nullable({"type": "integer", "minimum": 1}), "detail": ANYSTR,
+    }),
+}
+
+handshake = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/handshake/1.0", "title": "Groundwork skill handshake",
+    **obj({"schema_version": {"const": "1.0"}, "name": {"type": "string", "pattern": "^groundwork-[a-z0-9-]+$", "maxLength": 64},
+           "kind": {"enum": ["system", "tracker"]}, "version": SEMVER, "release": STR, "contract": MAJMIN, "platform": SLUG}),
+}
+
+skill_manifest = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/skill-manifest/1.0", "title": "groundwork.yaml",
+    **obj({
+        "schema_version": {"const": "1.0"}, "kind": {"enum": ["core", "system", "tracker"]},
+        "name": {"type": "string", "pattern": "^groundwork-[a-z0-9-]+$", "maxLength": 64},
+        "platform": nullable(SLUG), "version": SEMVER, "release": STR, "contract": MAJMIN,
+        "surfaces": {"type": "object", "properties": {s: obj({"connect": arr(STR), "coverage": {"enum": ["full", "partial", "none"]}}) for s in SURFACES},
+                     "required": SURFACES, "additionalProperties": False},
+        "rule_prefix": nullable(SLUG), "sections": arr(STR),
+    }),
+}
+
+rules = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/rules/1.0", "title": "Skill correctness rules",
+    **obj({"schema_version": {"const": "1.0"},
+           "rules": arr(obj({"id": {"type": "string", "pattern": r"^[a-z0-9]+(-[a-z0-9]+)*\.[a-z0-9]+(-[a-z0-9]+)*$"},
+                             "applies_when": STR, "check": STR, "severity": {"enum": ["blocker", "minor"]},
+                             "source": {"type": "string", "pattern": "^https://"}}))}),
+}
+
+review = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/review/1.0", "title": "Independent reviewer output",
+    "$defs": {"finding": finding},
+    **obj({"schema_version": {"const": "1.0"}, "view_hash": HEX, "surface": {"enum": SURFACES}, "model": STR,
+           "mode": {"enum": ["subagent", "fresh_conversation"]},
+           "findings": arr({"$ref": "#/$defs/finding"}), "not_performed": arr(ANYSTR)}),
+}
+
+ROLE_HOLDER = obj({"role_key": {"enum": ROLE_KEYS}, "display": STR, "handle": nullable(STR), "account_id": nullable(STR)},
+                  required=["role_key", "display"])
+ACCOUNT = obj({"account_id": STR, "name": STR})
+overlay = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/overlay/1.0", "title": "Groundwork org overlay",
+    "patternProperties": {"^x-": True},
+    **obj({
+        "schema_version": {"const": "1.0"}, "overlay_format": {"type": "string", "pattern": r"^1\.\d+$"},
+        "id": SLUG, "version": {"type": "integer", "minimum": 1}, "hash": nullable(HEX), "org_name": STR,
+        "admins": arr(ACCOUNT, minItems=1),
+        "skills": obj({
+            "core": STR,
+            "systems": arr(obj({"skill": {"type": "string", "pattern": "^groundwork-system-[a-z0-9-]+$"}, "version": STR,
+                                "instances": arr(obj({"id": STR, "url": {"type": "string", "pattern": "^https://"},
+                                                      "expected_identity": {"type": "object"}}), minItems=1),
+                                "expectations": arr(obj({"id": STR, "check": STR, "confirmed_value": {}})),
+                                "readiness": arr(obj({"check": STR, "status": {"enum": ["ok", "gap_reported"]}, "note": ANYSTR}))})),
+            "unsupported_systems": arr(obj({"name": STR, "note": ANYSTR})),
+            "tracker": obj({"skill": {"type": "string", "pattern": "^groundwork-tracker-[a-z0-9-]+$"}, "version": STR,
+                            "instance": obj({"id": STR, "url": {"type": "string", "pattern": "^https://"}, "project": STR}),
+                            "field_map": obj({"key": obj({"slot": {"enum": ["label", "field", "item_property"]}, "name": STR}, required=["slot"]),
+                                              "points": STR, "hours": nullable(STR), "phase": STR, "blocked": STR,
+                                              "depends_on": STR, "not_ready": STR, "role": nullable(STR)},
+                                             required=["key", "points", "phase", "blocked", "depends_on", "not_ready"])}),
+        }),
+        "working_day_hours": {"type": "number", "minimum": 1, "maximum": 8},
+        "assumed_executor": {"enum": ["junior_no_context", "junior_with_context", "mid_no_context"]},
+        "roles": arr(obj({"key": {"enum": ROLE_KEYS}, "name": STR}), minItems=1),
+        "task_hierarchy": obj({"task_to_epic": {"enum": ["parent", "linked"]}, "steps_as": {"enum": ["checklist", "subtasks"]}}),
+        "approval_gates": arr(obj({"id": STR, "applies_to": {"enum": ["all_phases", "one_day_exceptions", "overlay_changes"]},
+                                   "approvers": arr(ACCOUNT, minItems=1), "min_approvers": {"type": "integer", "minimum": 1}},
+                                  required=["id", "applies_to", "approvers"]), minItems=1),
+        "evidence_max_age_days": {"type": "integer", "minimum": 1, "maximum": 90},
+        "create_window_days": {"type": "integer", "minimum": 1, "maximum": 30},
+        "anchor": obj({"tracker_ref": nullable(STR)}),
+        "role_holders": arr(ROLE_HOLDER),
+        "tracker_access_assumed": {"type": "boolean"},
+        "environments": arr(obj({"name": STR, "shared": {"type": "boolean"}})),
+        "labels": obj({"draft": STR, "not_ready": STR}),
+        "plan_store": obj({"mode": {"enum": ["attachments", "repo_path"]}, "repo": nullable(STR), "path": nullable(STR)}, required=["mode"]),
+        "naming": obj({"epic": STR, "task": STR, "label": STR}),
+        "access_requests": obj({"how": STR, "link": nullable(STR), "on_behalf_allowed": {"type": "boolean"}}),
+        "channels": obj({"release": nullable(STR), "announcements": nullable(STR)}),
+        "run_storage": {"type": "object", "properties": {s: STR for s in SURFACES}, "additionalProperties": False},
+    }, required=["schema_version", "overlay_format", "id", "version", "org_name", "admins", "skills", "roles", "approval_gates", "anchor"]),
+}
+
+out = os.path.join(os.path.dirname(__file__), "..", "..", "skills", "groundwork-core", "schemas")
+for name, sch in [("plan", plan), ("evidence", evidence), ("approval", approval), ("manifest", manifest), ("journal", journal),
+                  ("handshake", handshake), ("skill-manifest", skill_manifest), ("rules", rules), ("review", review), ("overlay", overlay)]:
+    with open(os.path.join(out, f"{name}.schema.json"), "w") as f:
+        json.dump(sch, f, indent=2)
+        f.write("\n")
+print("ok")
