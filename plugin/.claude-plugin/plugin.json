@@ -1,0 +1,7 @@
+{
+  "name": "groundwork",
+  "description": "Groundwork: turn a project request into one reviewed, approved tracker epic of one-day tasks.",
+  "version": "0.0.0",
+  "author": {"name": "Micah Palmquist"},
+  "license": "Apache-2.0"
+}

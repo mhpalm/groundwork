@@ -1,0 +1,13 @@
+schema_version: "1.0"
+kind: system
+name: groundwork-system-github
+platform: github
+version: 1.0.0
+release: unreleased
+contract: "1.0"
+surfaces:
+  claude-code-local: {connect: [cli, mcp], coverage: full}
+  claude-code-cloud: {connect: [mcp, cli], coverage: partial}
+  claude-app: {connect: [mcp], coverage: partial}
+rule_prefix: github
+sections: [handshake, connect, discover, evidence_types, coverage, rules, readiness, expectations, breakdown, standard_work]

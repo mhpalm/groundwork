@@ -1,0 +1,13 @@
+schema_version: "1.0"
+kind: tracker
+name: groundwork-tracker-github
+platform: github
+version: 1.0.0
+release: unreleased
+contract: "1.0"
+surfaces:
+  claude-code-local: {connect: [cli, mcp], coverage: full}
+  claude-code-cloud: {connect: [mcp], coverage: partial}
+  claude-app: {connect: [mcp], coverage: partial}
+rule_prefix: github
+sections: [handshake, connect, coverage, capabilities, discover_config, map, readiness, configure, list_children, find_by_key, read_epic, write, plan_store, lock, rules, normalize]

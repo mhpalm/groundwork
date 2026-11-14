@@ -96,6 +96,14 @@ class Drift(unittest.TestCase):
         item["title"] = "  " + item["title"] + "  "
         self.assertTrue(run_create(tr, plan, ov, PH, run="run-2")["ok"])
 
+    def test_ticked_steps_are_not_drift(self):
+        plan, ov = g1()
+        tr = FakeTracker()
+        run_create(tr, plan, ov, PH)
+        item = next(i for i in tr.items.values() if i["key"].endswith("P1-T02"))
+        item["body"] = item["body"].replace("- [ ] 1.", "- [x] 1.").replace("- [ ] 2.", "- [X] 2.")
+        self.assertTrue(run_create(tr, plan, ov, PH, run="run-2")["ok"])
+
     def test_deleted_item_stops_and_is_not_recreated(self):
         plan, ov = g1()
         tr = FakeTracker()

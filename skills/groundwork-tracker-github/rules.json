@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "rules": [
+    {"id": "github.sub-issue-same-owner", "applies_when": "task_to_epic is parent", "check": "The epic and every task issue are in repositories with the same owner", "severity": "blocker", "source": "https://docs.github.com/en/rest/issues/sub-issues"},
+    {"id": "github.approval-from-own-account", "applies_when": "Any approval", "check": "Approval records are read from issue comments by the numeric user id of the comment's author, and a comment with updated_at different from created_at is refused", "severity": "blocker", "source": "https://docs.github.com/en/rest/issues/comments"}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "rules": [
+    {"id": "jira.no-description-only-key", "applies_when": "Choosing the key slot", "check": "The key is in a label or a dedicated field, never only in the description", "severity": "blocker", "source": "https://developer.atlassian.com/cloud/jira/platform/jira-entity-properties/"},
+    {"id": "jira.scoped-read-token", "applies_when": "Discovery or preflight from local Claude Code with an API token", "check": "Coverage says read_only enforced only when the token was created with read scopes alone", "severity": "minor", "source": "https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/"}
+  ]
+}

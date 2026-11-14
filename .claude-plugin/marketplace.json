@@ -1,0 +1,7 @@
+{
+  "name": "groundwork",
+  "owner": {"name": "Micah Palmquist"},
+  "plugins": [
+    {"name": "groundwork", "source": "./plugin", "description": "Groundwork core, GitHub system skill, and GitHub Issues and Jira tracker skills."}
+  ]
+}

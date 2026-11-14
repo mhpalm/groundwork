@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "types": {
+    "repo": {"type": "object", "properties": {"default_branch": {"type": "string"}, "required_approving_reviews": {"type": "integer"}, "code_owner_review": {"type": "boolean"}, "required_checks": {"type": "array", "items": {"type": "string"}}, "tag_protection": {"type": "boolean"}, "visibility": {"enum": ["public", "private", "internal"]}, "rulesets": {"type": "integer"}}, "additionalProperties": false},
+    "file": {"type": "object"},
+    "workflow": {"type": "object", "properties": {"triggers": {"type": "array", "items": {"type": "string"}}, "steps": {"type": "array", "items": {"type": "string"}}, "check_name": {"type": "string"}}, "additionalProperties": true},
+    "environments": {"type": "object"},
+    "tags": {"type": "object", "properties": {"latest_tag": {"type": "string"}, "changelog_unreleased_section": {"type": "boolean"}, "feature_release_bumps": {"enum": ["major", "minor", "patch"]}}, "additionalProperties": true},
+    "secrets": {"type": "object", "properties": {"names": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false},
+    "seed": {"type": "object"}
+  }
+}

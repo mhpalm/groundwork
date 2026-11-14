@@ -251,10 +251,21 @@ overlay = {
     }, required=["schema_version", "overlay_format", "id", "version", "org_name", "admins", "skills", "roles", "approval_gates", "anchor"]),
 }
 
+import sys
 out = os.path.join(os.path.dirname(__file__), "..", "..", "skills", "groundwork-core", "schemas")
+check = "--check" in sys.argv
+stale = []
 for name, sch in [("plan", plan), ("evidence", evidence), ("approval", approval), ("manifest", manifest), ("journal", journal),
                   ("handshake", handshake), ("skill-manifest", skill_manifest), ("rules", rules), ("review", review), ("overlay", overlay)]:
-    with open(os.path.join(out, f"{name}.schema.json"), "w") as f:
-        json.dump(sch, f, indent=2)
-        f.write("\n")
+    path = os.path.join(out, f"{name}.schema.json")
+    text = json.dumps(sch, indent=2) + "\n"
+    if check:
+        if not os.path.exists(path) or open(path).read() != text:
+            stale.append(name)
+        continue
+    with open(path, "w") as f:
+        f.write(text)
+if stale:
+    print("schemas out of date (run tools/gen/make_schemas.py):", ", ".join(stale))
+    sys.exit(1)
 print("ok")

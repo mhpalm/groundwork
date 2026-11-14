@@ -59,7 +59,10 @@ def owned_hash(fields):
     if missing:
         raise ValueError(f"normalized fields missing {missing}")
     norm = {k: fields[k] for k in want}
-    norm["body_owned"] = "\n".join(line.rstrip() for line in norm["body_owned"].replace("\r\n", "\n").strip().split("\n"))
+    lines = [line.rstrip() for line in norm["body_owned"].replace("\r\n", "\n").strip().split("\n")]
+    # A person ticking a checklist step is progress, not drift.
+    lines = [re.sub(r"^- \[[xX]\] ", "- [ ] ", line) for line in lines]
+    norm["body_owned"] = "\n".join(lines)
     norm["title"] = " ".join(norm["title"].split())
     return hash_value(norm)
 

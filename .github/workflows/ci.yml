@@ -1,0 +1,22 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Deterministic checks
+        run: python3 tools/run_checks.py
+      - name: DCO sign-off on every commit
+        if: github.event_name == 'pull_request'
+        run: python3 tools/check_dco.py "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
