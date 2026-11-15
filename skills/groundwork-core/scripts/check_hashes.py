@@ -113,7 +113,14 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
         return [], [f"plan version {latest_stored_version} is stored, so every pending set at version {plan['version']} "
                     "is void; re-propose against the current version"]
     if anchor["overlay_id"] != overlay["id"] or anchor["version"] != overlay["version"] or anchor["hash"] != overlay.get("hash"):
-        probs.append("the loaded overlay does not match the latest admin-anchored overlay record (CR-12)")
+        bound = plan.get("overlay", {})
+        if resuming_writes and bound.get("id") == overlay["id"] and bound.get("hash") == overlay.get("hash"):
+            # thirteenth review, M3: an admin published a new overlay while the retire was in progress. The
+            # retire can't be drafted again, so its resume runs with the overlay the plan binds; approvers
+            # are still checked against both that overlay's gates and the latest anchor's
+            info.append("the overlay changed since this retire started; its resume runs with the overlay the plan binds (CR-12)")
+        else:
+            probs.append("the loaded overlay does not match the latest admin-anchored overlay record (CR-12)")
     if anchor.get("author_account_id") not in {a["account_id"] for a in overlay["admins"]}:
         probs.append("the anchored overlay record was not authored by an overlay admin")
     schema = load_schema("approval")
@@ -125,6 +132,11 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
     gates = {g["id"]: g for g in overlay["approval_gates"]}
     window = overlay.get("create_window_days", 3)
     records = []
+    # thirteenth review, M2: on the resume of a retire whose writes started, a record in this set that fails a
+    # per-record check (edited, copied by another account, wrong scope) is not counted and is reported, never
+    # a stop: no new set can be proposed, so a fresh record from an approver must be able to reach quorum
+    bad = info if resuming_writes else probs
+    rec_note = " (not counted; post a fresh record)" if resuming_writes else ""
     for c in comments:
         m = APPROVAL_BLOCK.search(c.get("body", ""))
         if not m:
@@ -144,32 +156,32 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
             continue
         errs = validate(rec, schema)
         if errs:
-            probs.append(f"comment {c['ref']}: {errs[0]}")
+            bad.append(f"comment {c['ref']}: {errs[0]}" + rec_note)
             continue
         if c["updated_at"] != c["created_at"]:
-            probs.append(f"comment {c['ref']} was edited after it was posted; edited approvals are refused")
+            bad.append(f"comment {c['ref']} was edited after it was posted; edited approvals are refused" + rec_note)
             continue
         if c["author_account_id"] != rec["approver"]["account_id"]:
-            probs.append(f"comment {c['ref']} names approver {rec['approver']['account_id']} but was posted by {c['author_account_id']}")
+            bad.append(f"comment {c['ref']} names approver {rec['approver']['account_id']} but was posted by {c['author_account_id']}" + rec_note)
             continue
         gate = gates.get(rec["gate"])
         anchored = set(anchor.get("gates", {}).get(rec["gate"], []))
         if not gate or c["author_account_id"] not in {a["account_id"] for a in gate["approvers"]} or c["author_account_id"] not in anchored:
-            probs.append(f"comment {c['ref']}: {c['author_account_id']} is not an anchored approver on gate {rec['gate']}")
+            bad.append(f"comment {c['ref']}: {c['author_account_id']} is not an anchored approver on gate {rec['gate']}" + rec_note)
             continue
         rec_scope = rec.get("scope", "phases")
         if scope == "plan_level":
             if rec_scope != "plan_level" or rec["kind"] not in PLAN_LEVEL_KINDS or rec["phases"]:
-                probs.append(f"comment {c['ref']}: a plan-level set takes only plan_level records with no phases "
-                             f"(found {rec_scope}, {rec['kind']})")
+                bad.append(f"comment {c['ref']}: a plan-level set takes only plan_level records with no phases "
+                             f"(found {rec_scope}, {rec['kind']})" + rec_note)
                 continue
         elif rec_scope != "phases" or rec["kind"] not in PHASE_KINDS:
-            probs.append(f"comment {c['ref']}: a phase set takes only phase records (found {rec_scope}, {rec['kind']})")
+            bad.append(f"comment {c['ref']}: a phase set takes only phase records (found {rec_scope}, {rec['kind']})" + rec_note)
             continue
         elif rec["kind"] != "exception" and sorted(rec["phases"]) != sorted(wl.get("phases", [])):
             # a record approves the whole offer; a smaller offer is a new proposal with its own write list
-            probs.append(f"comment {c['ref']}: approves {', '.join(rec['phases']) or 'no phase'}, but the offer is "
-                         f"{', '.join(wl.get('phases', []))}; a record approves the whole offer, so propose again to offer less")
+            bad.append(f"comment {c['ref']}: approves {', '.join(rec['phases']) or 'no phase'}, but the offer is "
+                         f"{', '.join(wl.get('phases', []))}; a record approves the whole offer, so propose again to offer less" + rec_note)
             continue
         stale = []
         if rec["plan_hash"] != p_hash:
@@ -184,10 +196,10 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
         if rec["view_hash"] != review["view_hash"]:
             stale.append("view_hash")
         if stale:
-            probs.append(f"comment {c['ref']}: does not match the current plan ({', '.join(stale)}); the approval is void")
+            bad.append(f"comment {c['ref']}: does not match the current plan ({', '.join(stale)}); the approval is void" + rec_note)
             continue
         if unverified_writer and not rec["accept_unverified_writer"]:
-            probs.append(f"comment {c['ref']}: the tracker skill is unverified on this surface and the record does not accept that")
+            bad.append(f"comment {c['ref']}: the tracker skill is unverified on this surface and the record does not accept that" + rec_note)
             continue
         if (now - ts(c["created_at"])).days >= window and not resuming_writes:
             # an expired record is information, never a problem: fresh records for the same proposal

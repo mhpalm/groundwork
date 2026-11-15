@@ -108,7 +108,9 @@ def recheck(wl, items, seen, manifest=None, warnings=None):
 
     Once the retire's status intent is recorded, proposing again is impossible (the gate allows only this
     retire's resume), so a child a person added since is left open and reported, and an item started since
-    is closed as approved and reported; both go to warnings (eleventh review, M2)."""
+    is closed as approved and reported; both go to warnings (eleventh review, M2). So do an item open again
+    since the proposal, a plan-owned item no manifest records, and an item this retire closed that a person
+    reopened: each is left open (twelfth review, M1; thirteenth review, M1 and m1)."""
     resuming = bool((manifest or {}).get("status_file"))
     warnings = warnings if warnings is not None else []
     if wl.get("kind") != "retire":
@@ -117,6 +119,7 @@ def recheck(wl, items, seen, manifest=None, warnings=None):
     left = {x["key"] for x in wl.get("left_open", [])}
     person = set(wl.get("person_added", []))
     recorded = {w["key"] for w in (manifest or {}).get("items", [])}
+    closed_state = {w["key"]: (w.get("close") or {}).get("state") for w in (manifest or {}).get("items", [])}
     # a key the manifest records is Groundwork's, whatever the runner's read flagged (eighth review, M1)
     items = [dict(i, person_added=False) if i.get("person_added") and i["key"] in recorded else i for i in items]
     probs = []
@@ -130,11 +133,19 @@ def recheck(wl, items, seen, manifest=None, warnings=None):
                     probs.append(f"{k} was added by a person after the proposal and is not named in it: propose again")
             continue
         if it.get("unrecorded"):
-            probs.append(f"{k} is plan-owned but no manifest records it: resume that create first, then propose again")
+            if resuming:  # neither closing nor recording it is in the approved set (thirteenth review, M1)
+                warnings.append(f"{k} is plan-owned but no manifest records it; Groundwork never recorded it, so it is left open")
+            else:
+                probs.append(f"{k} is plan-owned but no manifest records it: resume that create first, then propose again")
             continue
         if st in ("done", "closed_not_done"):
             continue
         if k in left or k in set(wl.get("reopened", [])):
+            continue
+        if k in closes and closed_state.get(k) == "closed":
+            # this retire closed it and a person reopened it; the close procedure never closes an item twice,
+            # so it stays open and the warning says so (thirteenth review, m1)
+            warnings.append(f"{k} was reopened after this retire closed it; it is left open")
             continue
         if k not in closes:
             if resuming:  # reopened or found again since the proposal; proposing again is impossible (twelfth review, M1)
