@@ -8,9 +8,14 @@ Usage:
   check_hashes.py summary PLAN.json
   check_hashes.py view PLAN.json --evidence DIR [--rules RULES.json ...] --out BUNDLE.json
   check_hashes.py review REVIEW.json --bundle BUNDLE.json
+  check_hashes.py view PLAN.json --plan-level --write-list WL.json --context CONTEXT.json [--assessment A.json] --out BUNDLE.json
   check_hashes.py approvals PLAN.json --overlay OVERLAY.yaml --anchor ANCHOR.json
                   --comments COMMENTS.json --proposal proposal.md --write-list WL.json
                   --review REVIEW.json --phases P0,P1 --now 2026-11-15T00:00:00Z
+                  --latest-version N --manifest MANIFEST.json|- --status STATUS.json|- --epic open|closed
+                  --evidence DIR [--rules RULES.json ...]
+  check_hashes.py plan-level PLAN.json  (the same flags, without --phases, plus --context CONTEXT.json
+                  [--assessment A.json]: the stored inputs the proposal is re-rendered from)
   check_hashes.py manifest-chain MANIFEST.json [MANIFEST.json ...]
   check_hashes.py owned FIELDS.json            plan-owned hash of normalized item fields
 
@@ -161,6 +166,11 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
         elif rec_scope != "phases" or rec["kind"] not in PHASE_KINDS:
             probs.append(f"comment {c['ref']}: a phase set takes only phase records (found {rec_scope}, {rec['kind']})")
             continue
+        elif rec["kind"] != "exception" and sorted(rec["phases"]) != sorted(wl.get("phases", [])):
+            # a record approves the whole offer; a smaller offer is a new proposal with its own write list
+            probs.append(f"comment {c['ref']}: approves {', '.join(rec['phases']) or 'no phase'}, but the offer is "
+                         f"{', '.join(wl.get('phases', []))}; a record approves the whole offer, so propose again to offer less")
+            continue
         stale = []
         if rec["plan_hash"] != p_hash:
             stale.append("plan_hash")
@@ -188,6 +198,29 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
     return records, probs
 
 
+def _same_review(a, b):
+    return bool(a) and bool(b) and a.get("view_hash") == b.get("view_hash") and a.get("findings") == b.get("findings")
+
+
+def rebuilt_write_list_problems(plan, overlay, wl):
+    """A phase write list is rebuilt from the plan of record and the closes, edits and change-request
+    entry it carries, and must come out identical: nothing else can be slipped into it."""
+    import render_proposal
+    task_of = {t["key"]: t["id"] for t in plan["tasks"]}
+    closes = [{"key": w["key"], "reason": w["reason"]} for w in wl.get("writes", []) if w.get("kind") == "close_item"]
+    edits = [task_of.get(w["key"], w["key"]) for w in wl.get("writes", []) if w.get("kind") == "update_item"]
+    entries = [w["entry"] for w in wl.get("writes", []) if w.get("kind") == "cr_log_put"]
+    try:
+        again = render_proposal.write_list(plan, overlay, set(wl.get("phases", [])), closes or None,
+                                           entries[0] if len(entries) == 1 else None, edits)
+    except (ValueError, KeyError) as e:
+        return [f"the write list can't be rebuilt from the plan of record: {e}"]
+    if len(entries) > 1 or hash_value(again) != hash_value(wl):
+        return ["the write list is not the one Groundwork renders from the plan of record for these phases, closes, "
+                "edits and change-request entry; render it again"]
+    return []
+
+
 def open_blockers(review):
     return [f["id"] for f in review.get("findings", []) if f.get("severity") == "blocker" and f.get("resolution") != "fixed"]
 
@@ -207,6 +240,12 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
     records, probs = _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info,
                                    latest_stored_version, "phases", plan_state)
     import render_proposal
+    probs += rebuilt_write_list_problems(plan, overlay, wl)
+    if review != (plan.get("review") or {}).get("reviewer") and not _same_review(review, (plan.get("review") or {}).get("reviewer")):
+        probs.append("the review the approvals bind is not the review recorded in the plan of record")
+    blockers = open_blockers(review)
+    if blockers:
+        probs.append(f"the review has open blocker findings ({', '.join(blockers)}); fix them and review again")
     if not overlay.get("provisional") and proposal_text != render_proposal.proposal(plan, overlay, wl.get("phases", []), wl):
         probs.append("the proposal does not re-render from the plan of record and the write list; approvals bind only "
                      "what Groundwork rendered")
@@ -271,7 +310,7 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
     else:
         import render_proposal
         try:
-            again = render_proposal.plan_level_proposal(plan, overlay, wl, stored["context"])
+            again = render_proposal.plan_level_proposal(plan, overlay, wl, stored["context"], stored.get("assessment"))
         except (ValueError, KeyError) as e:
             again = None
             probs.append(f"the stored proposal context does not fit this set: {e}")

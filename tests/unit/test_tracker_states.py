@@ -363,5 +363,77 @@ def fake_planned(plan, ov):
     return planned_items(plan, ov, PH)
 
 
+class ManifestKeepsHistory(unittest.TestCase):
+    """Third review, finding 7: a later manifest never forgets an item or something done once."""
+
+    def setUp(self):
+        self.plan, self.ov, _e = fresh("G1")
+        self.tr = FakeTracker()
+        self.assertTrue(run_create(self.tr, self.plan, self.ov, PH)["ok"])
+        self.m = latest_manifest(self.tr, self.plan["id"])
+
+    def next(self, items):
+        return create_steps.make_manifest(self.m, items, self.plan["id"], "run-x", self.m["seq"] + 1, self.tr.clock, [])
+
+    def test_carrying_items_forward_is_allowed(self):
+        items = copy.deepcopy(self.m["items"])
+        items[0]["close"] = {"reason": "not_planned", "state": "intent"}
+        m2 = self.next(items)
+        items = copy.deepcopy(m2["items"])
+        items[0]["close"]["state"] = "closed"
+        create_steps.make_manifest(m2, items, self.plan["id"], "run-x", m2["seq"] + 1, self.tr.clock, [])
+
+    def test_dropping_or_moving_an_item_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.next(self.m["items"][1:])
+        items = copy.deepcopy(self.m["items"])
+        items[0]["tracker_id"] = "999"
+        with self.assertRaises(ValueError):
+            self.next(items)
+
+    def test_clearing_something_done_once_is_refused(self):
+        base = copy.deepcopy(self.m["items"])
+        base[0].update(blocked_set=True, split_comment=True, close={"reason": "not_planned", "state": "closed"})
+        m2 = self.next(base)
+        for change in (lambda i: i.pop("blocked_set"), lambda i: i.update(split_comment=False), lambda i: i.pop("close"),
+                       lambda i: i.update(close={"reason": "not_planned", "state": "intent"}),
+                       lambda i: i.update(close={"reason": "duplicate", "state": "closed"})):
+            items = copy.deepcopy(m2["items"])
+            change(items[0])
+            with self.assertRaises(ValueError):
+                create_steps.make_manifest(m2, items, self.plan["id"], "run-x", m2["seq"] + 1, self.tr.clock, [])
+
+
+class ReliesOnRecheck(unittest.TestCase):
+    """Third review, finding 9: a revise apply stops if any item the diff read moved since."""
+
+    def setUp(self):
+        self.plan, self.ov, _e = fresh("G1")
+        self.tr = FakeTracker()
+        self.assertTrue(run_create(self.tr, self.plan, self.ov, ["P0"])["ok"])
+        self.refs = [{"key": i["key"], "tracker_id": i["tracker_id"], "updated_at": self.tr.updated_at(i["tracker_id"])}
+                     for i in self.tr.items.values()]
+
+    def test_nothing_moved_goes_ahead(self):
+        self.assertTrue(run_create(self.tr, self.plan, self.ov, ["P1"], run="run-2", relies_on=self.refs)["ok"])
+
+    def test_a_status_change_since_the_diff_stops(self):
+        item = next(iter(self.tr.items.values()))
+        item["category"] = "in_progress"
+        pf = run_create(self.tr, self.plan, self.ov, ["P1"], run="run-2", relies_on=self.refs)
+        self.assertFalse(pf["ok"])
+        self.assertEqual([s["key"] for s in pf["stops"]], [item["key"]])
+        self.assertIn("diff again", pf["stops"][0]["why"])
+        self.assertFalse([a for a in pf["actions"] if a["action"] == "create"] and pf["ok"])
+
+    def test_a_deleted_item_stops(self):
+        tid = next(iter(self.tr.items))
+        key = self.tr.items[tid]["key"]
+        del self.tr.items[tid]
+        pf = run_create(self.tr, self.plan, self.ov, ["P1"], run="run-2", relies_on=self.refs)
+        self.assertFalse(pf["ok"])
+        self.assertIn(key, [s["key"] for s in pf["stops"]])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -188,7 +188,7 @@ class BoundDecision(unittest.TestCase):
     def setUp(self):
         self.plan, self.ov = g1()
         self.log, _ = logged(self.plan)
-        self.entry = {"id": "CR-1", "outcome": "declined", "reason": "Outside the brief's scope"}
+        self.entry = cr.to_bind(self.log, "CR-1", "declined", "Outside the brief's scope")
         self.wl = render_proposal.plan_write_list(self.plan, self.ov, "decline", cr_entry=self.entry)
 
     def test_decide_takes_outcome_and_reason_from_the_write_list(self):
@@ -304,7 +304,7 @@ class RevisionDecides(unittest.TestCase):
         d = tempfile.mkdtemp()
         P = lambda n: os.path.join(d, n)
         json.dump(plan, open(P("plan.json"), "w"))
-        json.dump({"id": "CR-1", "outcome": "added", "reason": "Fits the outcome"}, open(P("e.json"), "w"))
+        json.dump(cr.to_bind(log, "CR-1", "added", "Fits the outcome"), open(P("e.json"), "w"))
         ovp = os.path.join(os.path.dirname(__file__), "..", "golden", "G1", "overlay", "overlay.yaml")
         with redirect_stdout(io.StringIO()):
             render_proposal.main(["write-list", P("plan.json"), "--overlay", ovp, "--offer", "P1", "--entry", P("e.json"),
@@ -319,6 +319,62 @@ class RevisionDecides(unittest.TestCase):
             cr.decide_bound(log, wl, "a76e")
         with self.assertRaises(ValueError):
             cr.decide_bound(log, wl, "d" * 64, "CR-2")
+
+class BoundEntryIsTheLoggedRequest(unittest.TestCase):
+    """Third review, finding 6: the write list binds the logged request itself, not only its id."""
+
+    def setUp(self):
+        self.plan, self.ov = g1()
+        self.log, _ = logged(self.plan)
+
+    def wl(self, entry):
+        return render_proposal.plan_write_list(self.plan, self.ov, "decline", cr_entry=entry)
+
+    def test_the_bound_entry_is_the_pending_entry_with_the_decision(self):
+        e = cr.to_bind(self.log, "CR-1", "declined", "Outside the brief's scope")
+        self.assertNotIn("decided_by", e)
+        self.assertEqual(e["restatement"], cr.entry_of(self.log, "CR-1")["restatement"])
+        log, out = cr.decide_bound(self.log, self.wl(e), "d" * 64)
+        self.assertEqual(out["outcome"], "declined")
+        ctx = render_proposal.proposal_context(self.plan, "decline", "Decline CR-1.")
+        self.assertIn(e["restatement"], render_proposal.plan_level_proposal(self.plan, self.ov, self.wl(e), ctx))
+
+    def test_a_different_restatement_origin_or_base_is_refused(self):
+        good = cr.to_bind(self.log, "CR-1", "declined", "Outside the brief's scope")
+        for k, v in (("restatement", "Something milder"), ("origin_role_key", "approver"),
+                     ("base", {"plan_version": 99, "manifest_seq": 2}), ("source", "pasted")):
+            with self.subTest(field=k):
+                with self.assertRaises(ValueError) as cm:
+                    cr.decide_bound(self.log, self.wl(dict(good, **{k: v})), "d" * 64)
+                self.assertIn(k, str(cm.exception))
+        bare = {"id": "CR-1", "outcome": "declined", "reason": "Outside the brief's scope"}
+        with self.assertRaises(ValueError):
+            cr.decide_bound(self.log, self.wl(bare), "d" * 64)
+
+    def test_an_entry_carrying_decided_by_is_refused(self):
+        e = dict(cr.to_bind(self.log, "CR-1", "declined", "x"), decided_by={"plan_version": 1, "proposal_hash": "d" * 64})
+        with self.assertRaises(ValueError):
+            cr.decide_bound(self.log, self.wl(e), "d" * 64)
+
+    def test_bind_refuses_a_decided_request(self):
+        log, _ = cr.decide_bound(self.log, self.wl(cr.to_bind(self.log, "CR-1", "declined", "x")), "d" * 64)
+        with self.assertRaises(ValueError):
+            cr.to_bind(log, "CR-1", "declined", "x")
+
+
+class StoredAssessmentIsShown(unittest.TestCase):
+    """Third review, finding 11: a plan-level proposal shows the stored assessment and is verified with it."""
+
+    def test_the_assessment_is_rendered_and_bound(self):
+        plan, ov = g1()
+        log, _ = logged(plan)
+        a = cr.assess(plan, add_task(plan), log, "CR-1", "drafted")
+        wl = render_proposal.plan_write_list(plan, ov, "decline", cr_entry=cr.to_bind(log, "CR-1", "declined", "Too costly"))
+        ctx = render_proposal.proposal_context(plan, "decline", "Decline CR-1.")
+        with_a = render_proposal.plan_level_proposal(plan, ov, wl, ctx, a)
+        self.assertIn(cr.render(a).strip().split("\n")[0], with_a)
+        self.assertNotEqual(with_a, render_proposal.plan_level_proposal(plan, ov, wl, ctx))
+
 
 if __name__ == "__main__":
     unittest.main()

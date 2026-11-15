@@ -221,19 +221,25 @@ def proposal_context(plan, kind, summary, degraded=(), items=(), voided_sets=())
             "voided_sets": sorted(voided_sets)}
 
 
-def plan_level_proposal(plan, overlay, wl, context):
+def plan_level_proposal(plan, overlay, wl, context, assessment=None):
     """A plan-level proposal, rendered only from stored inputs."""
     if context["plan_id"] != plan["id"] or context["plan_version"] != plan["version"] or context["kind"] != wl.get("kind"):
         raise ValueError("the proposal context, plan and write list do not belong together")
     out = [f"# Proposal: {PLAN_LEVEL_TITLES[context['kind']]}", "",
            f"Plan {plan['id']} version {plan['version']}, plan hash {short(plan_hash(plan))}. "
            "This is a plan-level change: it offers no phase.", "", "## What and why", context["summary"], ""]
+    if assessment is not None:
+        # the stored assessment, so approvers outside the session see the fit, cost and options it showed
+        import change_request
+        out += change_request.render(assessment).rstrip("\n").split("\n") + [""]
     for w in wl["writes"]:
         if w["kind"] == "cr_log_put":
             e = w["entry"]
             out.append("## Change request decision")
             out.append(f"- `{e.get('id')}`: {str(e.get('outcome', e.get('decision', ''))).replace('_', ' ')}"
                        + (f". Reason: {e['reason']}" if e.get("reason") else ""))
+            if e.get("restatement"):
+                out.append(f"- The request, as the runner confirmed it: {e['restatement']}")
             out.append("")
         elif w["kind"] == "status_put":
             out.append("## Plan status")
@@ -320,6 +326,26 @@ def model_sections(plan, overlay):
         out.append("**Stays unchanged:** " + ", ".join(ap["unchanged"]))
     out.append("")
     return out
+
+
+def other_writes(plan, wl):
+    """What a phase write list does besides creating its phases: updates, closes, a change-request
+    decision. Approvers outside the session see only the proposal, so each is named here."""
+    by_key = {t["key"]: t["id"] for t in plan["tasks"]}
+    ups = [w for w in wl["writes"] if w["kind"] == "update_item"]
+    closes = [w for w in wl["writes"] if w["kind"] == "close_item"]
+    crs = [w for w in wl["writes"] if w["kind"] == "cr_log_put"]
+    out = []
+    if ups:
+        out.append("**Tasks whose plan-owned text is updated:** "
+                   + ", ".join(f"{by_key.get(w['key'], w['key'])} (`{w['owned_hash'][:12]}`)" for w in ups) + ".")
+    if closes:
+        out.append("**Tasks closed:** " + ", ".join(f"`{w['key']}` as {w['reason'].replace('_', ' ')}" for w in closes) + ".")
+    for w in crs:
+        e = w["entry"]
+        out.append(f"**Change request decided:** `{e.get('id')}`, {e.get('outcome')}. Reason: {e.get('reason')}"
+                   + (f" The request, as the runner confirmed it: {e['restatement']}" if e.get("restatement") else ""))
+    return out + ([""] if out else [])
 
 
 def proposal(plan, overlay, offer, wl=None):
@@ -444,6 +470,7 @@ def proposal(plan, overlay, offer, wl=None):
         return "\n".join(out) + "\n"
     out.append(f"Phases offered: {', '.join(sorted(offer))}. plan_hash {short(plan_hash(plan))}.")
     if wl:
+        out += other_writes(plan, wl)
         out.append(f"Write list: {len(wl['writes'])} numbered writes, write_list_hash {short(write_list_hash(wl))}.")
     out.append("Each approver posts their own approval record as a comment on the epic, from their own tracker account.")
     out.append("")
@@ -490,6 +517,7 @@ def main(argv=None):
     ap.add_argument("--voided", nargs="*", default=[], help="context: pending sets this replaces")
     ap.add_argument("--degraded", nargs="*", default=[], help="context: checks not fully run")
     ap.add_argument("--context", help="proposal-context JSON (plan-level proposals)")
+    ap.add_argument("--assessment", help="plan-level: the change request's stored assessment (change_request.py assess), if any")
     ap.add_argument("plan")
     ap.add_argument("--overlay", required=True)
     ap.add_argument("--offer")
@@ -512,7 +540,8 @@ def main(argv=None):
         text = task_body(plan, overlay, next(t for t in plan["tasks"] if t["id"] == a.task))
     elif a.what == "plan-level":
         text = plan_level_proposal(plan, overlay, json.load(open(a.write_list, encoding="utf-8")),
-                                   json.load(open(a.context, encoding="utf-8")))
+                                   json.load(open(a.context, encoding="utf-8")),
+                                   json.load(open(a.assessment, encoding="utf-8")) if a.assessment else None)
     elif a.what == "plan-write-list":
         entry = json.load(open(a.entry, encoding="utf-8")) if a.entry else None
         text = json.dumps(plan_write_list(plan, overlay, a.kind, entry), indent=2)
@@ -535,6 +564,8 @@ def main(argv=None):
         sys.stdout.write(text)
     if a.what in ("proposal", "plan-level"):
         print(f"proposal_hash {proposal_hash(text)}", file=sys.stderr)
+    if a.what in ("write-list", "plan-write-list"):
+        print(f"write_list_hash {write_list_hash(json.loads(text))}", file=sys.stderr)
     return 0
 
 

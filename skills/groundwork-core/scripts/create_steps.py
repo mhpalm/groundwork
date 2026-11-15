@@ -9,6 +9,7 @@ mean, so the decision is the same on every tracker and every surface.
 Usage:
   create_steps.py lock LOCK_COMMENTS.json --run RUN_ID --account ACCOUNT --now TS
   create_steps.py preflight PLANNED.json FOUND.json MANIFEST.json --phases P1,P2 --write-list VERIFIED_WRITE_LIST.json
+      [--relies-on DIFF_RELIES_ON.json]   (first preflight of a revise apply: stops if any item moved since the diff)
   create_steps.py manifest PREV_MANIFEST.json|- ITEMS.json --plan-id ID --run RUN_ID --seq N --now TS [--relies-on REFS.json]
                   [--status-file STATUS_FILE_ENTRY.json]
   create_steps.py status RAW.json MANIFEST.json|- --overlay OVERLAY.yaml
@@ -102,7 +103,7 @@ def lock_decision(comments, run, account, now):
             "post": lock_line("release", run, account, now), "then": "post the release if you posted a claim, then stop"}
 
 
-def preflight(planned, found, manifest, phases, approved_updates=()):
+def preflight(planned, found, manifest, phases, approved_updates=(), relies_on=None):
     """Decide create | skip | adopt | update | adopt_update | link_parent | stop per planned item (spec section 8 table).
 
     approved_updates: {key: owned_hash} from the verified write list's update_item writes. A written
@@ -110,6 +111,16 @@ def preflight(planned, found, manifest, phases, approved_updates=()):
     list names it with exactly the planned hash, and only while the item is not finished; otherwise
     create stops, so an approved edit is never skipped silently and nothing else is ever written."""
     approved_updates = dict(approved_updates) if isinstance(approved_updates, dict) else {k: None for k in approved_updates}
+    # relies_on (revise apply): each item the diff read, with its updated_at then. The first preflight of a
+    # revise apply passes it, and any change since the diff stops create: diff again. A resume of that
+    # same apply leaves it out, because its own writes moved updated_at; the drift rules below still hold.
+    moved = []
+    by_key_now = {f["key"]: f for f in found}
+    for r in relies_on or []:
+        now = by_key_now.get(r["key"])
+        if now is None or now.get("tracker_id") != r["tracker_id"] or now.get("updated_at") != r["updated_at"]:
+            moved.append({"key": r["key"], "why": "changed in the tracker since the revise diff read it "
+                          f"(updated {r['updated_at']}, now {(now or {}).get('updated_at', 'missing')}); diff again"})
 
     def update_problem(p, f):
         bound = approved_updates.get(p["key"])
@@ -196,6 +207,9 @@ def preflight(planned, found, manifest, phases, approved_updates=()):
             # Points a person set are never changed.
             actions.append({"key": key, "action": "comment_split", "tracker_id": f["tracker_id"],
                             "why": f"a person set {f['points']} points; keep them and recommend a split"})
+    stops = moved + stops
+    if moved:
+        actions = [{"key": m["key"], "action": "stop", "why": m["why"]} for m in moved] + actions
     return {"ok": not stops, "actions": actions, "stops": stops, "warnings": warnings}
 
 
@@ -300,6 +314,28 @@ def scope_decision(count, overlay, requested=None):
 _KEEP = object()
 
 
+CLOSE_ORDER = {"intent": 0, "closed": 1}
+
+
+def item_history_problems(prev_items, items):
+    """Third review, finding 7: a manifest is the record of what Groundwork wrote and did once. A later
+    manifest keeps every item the previous one records, under the same tracker id, and never forgets a
+    close, a blocked flag applied or a split comment posted (each would be redone or lost on resume)."""
+    now = {i["key"]: i for i in items}
+    for p in prev_items:
+        n = now.get(p["key"])
+        if n is None:
+            raise ValueError(f"the manifest drops {p['key']}, which the previous manifest records")
+        if n["tracker_id"] != p["tracker_id"]:
+            raise ValueError(f"{p['key']} moved from tracker item {p['tracker_id']} to {n['tracker_id']}")
+        for flag in ("blocked_set", "split_comment"):
+            if p.get(flag) and not n.get(flag):
+                raise ValueError(f"the manifest clears {flag} on {p['key']}; it records something already done once")
+        pc, nc = p.get("close"), n.get("close")
+        if pc and (not nc or nc["reason"] != pc["reason"] or CLOSE_ORDER[nc["state"]] < CLOSE_ORDER[pc["state"]]):
+            raise ValueError(f"the manifest changes or clears the recorded close of {p['key']}")
+
+
 def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_KEEP):
     """status_file: the retire record to set; by default it is carried forward from prev, so a later
     manifest can never drop a recorded or intended status file."""
@@ -316,6 +352,8 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_K
             raise ValueError("a recorded status file never goes back to intent")
     if sf is not None:
         m["status_file"] = sf
+    if prev:
+        item_history_problems(prev["items"], items)
     if prev and seq != prev["seq"] + 1:
         raise ValueError("manifest seq must be the previous seq + 1")
     if not prev and seq != 1:
@@ -349,7 +387,8 @@ def main(argv=None):
             print(json.dumps({"ok": False, "problems": ["--write-list required: preflight updates only what it approves"]}))
             return 1
         ups = {w["key"]: w["owned_hash"] for w in J(a.write_list)["writes"] if w["kind"] == "update_item"}
-        out = preflight(J(a.files[0]), J(a.files[1]), J(a.files[2]), [x.strip() for x in a.phases.split(",")], ups)
+        out = preflight(J(a.files[0]), J(a.files[1]), J(a.files[2]), [x.strip() for x in a.phases.split(",")], ups,
+                        J(a.relies_on) if a.relies_on else None)
     elif a.cmd == "status":
         import gw_yaml
         fm = gw_yaml.load(a.overlay)["skills"]["tracker"]["field_map"]

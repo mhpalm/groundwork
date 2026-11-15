@@ -10,6 +10,7 @@ and freeze resume without any real tracker.
 import copy
 import datetime as dt
 import itertools
+import json
 
 import create_steps
 from check_hashes import owned_hash
@@ -102,6 +103,12 @@ class FakeTracker:
         self._write()
         self.epic_state[epic] = "closed"
 
+    def updated_at(self, tid):
+        """Moves whenever anything about the item changes, as a real tracker's last-updated time does,
+        including changes tests make directly to the item."""
+        from gw_canon import sha256_hex
+        return "v-" + sha256_hex(json.dumps(self.items[tid], sort_keys=True, default=str).encode("utf-8"))[:16]
+
     def raw(self, tid):
         i = self.items[tid]
         return {"key": i["key"], "state": i["state"], "category": i["category"], "closed_as": list(i["closed_as"]),
@@ -163,7 +170,7 @@ def latest_manifest(tr, plan_id):
 
 
 def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic="VOL-1", hard_crash=False, updates=(),
-               crash_after_update=False):
+               crash_after_update=False, relies_on=None):
     fm = overlay["skills"]["tracker"]["field_map"]
     """Follow the core's create procedure. Returns the preflight result."""
     decision = create_steps.lock_decision(tr.comments, run, account, tr.clock)
@@ -179,13 +186,14 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
         hits = tr.find_by_key(p["key"])
         for h in hits:
             found.append({"key": h["key"], "tracker_id": h["tracker_id"], "owned_hash": owned_hash(tr.normalize(h)),
-                          "under_epic": h["key"] in children, "points": h["points"]})
+                          "under_epic": h["key"] in children, "points": h["points"],
+                          "updated_at": tr.updated_at(h["tracker_id"])})
     manifest = latest_manifest(tr, plan["id"])
     written = {i["key"]: i for i in (manifest or {}).get("items", [])}
     for f in found:
         f["status"] = create_steps.read_status(tr.raw(f["tracker_id"]), written.get(f["key"]), fm)["status"]
     pf = create_steps.preflight([{k: p[k] for k in ("key", "phase", "owned_hash", "points", "depends_on", "waits")}
-                                 for p in planned], found, manifest, phases, updates)
+                                 for p in planned], found, manifest, phases, updates, relies_on)
     if not pf["ok"]:
         tr.comment(account, create_steps.lock_line("release", run, account, tr.clock))
         return pf

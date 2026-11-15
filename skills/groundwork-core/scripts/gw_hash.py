@@ -79,6 +79,12 @@ def reviewer_view(plan):
     v.pop("history", None)
     v.pop("review", None)
     v.pop("approvals", None)
+    # set after review without changing what was reviewed: the draft epic's key, phase states and
+    # the plan status (a new version is still a new view)
+    v.get("epic", {}).pop("tracker_ref", None)
+    v.pop("status", None)
+    for ph in v.get("phases", []):
+        ph.pop("state", None)
     for t in v.get("tasks", []):
         t.pop("origin", None)
     req = v.get("request", {})
@@ -87,11 +93,16 @@ def reviewer_view(plan):
     return v
 
 
+EVIDENCE_VIEW_FIELDS = ("id", "system", "instance", "subject", "facts", "untrusted_text", "sensitivity")
+
+
 def view_bundle(plan, evidence, checklist_version, rules):
     return {
         "schema_version": "1.0",
         "plan": reviewer_view(plan),
-        "evidence": sorted(evidence, key=lambda e: e["id"]),
+        # the facts only: a re-read that finds the same facts (new collected_at and record hash)
+        # leaves the reviewed view, and so the approval, unchanged
+        "evidence": sorted(({k: e.get(k) for k in EVIDENCE_VIEW_FIELDS} for e in evidence), key=lambda e: e["id"]),
         "checklist_version": checklist_version,
         "rules": sorted(rules, key=lambda r: r["id"]),
     }

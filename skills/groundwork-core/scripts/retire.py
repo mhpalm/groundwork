@@ -240,6 +240,9 @@ def main(argv=None):
             res = (int(v), h)
         out = gate(a.files[0], J(a.plan), J(a.manifest), J(a.status), a.epic, res)
     print(json.dumps(out, indent=2))
+    if a.cmd == "write-list":
+        from gw_hash import write_list_hash
+        print(f"write_list_hash {write_list_hash(out)}", file=sys.stderr)
     return 0 if out.get("ok", True) else 1
 
 

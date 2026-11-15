@@ -9,6 +9,7 @@ Usage:
   change_request.py base LOG.json CR-n --plan-version N --manifest-seq N
   change_request.py assess BASE_PLAN.json NEW_PLAN.json LOG.json CR-n --cost drafted|outline|unknown
                     [--approved-unwritten P1,P2]
+  change_request.py bind LOG.json CR-n --outcome declined --reason TEXT   (the entry a write list binds)
   change_request.py decide LOG.json CR-n --write-list VERIFIED_WRITE_LIST.json --proposal-hash HEX
                     [--restricted RESTRICTED.json]   (outcome and reason come from the bound entry)
   change_request.py basis RELEASED_PLAN.json CURRENT_PLAN.json --phase P
@@ -275,12 +276,39 @@ def bound_entry(wl):
     return e
 
 
+DECIDED_FIELDS = ("outcome", "reason", "decided_by")
+
+
+def to_bind(latest, cr_id, outcome, reason):
+    """The entry a write list binds: the logged pending entry as allocated, with the outcome and reason
+    the proposal decides, and no decided_by (create fills that in from the verified proposal)."""
+    e = copy.deepcopy(entry_of(latest, cr_id))
+    if e["outcome"] != "pending":
+        raise ValueError(f"{cr_id} was already decided ({e['outcome']})")
+    e.pop("decided_by", None)
+    e.update(outcome=outcome, reason=reason)
+    return e
+
+
+def bound_matches_log(latest, bound):
+    """Third review, finding 6: the approvers approved the restatement, source, origin and base the
+    write list shows. Create refuses unless the logged entry is that same request."""
+    logged = entry_of(latest, bound["id"])
+    keep = lambda e: {k: v for k, v in e.items() if k not in DECIDED_FIELDS}
+    if keep(logged) != keep(bound):
+        diff = sorted(k for k in set(keep(logged)) | set(keep(bound)) if logged.get(k) != bound.get(k))
+        raise ValueError(f"the write list's {bound['id']} is not the logged request ({', '.join(diff)} differ); propose again")
+
+
 def decide_bound(latest, wl, proposal_hash, cr_id=None):
     if not re.fullmatch(r"[0-9a-f]{64}", proposal_hash or ""):
         raise ValueError("decided_by names the verified proposal's full sha256 (64 hex characters)")
     e = bound_entry(wl)
     if cr_id is not None and cr_id != e["id"]:
         raise ValueError(f"the write list decides {e['id']}, not {cr_id}")
+    if "decided_by" in e:
+        raise ValueError("the bound entry carries decided_by; the write list never names its own proposal")
+    bound_matches_log(latest, e)
     return decide(latest, e["id"], e["outcome"], e["reason"], wl["plan_version"], proposal_hash)
 
 
@@ -326,11 +354,11 @@ def release_basis_problems(current, released, phase_id):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["allocate", "base", "assess", "decide", "basis", "release-check"])
+    ap.add_argument("cmd", choices=["allocate", "base", "assess", "bind", "decide", "basis", "release-check"])
     ap.add_argument("--released", nargs="*", default=[], help="release-check: PHASE=PLAN_AT_RELEASE.json for each released phase")
     ap.add_argument("files", nargs="*")
     for a in ("--plan-id", "--restatement", "--source", "--origin", "--derived-from", "--cost", "--approved-unwritten",
-              "--proposal-hash", "--phase", "--write-list", "--restricted"):
+              "--proposal-hash", "--phase", "--write-list", "--restricted", "--outcome", "--reason"):
         ap.add_argument(a)
     ap.add_argument("--plan-version", type=int)
     ap.add_argument("--manifest-seq", type=int)
@@ -349,6 +377,12 @@ def main(argv=None):
     elif a.cmd == "assess":
         res = assess(J(a.files[0]), J(a.files[1]), J(a.files[2]), a.files[3], a.cost, split(a.approved_unwritten))
         out = {"assessment": res, "markdown": render(res)}
+    elif a.cmd == "bind":
+        try:
+            out = {"entry": to_bind(J(a.files[0]), a.files[1], a.outcome, a.reason)}
+        except (ValueError, KeyError) as e:
+            print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
+            return 1
     elif a.cmd == "decide":
         if not a.write_list:
             print(json.dumps({"ok": False, "problems": ["--write-list required: the outcome comes from the verified write list"]}))

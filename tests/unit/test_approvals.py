@@ -28,9 +28,11 @@ def setup_case():
     anchor = {"overlay_id": overlay["id"], "version": overlay["version"], "hash": overlay["hash"],
               "gates": {g["id"]: [a["account_id"] for a in g["approvers"]] for g in overlay["approval_gates"]},
               "author_account_id": PD}
-    wl = {"schema_version": "1.0", "plan_id": plan["id"], "plan_version": plan["version"], "phases": ["P0"], "writes": []}
+    wl = render_proposal.write_list(plan, overlay, ["P0"])
+    review = {"surface": "claude-code-cloud", "model": "test-model", "view_hash": "a" * 64, "independent": True,
+              "mode": "subagent", "findings": [], "not_performed": []}
+    plan["review"]["reviewer"] = dict(plan["review"]["reviewer"] or {}, **review)
     proposal = render_proposal.proposal(plan, overlay, wl["phases"], wl)
-    review = {"view_hash": "a" * 64, "findings": []}
     return plan, overlay, anchor, proposal, wl, review
 
 
@@ -65,7 +67,7 @@ class ApprovalVersions(unittest.TestCase):
             plan["version"] = 2
             wl = dict(wl, plan_version=2)
             old = record(plan, prop, wl, rev, ["P0"], version=1, rid="A-1", phash="0" * 64)
-        wl = dict(wl, phases=["P1"])
+        wl = render_proposal.write_list(plan, overlay, ["P1"])
         prop = render_proposal.proposal(plan, overlay, wl["phases"], wl)  # the release proposal at version N
         old = record(plan, prop, wl, rev, ["P0"], version=plan["version"] - 1, rid="A-1", phash="0" * 64)
         new = record(plan, prop, wl, rev, ["P1"], rid="A-2")

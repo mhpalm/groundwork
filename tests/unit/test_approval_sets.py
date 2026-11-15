@@ -30,7 +30,9 @@ def base():
     anchor = {"overlay_id": overlay["id"], "version": overlay["version"], "hash": overlay["hash"],
               "gates": {g["id"]: [a["account_id"] for a in g["approvers"]] for g in overlay["approval_gates"]},
               "author_account_id": PD}
-    review = {"view_hash": "a" * 64, "findings": []}
+    review = {"surface": "claude-code-cloud", "model": "test-model", "view_hash": "a" * 64, "independent": True,
+              "mode": "subagent", "findings": [], "not_performed": []}
+    plan["review"]["reviewer"] = dict(plan["review"]["reviewer"] or {}, **review)  # the review the plan records
     return plan, overlay, anchor, review
 
 
@@ -456,11 +458,145 @@ class PhaseReviewView(unittest.TestCase):
         wl, prop = phase_case(plan, ov)
         view = {"evidence": [], "rules": []}
         good = {"view_hash": view_hash(view_bundle(plan, [], check_hashes.CHECKLIST_VERSION, [])), "findings": []}
+        plan["review"]["reviewer"].update(good)
+        wl, prop = phase_case(plan, ov)  # the proposal shows the recorded review, so render it after
         for rev, want in ((good, True), ({"view_hash": "a" * 64, "findings": []}, False)):
             recs = [comment(record(plan, prop, wl, rev, ["P1"]))]
             ok, probs, _ = check_hashes.verify_approvals(plan, ov, anchor, recs, prop, wl, rev, ["P1"], NOW, False, None,
                                                          plan["version"], None, view)
             self.assertEqual(ok, want, probs)
+
+class ReviewThreeBindings(unittest.TestCase):
+    """Third review, findings 1 to 5: approvals bind only what Groundwork renders and reviews."""
+
+    def setUp(self):
+        self.plan, self.ov, self.anchor, self.rev = base()
+
+    def test_an_injected_epic_close_in_a_phase_write_list_is_refused(self):
+        wl, _ = phase_case(self.plan, self.ov)
+        wl = copy.deepcopy(wl)
+        wl["writes"].insert(-1, {"n": 0, "kind": "close_epic", "phase": "P1"})
+        for i, w in enumerate(wl["writes"], 1):
+            w["n"] = i
+        prop = render_proposal.proposal(self.plan, self.ov, ["P1"], wl)
+        recs = [comment(record(self.plan, prop, wl, self.rev, ["P1"]))]
+        ok, probs, _ = phases_ok(self.plan, self.ov, self.anchor, recs, prop, wl, self.rev)
+        self.assertFalse(ok)
+        self.assertTrue(any("not the one Groundwork renders" in p for p in probs), probs)
+
+    def test_an_open_blocker_in_the_review_is_refused(self):
+        bad = dict(self.rev, findings=[{"id": "F-1", "check": "GR-04", "severity": "blocker", "target": "P1-T01",
+                                        "what": "Who decides is unclear.", "evidence_ids": [], "suggested_fix": "Ask.",
+                                        "resolution": "open"}])
+        self.plan["review"]["reviewer"] = bad
+        wl, prop = phase_case(self.plan, self.ov)
+        recs = [comment(record(self.plan, prop, wl, bad, ["P1"]))]
+        ok, probs, _ = phases_ok(self.plan, self.ov, self.anchor, recs, prop, wl, bad)
+        self.assertFalse(ok)
+        self.assertTrue(any("F-1" in p for p in probs), probs)
+        bad["findings"][0]["resolution"] = "fixed"
+        wl, prop = phase_case(self.plan, self.ov)
+        recs = [comment(record(self.plan, prop, wl, bad, ["P1"]))]
+        self.assertTrue(phases_ok(self.plan, self.ov, self.anchor, recs, prop, wl, bad)[0])
+
+    def test_a_review_other_than_the_recorded_one_is_refused(self):
+        wl, prop = phase_case(self.plan, self.ov)
+        other = dict(self.rev, view_hash="b" * 64)
+        recs = [comment(record(self.plan, prop, wl, other, ["P1"]))]
+        ok, probs, _ = phases_ok(self.plan, self.ov, self.anchor, recs, prop, wl, other)
+        self.assertFalse(ok)
+        self.assertTrue(any("not the review recorded" in p for p in probs), probs)
+
+    def test_the_epic_key_set_after_review_leaves_the_view_unchanged(self):
+        from gw_hash import view_bundle, view_hash
+        before = view_hash(view_bundle(self.plan, [], check_hashes.CHECKLIST_VERSION, []))
+        p = copy.deepcopy(self.plan)
+        p.setdefault("epic", {})["tracker_ref"] = "VOL-1"
+        self.assertEqual(view_hash(view_bundle(p, [], check_hashes.CHECKLIST_VERSION, [])), before)
+        p["title"] = p["title"] + " (edited)"
+        self.assertNotEqual(view_hash(view_bundle(p, [], check_hashes.CHECKLIST_VERSION, [])), before)
+
+    def test_an_evidence_reread_with_the_same_facts_leaves_the_view_unchanged(self):
+        from gw_hash import view_bundle, view_hash
+        _p, _o, ev = fresh("G1")
+        before = view_hash(view_bundle(self.plan, ev, check_hashes.CHECKLIST_VERSION, []))
+        again = copy.deepcopy(ev)
+        for e in again:
+            e["collected_at"] = "2026-11-15T09:00:00Z"
+            if "hash" in e:
+                e["hash"] = "c" * 64
+        self.assertEqual(view_hash(view_bundle(self.plan, again, check_hashes.CHECKLIST_VERSION, [])), before)
+        again[0]["facts"] = dict(again[0].get("facts") or {}, changed=True)
+        self.assertNotEqual(view_hash(view_bundle(self.plan, again, check_hashes.CHECKLIST_VERSION, [])), before)
+
+    def test_the_proposal_names_updates_closes_and_the_decision(self):
+        t = next(t for t in self.plan["tasks"] if t["phase"] == "P1")
+        other = next(t for t in self.plan["tasks"] if t["phase"] == "P0")
+        entry = {"id": "CR-3", "outcome": "added", "reason": "Fits the brief.", "restatement": "Add a export."}
+        wl = render_proposal.write_list(self.plan, self.ov, ["P1"], [{"key": other["key"], "reason": "not_planned"}],
+                                        entry, [t["id"]])
+        prop = render_proposal.proposal(self.plan, self.ov, ["P1"], wl)
+        self.assertIn(f"{t['id']} (`", prop)
+        self.assertIn(f"`{other['key']}` as not planned", prop)
+        self.assertIn("`CR-3`, added", prop)
+
+    def test_the_write_list_clis_print_their_hash(self):
+        import io
+        import tempfile
+        from contextlib import redirect_stderr, redirect_stdout
+        d = tempfile.mkdtemp()
+        pp, op = os.path.join(d, "plan.json"), os.path.join(d, "overlay.json")
+        json.dump(self.plan, open(pp, "w"))
+        json.dump(self.ov, open(op, "w"))
+        for argv in (["write-list", pp, "--overlay", op, "--offer", "P1"],
+                     ["plan-write-list", pp, "--overlay", op, "--kind", "later"]):
+            with self.subTest(argv=argv[0]):
+                out, err = io.StringIO(), io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err):
+                    rc = render_proposal.main(argv)
+                self.assertEqual(rc, 0)
+                self.assertIn(f"write_list_hash {write_list_hash(json.loads(out.getvalue()))}", err.getvalue())
+
+
+class PlanLevelAssessment(unittest.TestCase):
+    """Third review, finding 11: create re-renders a plan-level proposal with its stored assessment."""
+
+    def test_a_proposal_that_leaves_out_the_stored_assessment_is_refused(self):
+        import change_request as cr
+        from gw_hash import plan_level_bundle, view_hash
+        plan, ov, anchor, _r = base()
+        log, _ = cr.allocate(cr.empty_log(plan["id"]), "Also export a spreadsheet", "runner", "business_user",
+                             plan["version"], 2)
+        a = cr.assess(plan, plan, log, "CR-1", "unknown")
+        wl = render_proposal.plan_write_list(plan, ov, "decline", cr_entry=cr.to_bind(log, "CR-1", "declined", "Too costly"))
+        ctx = render_proposal.proposal_context(plan, "decline", DECLINE_SUMMARY)
+        stored = {"context": ctx, "assessment": a, "rules": []}
+        rev = {"view_hash": view_hash(plan_level_bundle(plan, wl, ctx, check_hashes.CHECKLIST_VERSION, [], a)), "findings": []}
+        for prop, want in ((render_proposal.plan_level_proposal(plan, ov, wl, ctx, a), True),
+                           (render_proposal.plan_level_proposal(plan, ov, wl, ctx), False)):
+            recs = [comment(record(plan, prop, wl, rev, [], kind="decline", scope="plan_level", rid="A-2"))]
+            ok, probs, _ = check_hashes.verify_plan_level(plan, ov, anchor, recs, prop, wl, rev, NOW, False, None, None,
+                                                          None, stored)
+            self.assertEqual(ok, want, probs)
+
+
+class WholeOffer(unittest.TestCase):
+    """Third review, finding 8: a record approves the whole offer."""
+
+    def test_a_record_for_part_of_the_offer_is_refused(self):
+        plan, ov, anchor, rev = base()
+        wl, prop = phase_case(plan, ov, ("P0", "P1"))
+        part = [comment(record(plan, prop, wl, rev, ["P1"]))]
+        ok, probs, acc = phases_ok(plan, ov, anchor, part, prop, wl, rev, phases=("P0", "P1"))
+        self.assertFalse(ok)
+        self.assertTrue(any("whole offer" in p for p in probs), probs)
+        ok, probs, acc = phases_ok(plan, ov, anchor, part, prop, wl, rev, phases=("P1",))
+        self.assertFalse(ok)
+        whole = [comment(record(plan, prop, wl, rev, ["P0", "P1"]))]
+        ok, probs, acc = phases_ok(plan, ov, anchor, whole, prop, wl, rev, phases=("P0", "P1"))
+        self.assertTrue(ok, probs)
+        self.assertEqual(acc, ["P0", "P1"])
+
 
 if __name__ == "__main__":
     unittest.main()
