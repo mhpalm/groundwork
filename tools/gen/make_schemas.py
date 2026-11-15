@@ -276,6 +276,7 @@ manifest = {
                                                     "proposal_hash": HEX})})),
         # the epic's draft label came off; carried forward once set
         "draft_label_removed": {"const": True},
+        "epic_owned_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "items": arr(obj({"key": STR, "tracker_id": STR, "owned_hash": HEX,
                           "links": arr(obj({"type": STR, "to_key": STR})), "not_ready": {"type": "boolean"},
                           "split_comment": {"type": "boolean"},
@@ -292,7 +293,7 @@ manifest = {
     }),
 }
 
-manifest["required"] = [k for k in manifest["properties"] if k not in ("status_file", "draft_label_removed")]
+manifest["required"] = [k for k in manifest["properties"] if k not in ("status_file", "draft_label_removed", "epic_owned_hash")]
 
 journal = {
     "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/journal/1.0", "title": "Groundwork journal line",

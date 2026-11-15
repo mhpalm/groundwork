@@ -20,6 +20,7 @@ Usage:
                   set on the manifest items exactly as given)
   create_steps.py done VERIFIED_WRITE_LIST.json [--logs LOG_1.json ...]   (before the lock release: stops with
                   every approved write the manifest or the change-request log doesn't show as done)
+  create_steps.py snapshot PLAN.json --phase P1 --now TS   (after the phase's last not-ready clear is in a manifest)
   create_steps.py scope COUNT --overlay OVERLAY.yaml [--limit N]
   create_steps.py recheck CONTEXT.json OPEN_ITEMS.json
 
@@ -426,6 +427,8 @@ def successor_problems(prev, m):
         status_file_problems(prev.get("status_file"), m.get("status_file"))
         if prev.get("draft_label_removed") and not m.get("draft_label_removed"):
             raise ValueError("clears draft_label_removed; it records something already done once")
+        if prev.get("epic_owned_hash") and not m.get("epic_owned_hash"):
+            raise ValueError("drops epic_owned_hash; a later freeze may change it but never clears it")
         item_history_problems(prev["items"], m["items"])
     except ValueError as e:
         return [str(e)]
@@ -532,6 +535,8 @@ def unfinished(wl, manifest, cr_log=None):
             why = "not recorded as closed (or as finished by a person first)"
         elif k == "remove_label" and w.get("on") == "epic" and not (manifest or {}).get("draft_label_removed"):
             why = "the epic's draft label removal is not recorded"
+        elif k == "update_epic" and (manifest or {}).get("epic_owned_hash") != w["owned_hash"]:
+            why = "the epic's approved text is not recorded"
         elif k == "status_put" and ((manifest or {}).get("status_file") or {}).get("state") != "recorded":
             why = "the status file is not recorded"
         elif k == "cr_log_put":
@@ -545,7 +550,32 @@ def unfinished(wl, manifest, cr_log=None):
     return left
 
 
-def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_KEEP, draft_label_removed=False):
+def snapshot(plan, manifest, phase, now):
+    """The dated snapshot stored at freeze (sandbox run 2, finding 26): what the phase looked like when it
+    was released, rebuilt only from the plan of record and the manifest it follows. Stored as
+    `<plan.id>-snapshot-<manifest seq>-<YYYY-MM-DD>`; restricted values never appear (the plan has none)."""
+    if not manifest:
+        raise ValueError("a snapshot follows a manifest; none was given")
+    keys = {t["key"] for t in plan["tasks"] if t["phase"] == phase}
+    if not keys:
+        raise ValueError(f"{phase} has no tasks in this plan")
+    items = [i for i in manifest["items"] if i["key"] in keys]
+    if {i["key"] for i in items} != keys:
+        raise ValueError(f"the manifest does not record every task of {phase}; freeze it first")
+    if any(i["not_ready"] for i in items):
+        raise ValueError(f"{phase} still has not-ready items; a snapshot is taken once every item is ready")
+    import gw_hash
+    snap = {"schema_version": "1.0", "plan_id": plan["id"], "plan_version": plan["version"],
+            "plan_hash": gw_hash.plan_hash(plan), "phase": phase, "phase_hash": gw_hash.phase_hash(plan, phase),
+            "at": fmt(now), "manifest": {"seq": manifest["seq"], "hash": manifest["hash"]},
+            "items": [{"key": i["key"], "tracker_id": i["tracker_id"], "owned_hash": i["owned_hash"],
+                       "links": i["links"]} for i in sorted(items, key=lambda i: i["key"])]}
+    snap["name"] = f"{plan['id']}-snapshot-{manifest['seq']}-{fmt(now)[:10]}"
+    return snap
+
+
+def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_KEEP, draft_label_removed=False,
+                  epic_owned_hash=None):
     """status_file: the retire record to set; by default it is carried forward from prev, so a later
     manifest can never drop a recorded or intended status file. draft_label_removed: the epic's draft
     label came off (a remove_label write landed); once recorded it is carried forward and never cleared,
@@ -559,6 +589,10 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_K
         m["status_file"] = sf
     if draft_label_removed or (prev or {}).get("draft_label_removed"):
         m["draft_label_removed"] = True
+    # sandbox run 2, finding 27: the epic's owned text as last written (its phase states); carried forward
+    eh = epic_owned_hash or (prev or {}).get("epic_owned_hash")
+    if eh:
+        m["epic_owned_hash"] = eh
     if prev:
         item_history_problems(prev["items"], items)
     before = {i["key"]: i for i in (prev or {}).get("items", [])}
@@ -580,7 +614,7 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_K
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["lock", "preflight", "manifest", "status", "close", "scope", "recheck", "done"])
+    ap.add_argument("cmd", choices=["lock", "preflight", "manifest", "status", "close", "scope", "recheck", "done", "snapshot"])
     ap.add_argument("--logs", nargs="*", default=None, help="done: every change-request log file, when the write list decides one")
     ap.add_argument("--overlay")
     ap.add_argument("--limit", type=int)
@@ -599,13 +633,15 @@ def main(argv=None):
                     help="close: written keys a project-wide find_by_key confirms are gone; recorded as missing")
     ap.add_argument("--draft-label-removed", action="store_true",
                     help="manifest: the epic's draft label came off (its remove_label write landed or was already done)")
+    ap.add_argument("--epic-owned-hash", help="manifest: the epic's owned text was written with this hash (an update_epic write landed)")
+    ap.add_argument("--phase", help="snapshot: the phase just released")
     ap.add_argument("--status-file", help="manifest: the retire status_file entry to set (JSON, from retire.py status "
                                          "or with state recorded); omitted, it is carried forward from the previous manifest")
     a = ap.parse_args(argv)
     J = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
     try:
         latest = None
-        if a.cmd in ("preflight", "manifest", "status", "close", "done"):
+        if a.cmd in ("preflight", "manifest", "status", "close", "done", "snapshot"):
             if not a.plan_id:
                 raise ValueError("--plan-id required")
             latest = check_hashes.latest_manifest_of(a.manifests, a.plan_id)
@@ -666,6 +702,12 @@ def main(argv=None):
                 return 1
         left = unfinished(wl, latest, log)
         out = {"ok": not left, "unfinished": left}
+    elif a.cmd == "snapshot":
+        try:
+            out = snapshot(J(a.files[0]), latest, a.phase, ts(a.now))
+        except ValueError as e:
+            print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
+            return 1
     elif a.cmd == "recheck":
         out = plan_level_recheck(J(a.files[0]), J(a.files[1]))
     elif a.cmd == "scope":
@@ -679,7 +721,7 @@ def main(argv=None):
             out = make_manifest(latest, J(a.files[0]), a.plan_id, a.run, seq, ts(a.now),
                                 J(a.relies_on) if a.relies_on else [],
                                 status_file=J(a.status_file) if a.status_file else _KEEP,
-                                draft_label_removed=a.draft_label_removed)
+                                draft_label_removed=a.draft_label_removed, epic_owned_hash=a.epic_owned_hash)
         except ValueError as e:
             print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
             return 1

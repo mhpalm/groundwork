@@ -7,7 +7,7 @@ structure comes from here, so every run looks the same.
 Usage:
   render_proposal.py proposal PLAN.json --overlay OVERLAY.yaml [--offer P0,P1] [--write-list WL.json] [--out proposal.md]
   render_proposal.py task PLAN.json --overlay OVERLAY.yaml --task P1-T02         (tracker item body)
-  render_proposal.py epic PLAN.json --overlay OVERLAY.yaml                       (epic description)
+  render_proposal.py epic PLAN.json --overlay OVERLAY.yaml [--released P0,P1]    (epic description; --released for freeze)
   render_proposal.py write-list PLAN.json --overlay OVERLAY.yaml --offer P0,P1 [--out WL.json]
 """
 
@@ -201,6 +201,14 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None, rel
             writes.append({"kind": "add_label", "key": c["key"], "label": prefix + c["reason"]})
             writes.append({"kind": "close_item", "key": c["key"], "reason": c["reason"]})
         writes.append({"kind": "manifest_put", "note": "closes done"})
+    if offer:
+        # freeze rewrites the epic's owned text so it shows the phases this set releases (sandbox run 2, finding 27)
+        from check_hashes import owned_hash
+        done = set(offer) | {p["id"] for p in plan["phases"] if p["state"] == "released"}
+        epic_fields = {"title": plan["epic"]["title"], "body_owned": epic_description(plan, overlay, released=done),
+                       "role_key": None, "phase": None, "key": plan["epic"]["key"]}
+        writes.append({"kind": "update_epic", "on": "epic", "fields": "plan_owned", "released": sorted(done),
+                       "owned_hash": owned_hash(epic_fields)})
     if not any(p["state"] in ("writing", "released") for p in plan["phases"]):
         writes.append({"kind": "remove_label", "on": "epic", "label": overlay.get("labels", {}).get("draft", "gw-draft")})
     # preflight finds these at write time; the write list names the procedure so the approval covers it
@@ -361,7 +369,7 @@ def model_sections(plan, overlay):
     out.append("## Approach")
     out.append("**Options considered**")
     for o in ap["options"]:
-        basis = f"{len(o['evidence'])} evidence item{'s' if len(o['evidence']) != 1 else ''}" if o["evidence"] else f"not inspected: {o['not_inspected_reason']}"
+        basis = f"{len(o['evidence'])} evidence item{'s' if len(o['evidence']) != 1 else ''}" if o["evidence"] else f"not inspected: {o['not_inspected_reason'].rstrip('.')}"  # sandbox run 2, finding 19: no double period
         verdict = f" Rejected because of {o['rejected_because']['brief_ref']}: {o['rejected_because']['why']}" if o["rejected_because"] else " Chosen."
         out.append(f"- **{o['id']}** ({o['kind'].replace('_', ' ')}) {o['summary']} Basis: {basis}.{verdict}")
     out.append("")
@@ -435,7 +443,7 @@ def proposal(plan, overlay, offer, wl=None):
     if sp["kind"] == "from_scratch":
         out.append("Nothing; this project starts from scratch.")
     for r in sp["resources"]:
-        how = f"inspected ({len(r['inspected'])} evidence item{'s' if len(r['inspected']) != 1 else ''})" if r["inspected"] else f"not inspected: {r['not_inspected_reason']}"
+        how = f"inspected ({len(r['inspected'])} evidence item{'s' if len(r['inspected']) != 1 else ''})" if r["inspected"] else f"not inspected: {r['not_inspected_reason'].rstrip('.')}"
         changed = [t["id"] for t in plan["tasks"] if t.get("changes_existing") and r["id"] in t["changes_existing"]["resources"]]
         out.append(f"- **{r['id']} {r['name']}** ({r['kind']}, {r['location']}): {how}. "
                    + (f"Changed by {', '.join(changed)}." if changed else "Not changed."))
@@ -536,10 +544,13 @@ def proposal(plan, overlay, offer, wl=None):
     return "\n".join(out) + "\n"
 
 
-def epic_description(plan, overlay):
+def epic_description(plan, overlay, released=()):
+    """released: phases to show as released though the plan of record still says drafted, for the text
+    the freeze writes once those phases are released (sandbox run 2, finding 27)."""
     out = [OWNED_START, plan["epic"]["summary"], "", "| Phase | Name | State |", "| --- | --- | --- |"]
     for p in sorted(plan["phases"], key=lambda p: p["order"]):
-        state = {"outline": "outline, needs a planning run", "released": "released"}.get(p["state"], "planned, not released")
+        st = "released" if p["id"] in released else p["state"]
+        state = {"outline": "outline, needs a planning run", "released": "released"}.get(st, "planned, not released")
         out.append(f"| {p['id']} | {p['name']} | {state} |")
     out.append("")
     out.append("**Access list**")
@@ -579,6 +590,7 @@ def main(argv=None):
     ap.add_argument("plan")
     ap.add_argument("--overlay", required=True)
     ap.add_argument("--offer")
+    ap.add_argument("--released", help="epic: phases shown as released (the freeze's update_epic text)")
     ap.add_argument("--task")
     ap.add_argument("--write-list")
     ap.add_argument("--closes", help="JSON file of [{key, reason}] to close (revise)")
@@ -609,7 +621,8 @@ def main(argv=None):
         items = json.load(open(a.items, encoding="utf-8")) if a.items else []
         text = json.dumps(proposal_context(plan, a.kind, a.summary, a.degraded, items, a.voided), indent=2)
     elif a.what == "epic":
-        text = epic_description(plan, overlay)
+        # --released P0,P1: the text a freeze writes (its update_epic write), with those phases released
+        text = epic_description(plan, overlay, released=[x.strip() for x in (a.released or "").split(",") if x.strip()])
     else:
         closes = json.load(open(a.closes, encoding="utf-8")) if a.closes else None
         edits = [x.strip() for x in (a.edits or "").split(",") if x.strip()]

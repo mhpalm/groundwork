@@ -169,7 +169,7 @@ Evidence holds structure, configuration and counts only. Counts are never groupe
   plan_id: gw-01JCX7Q3RZ9V4N2T8K5M6P0ABC
   plan_version: 3
   plan_hash: sha256 of canonical plan.json without approvals and history
-  plan_store_ref: "<plan.id>-v3-plan"
+  plan_store_ref: "<plan.id>-plan-v3"   # a plan-level set names its proposal context instead
   phases: [P0, P1]
   phase_hashes: {P0: sha256, P1: sha256}
   write_list_hash: sha256 of the numbered write list shown with the offer
@@ -184,7 +184,7 @@ Evidence holds structure, configuration and counts only. Counts are never groupe
   artifact: {tracker_comment_ref, author_account_id, verified_at}
 ```
 
-**Approval sets.** The records for one proposal form a set: same `plan_id`, same `plan_version` (the current version, the latest plan of record stored) and same `proposal_hash`. Only a set's own records are checked against it; every other record is information. A phase set has `scope: phases` and kind `initial`, `release`, `revision` or `exception`. A plan-level set has `scope: plan_level`, `phases: []`, one kind for all its records, and kind `decline`, `own_epic` or `retire` (no new plan version) or `later` (a new version that only adds outline content and offers no phase). `plan_store_ref` names the stored proposal context the proposal was rendered from.
+**Approval sets.** The records for one proposal form a set: same `plan_id`, same `plan_version` (the current version, the latest plan of record stored) and same `proposal_hash`. Only a set's own records are checked against it; every other record is information. A phase set has `scope: phases` and kind `initial`, `release`, `revision` or `exception`. A plan-level set has `scope: plan_level`, `phases: []`, one kind for all its records, and kind `decline`, `own_epic` or `retire` (no new plan version) or `later` (a new version that only adds outline content and offers no phase). `plan_store_ref` names what the proposal was rendered from: for a phase set, the plan of record (`<plan.id>-plan-v<N>`), because a phase proposal depends on nothing else and stores no proposal context; for a plan-level set, the stored proposal context (`proposal-context-<n>`).
 
 ## Plan status file
 

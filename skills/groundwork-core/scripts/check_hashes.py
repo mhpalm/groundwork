@@ -8,6 +8,9 @@ Usage:
   check_hashes.py summary PLAN.json
   check_hashes.py view PLAN.json --evidence DIR [--rules RULES.json ...] --out BUNDLE.json
   check_hashes.py review REVIEW.json --bundle BUNDLE.json
+  check_hashes.py recorded-review PLAN.json --review REVIEW.json --out RECORDED.json
+                  the review approvals bind: the reviewer's file with the resolutions recorded in the plan;
+                  prints its review_hash (sandbox run 2, finding 23)
   check_hashes.py view PLAN.json --plan-level --write-list WL.json --context CONTEXT.json [--assessment A.json] --out BUNDLE.json
   check_hashes.py approvals PLAN.json --overlay OVERLAY.yaml --anchor ANCHOR.json
                   --comments COMMENTS.json --proposal proposal.md --write-list WL.json
@@ -26,6 +29,7 @@ issue: {overlay_id, version, hash, gates: {gate_id: [account ids]}, author_accou
 """
 
 import argparse
+import copy
 import datetime as dt
 import json
 import os
@@ -210,6 +214,23 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
             continue
         records.append((c, rec, gate))
     return records, probs
+
+
+def recorded_review(plan, raw):
+    """The review an approval binds is the review as recorded in the plan of record: the reviewer's own file
+    with each finding's resolution set by Resolve. Only `resolution` may differ from what the reviewer wrote;
+    anything else means the plan records another review (sandbox run 2, finding 23)."""
+    rec = (plan.get("review") or {}).get("reviewer")
+    if not rec:
+        raise ValueError("the plan records no independent review")
+    if rec["view_hash"] != raw["view_hash"]:
+        raise ValueError(f"the plan records a review of another view ({rec['view_hash'][:12]} vs {raw['view_hash'][:12]})")
+    strip = lambda fs: [{k: v for k, v in f.items() if k != "resolution"} for f in fs]
+    if strip(rec["findings"]) != strip(raw["findings"]):
+        raise ValueError("the plan's recorded findings differ from the reviewer's file beyond their resolutions")
+    out = dict(raw)
+    out["findings"] = copy.deepcopy(rec["findings"])
+    return out
 
 
 def _same_review(a, b):
@@ -572,7 +593,7 @@ def cli_plan_state(a, plan_id, plan=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["summary", "view", "review", "approvals", "plan-level", "manifest-chain", "owned"])
+    ap.add_argument("cmd", choices=["summary", "view", "review", "approvals", "plan-level", "manifest-chain", "owned", "recorded-review"])
     ap.add_argument("--plan-id", help="manifest-chain: the plan every manifest must name")
     ap.add_argument("--latest-version", type=int, help="the latest plan-of-record version in the plan store")
     ap.add_argument("files", nargs="*")
@@ -623,6 +644,21 @@ def main(argv=None):
             print(f"review was made from a different reviewer view ({rev['view_hash'][:12]} vs {bh[:12]}); it does not count")
             return 1
         print(review_hash(rev))
+        return 0
+    if a.cmd == "recorded-review":
+        try:
+            out = recorded_review(J(a.files[0]), J(a.review))
+        except ValueError as e:
+            print(str(e))
+            return 1
+        errs = validate(out, load_schema("review"))
+        if errs:
+            print("\n".join(errs))
+            return 1
+        if a.out:
+            with open(a.out, "w", encoding="utf-8") as f:
+                json.dump(out, f, indent=2)
+        print(review_hash(out))
         return 0
     if a.cmd in ("approvals", "plan-level"):
         need = [("--latest-version", a.latest_version), ("--manifests", a.manifests), ("--status", a.status),

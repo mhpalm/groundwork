@@ -40,6 +40,7 @@ class FakeTracker:
         self.clock = T0
         self.epic_state = {}  # epic key -> open | closed (open when absent)
         self.epic_labels = {}  # epic key -> set of labels
+        self.epic_owned = {}  # epic key -> owned hash of the text last written to the epic
 
     def tick(self, seconds=1):
         self.clock += dt.timedelta(seconds=seconds)
@@ -102,6 +103,10 @@ class FakeTracker:
         self._write()
         self.items[tid]["title"] = title
         self.items[tid]["body"] = body
+
+    def update_epic(self, epic, owned_hash):
+        self._write()
+        self.epic_owned[epic] = owned_hash
 
     def remove_epic_label(self, epic, label):
         self._write()
@@ -216,11 +221,12 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
     pending = 0
 
     draft = {"removed": False}
+    epic_text = {"hash": None}
 
     def checkpoint():
         nonlocal seq, prev, pending
         m = create_steps.make_manifest(prev, sorted(items.values(), key=lambda i: i["key"]), plan["id"], run, seq + 1, tr.clock, [],
-                                       draft_label_removed=draft["removed"])
+                                       draft_label_removed=draft["removed"], epic_owned_hash=epic_text["hash"])
         tr.put(f"{plan['id']}-manifest-{seq + 1}", m)
         seq += 1
         prev = m
@@ -326,6 +332,13 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
                 pending += 1
                 if pending >= create_steps.BATCH:
                     checkpoint()
+        # freeze rewrites the epic's owned text once its phases are released (sandbox run 2, finding 27)
+        for w in (write_list or {}).get("writes", []):
+            if w["kind"] == "update_epic" and (prev or {}).get("epic_owned_hash") != w["owned_hash"]:
+                if tr.epic_owned.get(epic) != w["owned_hash"]:  # read the epic first
+                    tr.update_epic(epic, w["owned_hash"])
+                epic_text["hash"] = w["owned_hash"]
+                pending += 1
         checkpoint()
     except LockLost as e:
         return {"ok": False, "lock_lost": e.args[0]}  # stop at once; the release is not ours to post

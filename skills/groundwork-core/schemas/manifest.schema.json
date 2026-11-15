@@ -114,6 +114,10 @@
     "draft_label_removed": {
       "const": true
     },
+    "epic_owned_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "items": {
       "type": "array",
       "items": {

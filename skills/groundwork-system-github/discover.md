@@ -8,6 +8,7 @@ Per CR-01, CR-07 and CR-11. Before the first read, show the runner this list wit
 | --- | --- | --- | --- |
 | R1 | Repo settings, default branch | `gh api repos/{owner}/{repo}` | Each repo in scope |
 | R2 | Branch protection on the default branch | `gh api repos/{owner}/{repo}/branches/{branch}/protection` | Default branch and any named base branch |
+| R2b | Whether the branch is protected, when R2 answers 403 (it needs admin read) | `gh api repos/{owner}/{repo}/branches/{branch} --jq '{protected, enabled: .protection.enabled, checks: .protection.required_status_checks.contexts}'` | Same branches; record the protected flag and the required check names, and list "branch protection detail (R2)" as not inspected |
 | R3 | Rulesets that apply to a branch | `gh api repos/{owner}/{repo}/rules/branches/{branch}` | Same branches |
 | R4 | CODEOWNERS | `gh api repos/{owner}/{repo}/contents/.github/CODEOWNERS` (then `CODEOWNERS`, `docs/CODEOWNERS`) | One file |
 | R5 | Workflows | `gh api repos/{owner}/{repo}/contents/.github/workflows` then each file | At most 30 workflow files |
