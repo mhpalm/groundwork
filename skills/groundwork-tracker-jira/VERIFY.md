@@ -21,6 +21,8 @@ Checked 2026-11-14. Atlassian's REST reference pages render client-side, so thes
 | `GET /rest/api/3/issue/{key}/transitions` lists each transition's target status and required fields; a resolution can be set only on transitions whose screen has it | close | no |
 | A label may contain a colon (`gw-closed:not_planned`) | close labels | no; if not, setup sets `close_label_prefix` to `gw-closed-` |
 | `POST /rest/api/3/search/approximate-count` returns a count for a JQL query | read_scope | no |
+| The connector's HTML read-back of a heading, bullet list, task list, table, rule and expand parses with `jira_body.py read` to the Markdown that was written | normalize | no; the round trip is tested against the writer's own HTML, not yet against Jira's echo |
+| An `expand` node in a description is kept when a person edits text above or below it in the Jira editor | owned section boundary | no |
 | Issue properties set by REST are not JQL-searchable without an app's index module | key slot choice | partly ([entity properties](https://developer.atlassian.com/cloud/jira/platform/jira-entity-properties/)) |
 
 Confirmed: scoped API tokens exist and can be limited to read scopes such as `read:jira-work` ([manage API tokens](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/)).
