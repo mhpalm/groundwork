@@ -120,7 +120,9 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
             # are still checked against both that overlay's gates and the latest anchor's
             info.append("the overlay changed since this retire started; its resume runs with the overlay the plan binds (CR-12)")
         else:
-            probs.append("the loaded overlay does not match the latest admin-anchored overlay record (CR-12)")
+            probs.append("the loaded overlay does not match the latest admin-anchored overlay record (CR-12)"
+                         + ("; on a retire resume, load the overlay the plan binds, or have an admin anchor an overlay "
+                            "that renders the same write list" if resuming_writes else ""))
     if anchor.get("author_account_id") not in {a["account_id"] for a in overlay["admins"]}:
         probs.append("the anchored overlay record was not authored by an overlay admin")
     schema = load_schema("approval")

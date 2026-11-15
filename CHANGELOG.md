@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Changed (fourteenth review, no major findings): the CR-12 stop on a retire resume names the way out, and build decisions 124 and 125 record the two accepted minor findings.
+
 - Fixed (thirteenth review): the resume of a retire whose status intent is recorded can no longer be left with no way forward. `retire.py recheck` leaves an unrecorded plan-owned item open with a warning, and reports an item this retire closed that a person reopened as left open, not closed. On that resume, `check_hashes.py` lists a bad record in the set as information instead of stopping (a fresh record reaches quorum), and accepts the overlay the plan binds after an admin anchors a newer one. approval-create.md says a retire uses `retire.py recheck` and that its resume doesn't rerun the integrity profile.
 
 - Fixed (twelfth review): after a retire's status intent, an item finished at the proposal that is open again (reopened, or a missing item found again) is left open with a warning, so the resume can finish instead of asking to propose again, which the gate refuses.
