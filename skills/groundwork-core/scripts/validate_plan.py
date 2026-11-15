@@ -176,24 +176,24 @@ INTEGRITY_CHECKS = ("SCHEMA", "EVIDENCE-HASH", "EVIDENCE-ID", "CR-12", "GR-17", 
 
 
 def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", proposal_text=None,
-          restricted=None, done_tasks=None, profile="plan"):
+          restricted=None, done_tasks=None, profile="plan", working_text=None):
     """restricted: {brief id: plaintext} from the run folder's restricted.json, when this session has it.
     done_tasks: task ids the tracker reports done or closed_not_done (revise), exempt from GR-31's trace rule.
     profile: "plan"; "assess" for a reconstruction with no phases (open questions may block nothing); or
     "integrity" for a plan-level set with no version change, which offers no phase and reports only
     INTEGRITY_CHECKS."""
     if profile == "integrity":
-        R = _check(plan, overlay, evidence, [], now, stage, proposal_text, restricted, done_tasks, "plan")
+        R = _check(plan, overlay, evidence, [], now, stage, proposal_text, restricted, done_tasks, "plan", working_text)
         R.items = [f for f in R.items if f["check"] in INTEGRITY_CHECKS]
         R.offered = set()
         for f in R.items:
             f["_phase"] = None  # nothing is offered, so every integrity finding counts
         return R
-    return _check(plan, overlay, evidence, offered_arg, now, stage, proposal_text, restricted, done_tasks, profile)
+    return _check(plan, overlay, evidence, offered_arg, now, stage, proposal_text, restricted, done_tasks, profile, working_text)
 
 
 def _check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", proposal_text=None,
-           restricted=None, done_tasks=None, profile="plan"):
+           restricted=None, done_tasks=None, profile="plan", working_text=None):
     phases = {p["id"]: p for p in plan.get("phases", [])}
     drafted = [p["id"] for p in plan.get("phases", []) if p.get("state") != "outline"]
     # None means "not given": offer every drafted phase. An empty list means no phases.
@@ -489,7 +489,7 @@ def _check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", p
                           "Request it earlier", phase=x["phase"])
 
     if gw_model.is_model_plan(plan):
-        model_checks(R, plan, overlay, ev_by_id, tasks, phases, role_keys, restricted, done_tasks or set(), profile)
+        model_checks(R, plan, overlay, ev_by_id, tasks, phases, role_keys, restricted, done_tasks or set(), profile, working_text)
 
     # GR-17: no secrets, personal or financial data
     for src, blob in (("plan", plan), ("evidence", evidence)):
@@ -580,8 +580,11 @@ def _check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", p
     return R
 
 
-def model_checks(R, plan, overlay, ev_by_id, tasks, phases, role_keys, restricted, done_tasks, profile):
-    """GR-29, GR-31, GR-33 and GR-34 (plan format 2). GR-30 and GR-32 are reviewer checks."""
+def model_checks(R, plan, overlay, ev_by_id, tasks, phases, role_keys, restricted, done_tasks, profile, working_text=None):
+    """GR-29, GR-31, GR-33 and GR-34 (plan format 2). GR-30 and GR-32 are reviewer checks.
+
+    working_text: {WT id: text} from the run folder's working-text.json, when this session has it."""
+    wt_missing = set()
     for k in ("brief", "traits", "approach"):
         if k not in plan:
             R.add("GR-29" if k != "approach" else "GR-31", "blocker", None, f"plan format 2 needs '{k}'", f"Add {k} (plan-format.md)")
@@ -637,6 +640,18 @@ def model_checks(R, plan, overlay, ev_by_id, tasks, phases, role_keys, restricte
         for d in f["derived_from"]:
             if d.startswith("ev-") and d not in ev_by_id:
                 R.add("GR-29", "blocker", fid, f"derived_from names {d}, which discovery did not find", "Fix the reference")
+            elif d.startswith("WT-"):
+                # Working text (assess): ticket bodies and comments, kept in the run folder only.
+                if f["source"] != "from_tracker":
+                    R.add("GR-29", "blocker", fid, f"derived from working text {d} but source is {f['source']}",
+                          "Set source from_tracker")
+                if working_text is None:
+                    wt_missing.add(d)
+                elif d not in working_text:
+                    R.add("GR-29", "blocker", fid, f"derived_from names {d}, which is not in working-text.json", "Fix the reference")
+    if wt_missing:
+        R.not_run.append("working-text references not checked, working text unavailable in this session: "
+                         + ", ".join(sorted(wt_missing)))
     signoff = by_key.get("deliverable_signoffs")
     if signoff and signoff["status"] == "answered" and not any(t["kind"] == "signoff_prep" for t in tasks.values()):
         R.add("GR-29", "blocker", signoff["id"], "deliverable sign-offs are named but no signoff_prep task exists",
@@ -729,6 +744,44 @@ def model_checks(R, plan, overlay, ev_by_id, tasks, phases, role_keys, restricte
                     R.add("GR-33", "blocker", None, f"traits {p['id']} and {c['with']} conflict ({c['about']}) and no decision settles it",
                           "Add an approach decision with trait_conflict naming both")
 
+    # GR-31 (adopt by reference): legacy items are referred to, never written to
+    legacy = {r["key"] for r in plan.get("legacy_refs", [])}
+    closes = {}
+    for t in tasks.values():
+        la = t.get("legacy_action")
+        refs = ([la["ref"]] if la else []) + [w["legacy_ref"] for w in t["waits_on"] if w.get("legacy_ref")]
+        for r in refs:
+            if r not in legacy:
+                R.add("GR-31", "blocker", t["id"], f"refers to legacy item {r}, which is not in legacy_refs",
+                      "List it in legacy_refs (from assess) or fix the reference", phase=t["phase"])
+        if la:
+            if la["action"] == "close":
+                closes.setdefault(la["ref"], []).append(t["id"])
+            if not t["access"]:
+                R.add("GR-13", "blocker", t["id"], f"works on legacy item {la['ref']} but requests no access to its project",
+                      "Add an access_list line for the legacy project", phase=t["phase"])
+        for w in t["waits_on"]:
+            if w.get("legacy_ref") and w["kind"] != "external_event":
+                R.add("GR-31", "blocker", t["id"], f"a wait on legacy item {w['legacy_ref']} must be an external_event",
+                      "Set kind external_event and name the owner role", phase=t["phase"])
+    for t in tasks.values():
+        for w in t["waits_on"]:
+            k = w.get("legacy_ref")
+            if k in closes and not re.search(r"closed \(any reason\)", w["what"]):
+                R.add("GR-31", "blocker", t["id"], f"waits for legacy item {k} to be done, but {', '.join(closes[k])} closes it",
+                      f"Wait for \"{k} closed (any reason)\" instead", phase=t["phase"])
+    if legacy:
+        keypat = re.compile(r"(?<![\w-])(" + "|".join(re.escape(k) for k in sorted(legacy, key=len, reverse=True)) + r")(?![\w-])")
+        for t in tasks.values():
+            shown = {k: t[k] for k in ("title", "instructions", "visible_result")}
+            shown["waits_on"] = [{k: v for k, v in w.items() if k != "legacy_ref"} for w in t["waits_on"]]
+            for path, text in strings(shown):
+                bare = re.sub(r"`[^`]*`", "", text)
+                m = keypat.search(bare)
+                if m:
+                    R.add("GR-31", "blocker", t["id"], f"names legacy item {m.group(1)} outside a code span ({path})",
+                          "Put the key in backticks so the tracker does not link or cross-reference it", phase=t["phase"])
+
     # GR-34: restricted brief values never appear anywhere in the plan
     restricted_ids = [f["id"] for f in brief if f["sensitivity"] == "restricted"]
     if restricted_ids:
@@ -755,6 +808,7 @@ def main(argv=None):
     ap.add_argument("--restricted", help="restricted.json from the run folder: {brief id: value}")
     ap.add_argument("--done", help="task ids the tracker reports done or closed_not_done, comma separated (revise)")
     ap.add_argument("--profile", default="plan", choices=["plan", "assess", "integrity"])
+    ap.add_argument("--working-text", help="working-text.json from the run folder (assess and adopt)")
     a = ap.parse_args(argv)
     try:
         with open(a.plan, encoding="utf-8") as f:
@@ -763,13 +817,15 @@ def main(argv=None):
         evidence = load_evidence(a.evidence)
         proposal = open(a.proposal, encoding="utf-8").read() if a.proposal else None
         restricted = json.load(open(a.restricted, encoding="utf-8")) if a.restricted else None
+        wt = ({e["id"]: e["text"] for e in json.load(open(a.working_text, encoding="utf-8"))["entries"]}
+              if a.working_text else None)
     except (OSError, ValueError) as e:
         print(f"cannot read inputs: {e}", file=sys.stderr)
         return 2
     now = parse_ts(a.now) if a.now else None
     offer = [x.strip() for x in a.offer.split(",") if x.strip()] if a.offer is not None else None
     done = {x.strip() for x in a.done.split(",") if x.strip()} if a.done else None
-    R = check(plan, overlay, evidence, offer, now, a.stage, proposal, restricted, done, a.profile)
+    R = check(plan, overlay, evidence, offer, now, a.stage, proposal, restricted, done, a.profile, wt)
     blockers = R.blocking()
     out = {"version": VERSION, "passed": not blockers, "results": R.export()}
     if R.not_run:

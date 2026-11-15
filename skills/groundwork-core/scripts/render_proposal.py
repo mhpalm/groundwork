@@ -320,6 +320,14 @@ def proposal(plan, overlay, offer, wl=None):
     out.append("")
     if "brief" in plan:
         out += model_sections(plan, overlay)
+    legacy_waits = [(t, w) for t in sorted(plan["tasks"], key=lambda t: t["order"]) if t["phase"] in offer
+                    for w in t["waits_on"] if w.get("legacy_ref")]
+    if legacy_waits:
+        out.append("## Waits on legacy items")
+        out.append("These items are outside this plan and are never written to. Before approving, confirm each wait is still pending.")
+        for t, w in legacy_waits:
+            out.append(f"- {t['id']} waits for `{w['legacy_ref']}`: {w['what']} (owner: {role_name(overlay, w['owner_role_key'])})")
+        out.append("")
     if overlay.get("org_process"):
         out.append("## Org processes that apply")
         out += [f"- **{x['name']}** {x['note']}" for x in overlay["org_process"]]

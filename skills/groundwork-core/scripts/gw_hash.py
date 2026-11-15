@@ -9,7 +9,8 @@ phase_hash  the phase's id, name, goal, order, depends_on and task_ids, plus
 plan_hash   every phase_hash, plus scope, request.starting_point, epic.title,
             epic.summary, open_questions and access_list; in plan format 2
             also traits, the full brief (a restricted field contributes its
-            value_rev, never its value) and the full approach.
+            value_rev, never its value) and the full approach; legacy_refs
+            when the plan adopts by reference.
 basis_hash  informational only, never an approval binding: what a phase
             relies on without its own tasks (gw_model.basis_subset). Revise
             compares it at release and now to list "basis changed after release".
@@ -47,7 +48,7 @@ def plan_subset(plan):
         "open_questions": plan["open_questions"],
         "access_list": plan["access_list"],
     }
-    for k in ("traits", "brief", "approach"):
+    for k in ("traits", "brief", "approach", "legacy_refs"):
         if k in plan:
             out[k] = plan[k]
     return out

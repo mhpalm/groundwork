@@ -618,6 +618,35 @@
               "type": "null"
             }
           ]
+        },
+        "legacy_action": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "action": {
+                  "enum": [
+                    "close",
+                    "split",
+                    "update",
+                    "sequence"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "ref",
+                "action"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -1910,6 +1939,65 @@
     },
     "approach": {
       "$ref": "#/$defs/approach"
+    },
+    "legacy_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "todo",
+              "in_progress",
+              "done",
+              "closed_not_done"
+            ]
+          },
+          "points": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+          },
+          "read_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "status",
+          "points",
+          "parent",
+          "updated_at",
+          "read_at"
+        ]
+      }
     }
   },
   "additionalProperties": false,

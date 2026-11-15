@@ -24,6 +24,8 @@ Read `reference/rules.md` before anything else in a run. Those rules (CR-01 to C
 | "Release phase P2" | Validate again, re-check evidence, stages 8 to 10 | `reference/revise-mode.md` |
 | "Revise project X" with the epic's key or link | Diff against the tracker, gap review, approval | `reference/revise-mode.md` |
 | "Add this request to project X" (a change request, in the runner's own words) | Impact assessment in one-day tasks, then revise or a plan-level decision | `reference/revise-mode.md` |
+| "Assess project X" (an epic, one project query, or one repo that Groundwork didn't plan) | Read-only assessment and recommendations report | `reference/assess-mode.md` |
+| "Adopt project X" after an assessment | A new plan that refers to the old items by key and never writes to them | `reference/assess-mode.md` |
 | "Review this bundle" in a fresh conversation | Independent reviewer only | `reference/gap-review.md` |
 | "Migrate the overlay" | Overlay migration | `reference/setup-mode.md` |
 | "Export run bundle" / "import run bundle" | Move run state between sessions | `reference/pipeline.md` |
@@ -48,6 +50,7 @@ Never compute a hash, validate a plan or write proposal text by hand. Run the sc
 | `create_steps.py status|close|scope|recheck ...` | Read item state (done, closed not done, close pending, drift), order a close, check the read_scope limit, recheck a plan-level proposal's items |
 | `check_hashes.py plan-level ...` | Verify a plan-level approval set (decline, own epic, retire, later) |
 | `render_proposal.py plan-level PLAN.json --write-list ... --context ...` | Render a plan-level proposal from stored inputs |
+| `assess.py split|recommend|report|leaks|seed ...` | Assess: keep structure and working text apart, recommend, write the runner's report, check for copied working text, apply the runner's decisions |
 | `change_request.py allocate|base|assess|decide|basis ...` | Change requests: allocate the id under the lock, check the base, assess the impact, record the outcome, list basis changes after release |
 | `check_hashes.py owned FIELDS.json` / `manifest-chain ...` | Plan-owned hash of an item read back; verify the manifest chain |
 | `check_identity.py --overlay ... --connect CONNECT.json` | At Intake, before any discovery call: does each sign-in reach the org the overlay names |

@@ -14,7 +14,7 @@ import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 GOLDEN = os.path.join(ROOT, "tests", "golden")
-GENERATORS = ["make_g1.py", "make_goldens.py", "make_trait_goldens.py"]
+GENERATORS = ["make_g1.py", "make_goldens.py", "make_trait_goldens.py", "make_adopt_golden.py"]
 
 
 def snapshot():

@@ -59,3 +59,11 @@ These were settled while building v1 against spec draft 0.3. Each is a candidate
 37. An outline cost with no new outline phase still counts one phase. A later outcome always adds at least one.
 38. GR-17 now lives in one function, `validate_plan.gr17_scan`, used for the plan, evidence and the change-request log, so the patterns can't drift apart.
 
+## Planning model build 5, 2026-11-15
+
+39. Assess keeps item links in `legacy-refs.json` for cycle and dependency checks, but `legacy_refs` in the plan drops them: the forward plan refers to items, not to the old dependency graph.
+40. "No done criteria" is a heuristic (no acceptance, done-when, checklist, expected-result or verify wording in the body or comments). It only ever produces a clarify recommendation, which the runner can reject.
+41. A copy of working text is a sentence of at least 24 characters appearing verbatim. Shorter runs give false hits on common phrases; the reviewer's GR-19 check covers paraphrase.
+42. A tracker-derived brief field still needs `basis_role_key` (the existing GR-29 rule): someone confirmed that reading of the ticket.
+43. A provisional bundle may carry only `system: runner` evidence with an intact hash; import lists it under `reconfirm` for the runner to confirm against the approved overlay.
+

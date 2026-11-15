@@ -26,6 +26,9 @@ from gw_hash import item_hash  # noqa: E402
 TEXT = (".json", ".jsonl", ".md", ".yaml", ".yml", ".txt")
 
 PROVISIONAL_ID = "provisional"
+# Files that hold restricted text: the plaintext of restricted brief fields, and ticket bodies and
+# comments read by assess. They travel marked restricted and are never written to a plan store.
+RESTRICTED_FILES = ("restricted.json", "working-text.json")
 
 
 def export(run_dir):
@@ -39,7 +42,8 @@ def export(run_dir):
             full = os.path.join(root, n)
             rel = os.path.relpath(full, run_dir).replace(os.sep, "/")
             text = open(full, encoding="utf-8").read()
-            files.append({"path": rel, "sha256": sha256_hex(text.encode("utf-8")), "content": text})
+            files.append({"path": rel, "sha256": sha256_hex(text.encode("utf-8")), "content": text,
+                          "restricted": rel in RESTRICTED_FILES})
     b = {"schema_version": "1.0", "kind": "groundwork-run-bundle", "overlay_id": plan["overlay"]["id"],
          "overlay_version": plan["overlay"]["version"], "overlay_hash": plan["overlay"]["hash"],
          "plan_id": plan["id"], "plan_version": plan["version"], "files": files}
@@ -56,9 +60,21 @@ def problems(bundle, overlay):
     promoting = bundle["overlay_id"] == PROVISIONAL_ID and overlay["id"] != PROVISIONAL_ID
     if promoting:
         # D-54: a plan drafted before setup moves into the org's approved overlay. A provisional run
-        # inspected nothing, so it may carry no evidence; the core reruns Discover to Proposal after import.
-        if any(f["path"].startswith("evidence/") and f["path"].endswith(".json") for f in bundle["files"]):
-            probs.append("a provisional bundle carries evidence; a provisional run inspects nothing, so it was changed")
+        # inspected no system, so the only evidence it may carry is what the runner supplied
+        # (system: runner, hash intact), which is re-confirmed by the runner at promotion.
+        for f in bundle["files"]:
+            if not (f["path"].startswith("evidence/") and f["path"].endswith(".json")):
+                continue
+            try:
+                d = json.loads(f["content"])
+            except ValueError:
+                continue  # reported below
+            for item in d if isinstance(d, list) else [d]:
+                if not isinstance(item, dict) or item.get("system") != "runner":
+                    probs.append(f"a provisional bundle carries system evidence in {f['path']}; a provisional run inspects "
+                                 "no system, so it was changed")
+                elif item.get("hash") != item_hash(item):
+                    probs.append(f"runner evidence {item.get('id')} in {f['path']} does not match its hash")
     elif bundle["overlay_id"] != overlay["id"]:
         probs.append(f"bundle was made under overlay {bundle['overlay_id']!r}, not {overlay['id']!r} (CR-12); "
                      "start a new run under this org's overlay instead")
@@ -74,6 +90,8 @@ def problems(bundle, overlay):
         names.add(p)
         if sha256_hex(f["content"].encode("utf-8")) != f["sha256"]:
             probs.append(f"file {p} does not match its hash")
+        if p in RESTRICTED_FILES and not f.get("restricted"):
+            probs.append(f"file {p} holds restricted text but is not marked restricted")
         if p.startswith("evidence/") and p.endswith(".json"):
             try:
                 d = json.loads(f["content"])
@@ -105,9 +123,14 @@ def do_import(bundle, overlay, runs_root):
         with open(full, "w", encoding="utf-8") as fh:
             fh.write(f["content"])
     out = {"ok": True, "run_dir": dest, "files": len(bundle["files"])}
+    out["restricted_files"] = sorted(f["path"] for f in bundle["files"] if f.get("restricted"))
     if bundle["overlay_id"] == PROVISIONAL_ID and overlay["id"] != PROVISIONAL_ID:
         out["promoted_from_provisional"] = True
         out["rerun_from"] = "discover"
+        out["reconfirm"] = sorted(item["id"] for f in bundle["files"] if f["path"].startswith("evidence/")
+                                  and f["path"].endswith(".json")
+                                  for item in (lambda d: d if isinstance(d, list) else [d])(json.loads(f["content"]))
+                                  if isinstance(item, dict))
     return out
 
 

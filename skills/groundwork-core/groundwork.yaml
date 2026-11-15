@@ -10,4 +10,4 @@ surfaces:
   claude-code-cloud: {connect: [scripts], coverage: partial}
   claude-app: {connect: [scripts], coverage: partial}
 rule_prefix: null
-sections: [pipeline, rules, plan-format, gap-review, setup-mode, approval-create, release-revise, contract, hashing]
+sections: [pipeline, rules, plan-format, gap-review, setup-mode, approval-create, release-revise, assess-adopt, contract, hashing]

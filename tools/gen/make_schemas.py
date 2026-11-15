@@ -92,8 +92,10 @@ task = obj({
                                       "could_break": arr(STR, minItems=1), "regression_check": arr(TASK_ID, minItems=1)})),
     # plan format 2: what the task serves and relies on (required there by GR-31)
     "brief_refs": arr(B_ID), "approach_refs": arr(AD_ID), "derived_from_rec": nullable(REC_ID),
+    # adopt by reference: a manual task on a legacy item (never written to; the key stays in code spans)
+    "legacy_action": nullable(obj({"ref": STR, "action": {"enum": ["close", "split", "update", "sequence"]}})),
 })
-TASK_REQUIRED = [k for k in task["properties"] if k not in ("brief_refs", "approach_refs", "derived_from_rec")]
+TASK_REQUIRED = [k for k in task["properties"] if k not in ("brief_refs", "approach_refs", "derived_from_rec", "legacy_action")]
 task["required"] = TASK_REQUIRED
 
 brief_field = obj({
@@ -175,9 +177,13 @@ plan = {
         "traits": arr(obj({"id": TRAIT_ID, "version": SEMVER, "from_plan_version": {"type": "integer", "minimum": 1}})),
         "brief": arr({"$ref": "#/$defs/brief_field"}),
         "approach": {"$ref": "#/$defs/approach"},
+        # adopt by reference: legacy items the plan refers to, as read by assess; legacy items are not tasks
+        "legacy_refs": arr(obj({"key": STR, "status": {"enum": ["todo", "in_progress", "done", "closed_not_done"]},
+                                "points": nullable({"type": "number", "minimum": 0}), "parent": nullable(STR),
+                                "updated_at": TS, "read_at": TS})),
     }),
 }
-plan["required"] = [k for k in plan["properties"] if k not in ("traits", "brief", "approach")]
+plan["required"] = [k for k in plan["properties"] if k not in ("traits", "brief", "approach", "legacy_refs")]
 plan["$defs"]["brief_field"] = brief_field
 plan["$defs"]["approach"] = approach
 
