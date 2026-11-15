@@ -348,12 +348,17 @@ def run_close(tr, plan, overlay, closes, run="run-c", account="acct-dev", crash_
     fm = overlay["skills"]["tracker"]["field_map"]
     manifest = latest_manifest(tr, plan["id"])
     written = {i["key"]: copy.deepcopy(i) for i in (manifest or {}).get("items", [])}
-    found = []
+    found, missing = [], []
     for k, w in written.items():
+        if w["tracker_id"] not in tr.items:
+            if not tr.find_by_key(k):  # a project-wide find_by_key confirms a person deleted it
+                missing.append(k)
+            continue
         st = create_steps.read_status(tr.raw(w["tracker_id"]), w, fm)
         found.append({"key": k, "tracker_id": w["tracker_id"], "status": st["status"], "close_pending": st["close_pending"],
                       "closed_by_groundwork": st.get("closed_by_groundwork", False)})
-    plan_steps = create_steps.close_steps(closes, manifest, found)
+    plan_steps = create_steps.close_steps(closes, manifest, found,
+                                          [k for k in missing if k in {c["key"] for c in closes}])
     if not plan_steps["ok"]:
         return plan_steps
     seq = (manifest or {}).get("seq", 0)

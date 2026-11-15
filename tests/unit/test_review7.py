@@ -69,11 +69,13 @@ class StoredButNeverApplied(unittest.TestCase):
         next(i for i in m["items"] if i["key"] == self.dropped)["close"] = {"reason": "not_planned", "state": "closed"}
         self.assertEqual(revise_diff.required_closes(self.v3, m), [])
 
-    def test_a_recorded_dropped_task_the_read_misses_is_refused(self):
+    def test_a_recorded_dropped_task_the_read_misses_is_closed_as_missing(self):
         report, m = tracker_report(self.tr, self.v2, self.ov)
         report = [r for r in report if r["key"] != self.dropped]
         d = revise_diff.diff(self.v2, self.v3, report, self.ov, m)
-        self.assertFalse(d["ok"])
+        self.assertTrue(d["ok"], d)
+        self.assertEqual(d["missing"], [self.dropped])
+        self.assertIn(self.dropped, [c["key"] for c in d["close_items"]])
 
     def test_retire_closes_it_instead_of_naming_it_a_persons(self):
         items = retire_items(self.tr, self.v3, self.ov, "VOL-1")
@@ -82,8 +84,9 @@ class StoredButNeverApplied(unittest.TestCase):
         self.assertIn(self.dropped, [c["key"] for c in r["closes"]])
         flagged = [dict(i, person_added=True) if i["key"] == self.dropped else i for i in items]
         self.assertIn(self.dropped, [c["key"] for c in retire.plan_retire(flagged, {}, self.m)["closes"]])
-        missing = [i for i in items if i["key"] != self.dropped]
-        self.assertFalse(retire.plan_retire(missing, {}, self.m)["ok"])
+        missing = retire.plan_retire([i for i in items if i["key"] != self.dropped], {}, self.m)
+        self.assertEqual(missing["missing"], [self.dropped])
+        self.assertIn(self.dropped, [c["key"] for c in missing["closes"]])
 
     def test_the_retire_cli_needs_the_manifests(self):
         d = tempfile.mkdtemp()

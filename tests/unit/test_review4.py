@@ -351,7 +351,7 @@ class PlanLevelWriteListsAreRebuilt(unittest.TestCase):
         rp = retire.plan_retire(items, {items[1]["key"]: {"leave": "developer"}})
         good = retire.write_list(self.plan, self.ov, rp)
         self.assertEqual(check_hashes.rebuilt_plan_level_problems(self.plan, self.ov, good,
-                                                                  {"items": items}), [])
+                                                                  {"items": items}, None), [])
         for name, change in (("closes as completed", lambda wl: [w.update(reason="completed") for w in wl["writes"]
                                                                   if w["kind"] == "close_item"]),
                              ("drops the status file", lambda wl: wl.update(writes=[w for w in wl["writes"]
@@ -361,7 +361,7 @@ class PlanLevelWriteListsAreRebuilt(unittest.TestCase):
             with self.subTest(name):
                 bad = copy.deepcopy(good)
                 change(bad)
-                self.assertTrue(check_hashes.rebuilt_plan_level_problems(self.plan, self.ov, bad, {"items": items}))
+                self.assertTrue(check_hashes.rebuilt_plan_level_problems(self.plan, self.ov, bad, {"items": items}, None))
 
 
 class RecordChecks(unittest.TestCase):

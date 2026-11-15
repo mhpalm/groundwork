@@ -288,7 +288,7 @@ def read_status(raw, written, field_map):
     return {"key": raw["key"], "status": category, "close_pending": bool(close) and close["state"] == "intent", "drift": None}
 
 
-def close_steps(closes, manifest, found):
+def close_steps(closes, manifest, found, missing=()):
     """Ordered steps to close items: intent in the manifest first, as a batch of its own,
     then for each item the gw-closed label and the transition, then the manifest again.
 
@@ -297,16 +297,28 @@ def close_steps(closes, manifest, found):
     completion check can finish (sixth review, M1 and M2): Groundwork's own transition that landed
     before a crash is recorded as closed; an item a person finished first is recorded as finished
     (a person's close is never relabelled, and it reads by the tracker's own status).
+
+    missing: written keys a project-wide find_by_key confirms are gone (a person deleted the item). Their
+    close is recorded as missing, which is final, so a deleted item never leaves a plan with no way
+    forward (eighth review, M3). A key named missing that the read did find stops.
     """
+    missing = set(missing)
     written = {i["key"]: i for i in (manifest or {}).get("items", [])}
     by_key = {f["key"]: f for f in found}
-    intents, per_item, skipped, stops, landed, finished = [], [], [], [], [], []
+    intents, per_item, skipped, stops, landed, finished, gone = [], [], [], [], [], [], []
     for c in closes:
         key, reason = c["key"], c["reason"]
         if reason not in CLOSE_REASONS:
             stops.append({"key": key, "why": f"unknown close reason '{reason}'"})
             continue
         f = by_key.get(key)
+        if key in missing:
+            if f is not None or key not in written:
+                stops.append({"key": key, "why": "named missing, but " + ("the read found it" if f is not None
+                                                                         else "no manifest records it")})
+            elif (written[key].get("close") or {}).get("state") not in ("closed", "finished", "missing"):
+                gone.append(key)
+            continue
         if f is None or key not in written:
             stops.append({"key": key, "why": "no written item with this key; only items Groundwork wrote are closed"})
             continue
@@ -314,7 +326,7 @@ def close_steps(closes, manifest, found):
         if prior and prior["reason"] != reason:
             stops.append({"key": key, "why": f"a close as {prior['reason']} is already recorded; finish or revise it first"})
             continue
-        if prior and prior["state"] in ("closed", "finished"):
+        if prior and prior["state"] in ("closed", "finished", "missing"):
             skipped.append({"key": key, "why": f"its close is already recorded ({prior['state']})"})
             continue
         if f["status"] in ("done", "closed_not_done") and not f.get("close_pending"):
@@ -335,10 +347,12 @@ def close_steps(closes, manifest, found):
         steps.append({"step": "transition", **it,
                       "then": "if the tracker needs a person (no direct transition, a screen field, more than one hop), "
                               "stop and name the item; it stays close pending"})
-    if per_item or landed or finished:
+    if per_item or landed or finished or gone:
         reason_of = {c["key"]: c["reason"] for c in closes}
         recs = [{"key": k, "close": {"reason": reason_of[k], "state": "closed"}} for k in [it["key"] for it in per_item] + landed]
         recs += [{"key": k, "close": {"reason": reason_of[k], "state": "finished"}} for k in finished]
+        recs += [{"key": k, "close": {"reason": (written[k].get("close") or {}).get("reason", reason_of[k]), "state": "missing"}}
+                 for k in gone]
         # records: set each item's manifest close to exactly this, then write the manifest
         steps.append({"step": "manifest_closed", "keys": [it["key"] for it in per_item] + landed, "finished": finished,
                       "records": recs})
@@ -375,7 +389,7 @@ def scope_decision(count, overlay, requested=None):
 _KEEP = object()
 
 
-CLOSE_ORDER = {"intent": 0, "closed": 1, "finished": 1}
+CLOSE_ORDER = {"intent": 0, "closed": 1, "finished": 1, "missing": 1}
 
 
 def status_file_problems(prior, sf):
@@ -497,7 +511,7 @@ def unfinished(wl, manifest, cr_log=None):
             why = "the cleared blocked state is not recorded"
         elif k == "update_item" and items.get(key, {}).get("owned_hash") != w["owned_hash"]:
             why = "the approved text is not recorded"
-        elif k == "close_item" and (items.get(key, {}).get("close") or {}).get("state") not in ("closed", "finished"):
+        elif k == "close_item" and (items.get(key, {}).get("close") or {}).get("state") not in ("closed", "finished", "missing"):
             why = "not recorded as closed (or as finished by a person first)"
         elif k == "remove_label" and w.get("on") == "epic" and not (manifest or {}).get("draft_label_removed"):
             why = "the epic's draft label removal is not recorded"
@@ -564,6 +578,8 @@ def main(argv=None):
     ap.add_argument("--write-list", help="preflight: the verified write list (its update_item writes)")
     import check_hashes
     check_hashes.add_manifests_arg(ap)
+    ap.add_argument("--missing", nargs="*", default=None,
+                    help="close: written keys a project-wide find_by_key confirms are gone; recorded as missing")
     ap.add_argument("--draft-label-removed", action="store_true",
                     help="manifest: the epic's draft label came off (its remove_label write landed or was already done)")
     ap.add_argument("--status-file", help="manifest: the retire status_file entry to set (JSON, from retire.py status "
@@ -613,7 +629,7 @@ def main(argv=None):
         for r in J(a.files[1]):
             st = read_status(r, written.get(r["key"]), fm)
             found.append({"key": r["key"], "tracker_id": (written.get(r["key"]) or {}).get("tracker_id"), **st})
-        out = close_steps(closes, latest, found)
+        out = close_steps(closes, latest, found, a.missing or ())
     elif a.cmd == "done":
         wl = J(a.files[0])
         log = None

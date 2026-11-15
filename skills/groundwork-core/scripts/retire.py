@@ -10,14 +10,15 @@ Usage:
   retire.py status PLAN.json --n N --proposal PROPOSAL.md --at TS   (at write time, under the lock; the
             verified proposal file, whose hash is computed here and never typed)
   retire.py rebuild PLAN_ID --manifests M_1.json ... M_n.json   (resume: the status file from the latest manifest's intent)
-  retire.py recheck VERIFIED_WRITE_LIST.json ITEMS.json CONTEXT.json   (at write time, before any write)
+  retire.py recheck VERIFIED_WRITE_LIST.json ITEMS.json CONTEXT.json --plan-id ID --manifests M_1.json ...
+            (at write time, before any write)
   retire.py gate OP --plan PLAN.json --manifests M_1.json ... --status STATUS.json|- --epic open|closed
             [--resuming PLAN_VERSION:PROPOSAL_HASH]
 
 Retire writes no plan version. The status lives in status-<n>.json; the latest one
 wins over plan.status. ITEMS: [{key, status, person_added, unrecorded}] from list_children
-plus find_by_key for every plan key (status from create_steps.py status). person_added: the
-key is not one of the plan's task keys. unrecorded: a plan key no manifest records yet. CHOICES: {key: "close" | {leave:
+plus find_by_key for every plan key and every key a manifest records (status from create_steps.py
+status). person_added: the key is neither one of the plan's task keys nor recorded in a manifest. unrecorded: a plan key no manifest records yet. CHOICES: {key: "close" | {leave:
 owner_role_key}} for every in_progress plan-owned item.
 
 Write order: lock claim, status intent manifest (the first write after the lock), draft
@@ -51,9 +52,13 @@ def plan_retire(items, choices, manifest=None):
     recorded = {w["key"]: w for w in (manifest or {}).get("items", [])}
     items = [dict(i, person_added=False) if i.get("person_added") and i["key"] in recorded else i for i in items]
     found = {i["key"] for i in items}
+    missing = []
     for k, w in sorted(recorded.items()):
-        if k not in found and (w.get("close") or {}).get("state") not in ("closed", "finished"):
-            probs.append(f"{k} is recorded in the manifest but the read didn't find it: find it by key, then retire")
+        if k not in found and (w.get("close") or {}).get("state") not in ("closed", "finished", "missing"):
+            # a person deleted it: the close procedure records it as missing once a project-wide
+            # find_by_key confirms it is gone (eighth review, M3)
+            missing.append(k)
+            closes.append({"key": k, "reason": (w.get("close") or {}).get("reason", "not_planned")})
     for it in sorted(items, key=lambda i: i["key"]):
         if it.get("person_added"):
             person.append(it["key"])
@@ -76,10 +81,12 @@ def plan_retire(items, choices, manifest=None):
             probs.append(f"{it['key']} is in progress: the runner chooses close, or leave open with a named owner role")
     seen = [{"key": i["key"], "status": i["status"], "person_added": bool(i.get("person_added"))}
             for i in sorted(items, key=lambda i: i["key"])]
-    return {"ok": not probs, "closes": closes, "left_open": left, "person_added": person, "problems": probs, "seen": seen}
+    closes.sort(key=lambda c: c["key"])
+    return {"ok": not probs, "closes": closes, "left_open": left, "person_added": person, "missing": missing,
+            "problems": probs, "seen": seen}
 
 
-def recheck(wl, items, seen):
+def recheck(wl, items, seen, manifest=None):
     """At write time, check the items as they are now against the verified retire write list.
 
     wl: the verified write list (its close_item writes and left_open); seen: the statuses the
@@ -91,6 +98,9 @@ def recheck(wl, items, seen):
     closes = {w["key"] for w in wl["writes"] if w["kind"] == "close_item"}
     left = {x["key"] for x in wl.get("left_open", [])}
     person = set(wl.get("person_added", []))
+    recorded = {w["key"] for w in (manifest or {}).get("items", [])}
+    # a key the manifest records is Groundwork's, whatever the runner's read flagged (eighth review, M1)
+    items = [dict(i, person_added=False) if i.get("person_added") and i["key"] in recorded else i for i in items]
     probs = []
     for it in sorted(items, key=lambda i: i["key"]):
         k, st = it["key"], it["status"]
@@ -249,8 +259,14 @@ def main(argv=None):
             out = {"ok": False, "problems": [f"cannot rebuild the status file: {e}"]}
     elif a.cmd == "recheck":
         seen = {i["key"]: i["status"] for i in J(a.files[2])["items"]}
-        probs = recheck(J(a.files[0]), J(a.files[1]), seen)
-        out = {"ok": not probs, "problems": probs}
+        if not a.plan_id or a.manifests is None:
+            out = {"ok": False, "problems": ["--plan-id and --manifests required: a key the manifest records is never a person's"]}
+        else:
+            try:
+                probs = recheck(J(a.files[0]), J(a.files[1]), seen, check_hashes.latest_manifest_of(a.manifests, a.plan_id))
+                out = {"ok": not probs, "problems": probs}
+            except ValueError as e:
+                out = {"ok": False, "problems": [str(e)]}
     elif a.cmd == "status" and a.n is None:
         out = {"ok": False, "problems": ["--n required: the number is allocated under the lock at write time"]}
     elif a.cmd == "status" and not (a.proposal and a.at):

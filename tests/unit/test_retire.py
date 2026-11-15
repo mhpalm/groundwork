@@ -356,7 +356,9 @@ class Scripts(unittest.TestCase):
         json.dump(retire.write_list(plan, ov, rp), open(P("wl.json"), "w"))
         json.dump(retire_items(tr, plan, ov, "VOL-1"), open(P("now.json"), "w"))
         json.dump(render_proposal.proposal_context(plan, "retire", "Retire.", items=rp["seen"]), open(P("ctx.json"), "w"))
-        self.assertEqual(run(retire, ["recheck", P("wl.json"), P("now.json"), P("ctx.json")])[0], 0)
+        self.assertEqual(run(retire, ["recheck", P("wl.json"), P("now.json"), P("ctx.json")])[0], 1)  # no manifests
+        self.assertEqual(run(retire, ["recheck", P("wl.json"), P("now.json"), P("ctx.json"), "--plan-id", plan["id"],
+                                      "--manifests", *chain])[0], 0)
 
     def test_retire_proposal_lists_left_open_person_added_and_voided_sets(self):
         tr, plan, ov = created()

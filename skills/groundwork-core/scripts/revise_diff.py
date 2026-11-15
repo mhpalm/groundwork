@@ -72,16 +72,40 @@ def required_closes(plan, manifest):
     out = []
     for w in (manifest or {}).get("items", []):
         c = w.get("close") or {}
-        if w["key"].startswith(prefix) and w["key"] not in keys and c.get("state") not in ("closed", "finished"):
+        if w["key"].startswith(prefix) and w["key"] not in keys and c.get("state") not in ("closed", "finished", "missing"):
             out.append({"key": w["key"], "reason": c.get("reason", "not_planned")})
     return sorted(out, key=lambda c: c["key"])
 
 
+def derived_writes(plan, manifest):
+    """The relinks and unblocks the plan of record implies for every task the manifest records as written:
+    links that no longer match its dependencies, and a blocked state Groundwork recorded as set on a task
+    that no longer waits. Computed from the plan and the manifest alone, so the diff and the approvals
+    rebuild derive the same writes (eighth review, M2)."""
+    prefix = f"gw:{plan['id']}:"
+    strip = lambda k: k[len(prefix):] if k.startswith(prefix) else k
+    written = {w["key"]: w for w in (manifest or {}).get("items", [])}
+    relinks, unblocks = [], []
+    for t in sorted(plan["tasks"], key=lambda x: x["id"]):
+        w = written.get(t["key"])
+        if w is None:
+            continue
+        have = {lk["to_key"] for lk in w.get("links", []) if lk["type"] == "blocked_by"}
+        want = {f"{prefix}{d['task']}" for d in t["depends_on"]}
+        if have != want:
+            relinks.append({"task": t["id"], "added": sorted(strip(k) for k in want - have),
+                            "removed": sorted(strip(k) for k in have - want)})
+        if not t.get("waits_on") and blocked_state(w) == "set":
+            unblocks.append(t["id"])  # only what Groundwork recorded as set (seventh review, m1)
+    return {"relinks": relinks, "unblocks": unblocks}
+
+
 def catch_up(out, new, tr, manifest, touched, finished):
     """The tracker changes the plan of record implies, from what the manifest records Groundwork did:
-    closes of written tasks the plan dropped, links that no longer match a written task's dependencies,
-    and a blocked state Groundwork set on a task that no longer waits. Earlier versions that were stored
-    but never applied can't lose them, because none of this comes from the base plan."""
+    closes of written tasks the plan dropped, and the derived relinks and unblocks. Earlier versions that
+    were stored but never applied can't lose them, because none of this comes from the base plan. A dropped
+    task the tracker read doesn't show is still closed: the close procedure records it as missing once a
+    project-wide find_by_key confirms it is gone (eighth review, M3)."""
     prefix = f"gw:{new['id']}:"
     have = {c["key"] for c in out["close_items"]}
     for c in required_closes(new, manifest):
@@ -89,36 +113,25 @@ def catch_up(out, new, tr, manifest, touched, finished):
             continue
         tid = c["key"][len(prefix):]
         if c["key"] not in tr:
-            out["refused"].append({"task": tid, "why": "the manifest records this dropped task as written but the tracker "
-                                   "read doesn't show it: find it by key before revising"})
-            continue
+            out["missing"].append(c["key"])
         out["close"].append(tid)
         out["close_items"].append(c)
         touched.add(c["key"])
-    written = {w["key"]: w for w in manifest.get("items", [])}
-    relinks, unblocks = [], []
-    for t in sorted(new["tasks"], key=lambda x: x["id"]):
-        w, item = written.get(t["key"]), tr.get(t["key"])
-        if w is None or item is None or finished(item):
-            continue
-        have_links = {lk["to_key"] for lk in w.get("links", []) if lk["type"] == "blocked_by"}
-        want = {f"{prefix}{d['task']}" for d in t["depends_on"]}
-        strip = lambda k: k[len(prefix):] if k.startswith(prefix) else k
-        if have_links != want:
-            relinks.append({"task": t["id"], "added": sorted(strip(k) for k in want - have_links),
-                            "removed": sorted(strip(k) for k in have_links - want)})
-            touched.add(t["key"])
-        if not t.get("waits_on") and blocked_state(w) == "set":
-            unblocks.append(t["id"])  # only what Groundwork recorded as set (seventh review, m1)
-            touched.add(t["key"])
-    out["relinks"], out["unblocks"] = relinks, unblocks
+    d = derived_writes(new, manifest)
+    for r in d["relinks"] + [{"task": x} for x in d["unblocks"]]:
+        key = f"{prefix}{r['task']}"
+        if key not in tr:
+            out["refused"].append({"task": r["task"], "why": "the manifest records this task as written but the tracker "
+                                   "read doesn't show it: find it by key before revising"})
+        touched.add(key)
+    out["relinks"], out["unblocks"] = d["relinks"], d["unblocks"]
 
 
 def diff(base, new, tracker, overlay, manifest=None):
     """manifest: the latest manifest. A task is "never written" only when neither the tracker read
     nor the manifest knows its key; without the manifest, nothing is dropped."""
     out = {"added": [], "changed": [], "close": [], "close_items": [], "dropped": [], "adopted": [], "changed_unwritten": [], "deps_changed": [], "relinks": [], "unblocks": [], "phases_offered": [],
-           "drift": [], "refused": [], "relies_on": []}
+           "drift": [], "refused": [], "relies_on": [], "missing": []}
     if new["id"] != base["id"]:
         out["refused"].append({"task": None, "why": "the revised plan has a different plan id; revise keeps the epic's plan id"})
         out["ok"] = False
@@ -128,7 +141,7 @@ def diff(base, new, tracker, overlay, manifest=None):
     bt = {t["id"]: t for t in base["tasks"]}
     nt = {t["id"]: t for t in new["tasks"]}
     tr = {i["key"]: i for i in tracker}
-    recorded = {w["key"]: w for w in (manifest or {}).get("items", [])}
+    recorded_items = {w["key"]: w for w in (manifest or {}).get("items", [])}
     touched = set()
 
     def finished(item):
@@ -158,8 +171,19 @@ def diff(base, new, tracker, overlay, manifest=None):
         base_h, new_h = rendered_hash(base, overlay, b), rendered_hash(new, overlay, t)
         # drift is measured against the text Groundwork recorded writing, not the base plan's text: a base
         # version stored but never applied isn't on the tracker, and that is not a person's edit (seventh review)
-        rec = recorded.get(b["key"])
+        rec = recorded_items.get(b["key"])
         written_h = (rec or {}).get("owned_hash") or base_h
+        if item and item["owned_hash"] != written_h and item["owned_hash"] == base_h:
+            # the plan of record's own approved update reached the tracker, but the session ended before the
+            # manifest recorded it: not a person's edit (eighth review, m2). Record it first; edit it after.
+            touched.add(b["key"])
+            if new_h == base_h:
+                out["adopted"].append(tid)
+            else:
+                out["refused"].append({"task": tid, "why": "the plan of record's update to this task landed but was never "
+                                                           "recorded; revise once without changing it, so the update is "
+                                                           "recorded, then edit it"})
+            continue
         if item and item["owned_hash"] != written_h:
             out["drift"].append({"task": tid, "tracker_id": item["tracker_id"]})
             touched.add(b["key"])
@@ -221,6 +245,9 @@ def diff(base, new, tracker, overlay, manifest=None):
     for tid in out["added"]:
         if any(t["key"] == nt[tid]["key"] for t in base["tasks"]):
             out["refused"].append({"task": tid, "why": "a new task reuses a key from the plan of record; ids are append-only"})
+        elif nt[tid]["key"] in recorded_items:  # eighth review, m1: a dropped, written key is never reused
+            out["refused"].append({"task": tid, "why": "a new task reuses the key of a written task an earlier version "
+                                                       "dropped; ids are append-only, so take a new id"})
     bp = {p["id"]: p for p in base["phases"]}
     for p in new["phases"]:
         if p["state"] != "outline" and bp.get(p["id"], {}).get("state", "outline") == "outline":
@@ -247,7 +274,12 @@ def main(argv=None):
     J = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
     base = J(a.base)
     try:
-        manifest = check_hashes.latest_manifest_of(a.manifests, base["id"]) or {"items": []}
+        manifest = check_hashes.latest_manifest_of(a.manifests, base["id"])
+        if manifest is None and any(i["key"].startswith(f"gw:{base['id']}:") for i in J(a.tracker)):
+            # eighth review, m4: an empty manifest set while the tracker holds this plan's items would turn
+            # off every manifest-derived close, relink and unblock
+            raise ValueError("the tracker holds items of this plan but no manifest was given: pass every manifest file")
+        manifest = manifest or {"items": []}
     except ValueError as e:
         print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
         return 1

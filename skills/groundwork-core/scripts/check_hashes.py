@@ -208,12 +208,27 @@ def rebuilt_write_list_problems(plan, overlay, wl, manifest=None):
     manifest, it must also close every written task the plan no longer has (seventh review, M1)."""
     import render_proposal
     if manifest is not None:
-        from revise_diff import required_closes
+        from revise_diff import derived_writes, required_closes
         named = {w["key"] for w in wl.get("writes", []) if w.get("kind") == "close_item"}
         missing = [c["key"] for c in required_closes(plan, manifest) if c["key"] not in named]
         if missing:
             return ["the write list leaves open written tasks the plan of record no longer has: " + ", ".join(missing)
                     + "; diff against the latest manifest and render it again"]
+        # the relinks and unblocks the manifest implies are required too, exactly (eighth review, M2)
+        d = derived_writes(plan, manifest)
+        offered = set(wl.get("phases", []))
+        phase_of = {t["id"]: t["phase"] for t in plan["tasks"]}
+        key = lambda tid: f"gw:{plan['id']}:{tid}"
+        want = {("unlink_dependency", key(r["task"]), key(x)) for r in d["relinks"] for x in r["removed"]}
+        want |= {("link_dependency", key(r["task"]), key(x)) for r in d["relinks"] for x in r["added"]
+                 if phase_of[r["task"]] not in offered}
+        want |= {("clear_blocked", key(t), None) for t in d["unblocks"]}
+        got = {(w["kind"], w["key"], w.get("blocked_by")) for w in wl.get("writes", [])
+               if w.get("scope") == "plan" and w.get("kind") in ("unlink_dependency", "link_dependency", "clear_blocked")}
+        if want != got:
+            return ["the write list's relinks and unblocks are not the ones the latest manifest and the plan of record "
+                    "imply (missing: " + ", ".join(sorted(f"{k} {i}" for k, i, _ in want - got)) + "; extra: "
+                    + ", ".join(sorted(f"{k} {i}" for k, i, _ in got - want)) + "); diff again and render it again"]
     task_of = {t["key"]: t["id"] for t in plan["tasks"]}
     closes = [{"key": w["key"], "reason": w["reason"]} for w in wl.get("writes", []) if w.get("kind") == "close_item"]
     edits = [task_of.get(w["key"], w["key"]) for w in wl.get("writes", []) if w.get("kind") == "update_item"]
@@ -244,7 +259,7 @@ def open_blockers(review):
     return [f["id"] for f in review.get("findings", []) if f.get("severity") == "blocker" and f.get("resolution") != "fixed"]
 
 
-def rebuilt_plan_level_problems(plan, overlay, wl, context):
+def rebuilt_plan_level_problems(plan, overlay, wl, context, manifest):
     """A plan-level write list must be the one Groundwork renders for this plan, kind and stored context
     (fourth review, M7): for a retire, the closes follow from the items the proposal showed and the
     runner's leave-open choices; for the others, from the change-request entry it binds."""
@@ -256,11 +271,16 @@ def rebuilt_plan_level_problems(plan, overlay, wl, context):
     kind = wl.get("kind")
     try:
         if kind == "retire":
+            recorded = {w["key"] for w in (manifest or {}).get("items", [])}
+            flagged = sorted(i["key"] for i in context["items"] if i.get("person_added") and i["key"] in recorded)
+            if flagged:  # eighth review, M1: a key the manifest records is Groundwork's, never a person's
+                return ["the stored proposal context names items the manifest records as added by a person: "
+                        + ", ".join(flagged) + "; read again and propose again"]
             choices = {x["key"]: {"leave": x["owner_role_key"]} for x in wl.get("left_open", [])}
             for i in context["items"]:
                 if i["status"] == "in_progress" and not i["person_added"]:
                     choices.setdefault(i["key"], "close")
-            rp = retire.plan_retire(context["items"], choices)
+            rp = retire.plan_retire(context["items"], choices, manifest)
             if not rp["ok"]:
                 return [f"the retire can't be rebuilt from the stored context: {'; '.join(rp['problems'])}"]
             draft = any(w["kind"] == "remove_label" for w in wl.get("writes", []))
@@ -361,7 +381,7 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
     if stored is None:
         probs.append("a plan-level set is verified only against its stored proposal context")
     else:
-        probs += rebuilt_plan_level_problems(plan, overlay, wl, stored["context"])
+        probs += rebuilt_plan_level_problems(plan, overlay, wl, stored["context"], (plan_state or {}).get("manifest"))
         # a set that decides a change request shows that request's assessment (fit, cost, options):
         # approvers never decide one without it (fifth review, finding 8)
         decided = [w["entry"]["id"] for w in wl.get("writes", []) if w.get("kind") == "cr_log_put"]
@@ -492,9 +512,13 @@ def cli_rules(a):
     return [r for p in a.rules for r in json.load(open(p, encoding="utf-8")).get("rules", [])]
 
 
-def cli_plan_state(a, plan_id):
+def cli_plan_state(a, plan_id, plan=None):
     load = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
-    return {"manifest": latest_manifest_of(a.manifests, plan_id), "status": load(a.status), "epic": a.epic}
+    m = latest_manifest_of(a.manifests, plan_id)
+    if m is None and plan is not None and any(p["state"] in ("writing", "released") for p in plan.get("phases", [])):
+        # eighth review, m4: a written plan with no manifest would skip every manifest-derived check
+        raise ValueError("the plan has written phases but no manifest was given: pass every manifest file")
+    return {"manifest": m, "status": load(a.status), "epic": a.epic}
 
 
 def main(argv=None):
@@ -578,7 +602,7 @@ def _run(a, J):
         info = []
         phases = [x.strip() for x in (a.phases or "").split(",") if x.strip()]
         ok, probs, accepted = verify_approvals(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
-                                               phases, ts(a.now), unverified, info, a.latest_version, cli_plan_state(a, plan["id"]),
+                                               phases, ts(a.now), unverified, info, a.latest_version, cli_plan_state(a, plan["id"], plan),
                                                {"evidence": load_evidence(a.evidence), "rules": cli_rules(a)})
         print(json.dumps({"ok": ok, "accepted_phases": accepted, "problems": probs, "superseded": info}, indent=2))
         return 0 if ok else 1
@@ -589,7 +613,7 @@ def _run(a, J):
         unverified = any(s["verified"] != "verified" and s["name"] == overlay["skills"]["tracker"]["skill"] for s in plan["stamps"]["skills"])
         info = []
         ok, probs, kind = verify_plan_level(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
-                                            ts(a.now), unverified, info, a.latest_version, cli_plan_state(a, plan["id"]),
+                                            ts(a.now), unverified, info, a.latest_version, cli_plan_state(a, plan["id"], plan),
                                             {"context": J(a.context), "assessment": J(a.assessment) if a.assessment else None,
                                              "rules": cli_rules(a)},
                                             {"evidence": load_evidence(a.evidence), "rules": cli_rules(a)})
