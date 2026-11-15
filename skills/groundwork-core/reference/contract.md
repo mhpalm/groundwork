@@ -52,7 +52,7 @@ Attribution and license live in `SKILL.md` frontmatter under `license` and `meta
 | `list_children` | Every item under an epic with its tracker id, key, plan-owned hash and last-updated time | Cross-checks find\_by\_key and lists an epic |
 | `find_by_key` | Zero or one item for a key, `searched across the whole tracker project` | More than one is an error, never a pick |
 | `read_epic` | The epic and its items as plan-shaped data, every free-text field marked untrusted | Used by release, revise and preflight |
-| `write` | Create item (key and not-ready flag set in the same call), update plan-owned fields, add link, add comment, set or clear not-ready | Only after approval, from the numbered write list |
+| `write` | Ensure a phase's release container exists by exact name (a version, milestone or label; never renamed, released or deleted), create item (work type, release container, key and not-ready flag set in the same call), update plan-owned fields, add link, add comment, set or clear not-ready | Only after approval, from the numbered write list |
 | `plan_store` | Put and get immutable, versioned files for the epic (plan of record, snapshots, manifest), with size limits and chunking | `Naming in approval-create.md; never overwritten by Groundwork, tampering detected by hashes` |
 | `lock` | Claim and release a run lock on the epic with runner id and expiry | Protocol in approval-create.md |
 | `rules` | Tracker correctness rules, same shape as system rules | E.g. hierarchy depth limits |

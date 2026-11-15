@@ -10,6 +10,9 @@ Checked 2026-11-14. Atlassian's REST reference pages render client-side, so thes
 | `accountId` is the stable user id | approval records, gates | no |
 | `POST /rest/api/3/issueLink` creates a Blocks link | dependencies | no |
 | Attachments: `POST /rest/api/3/issue/{id}/attachments` with `X-Atlassian-Token: no-check`; size limit | plan store | no; attachments can be deleted by permitted users (a `delete:attachment:jira` scope exists, [scopes](https://developer.atlassian.com/cloud/jira/platform/scopes-for-oauth-2-3LO-and-forge-apps/)), so tampering is detected by hashes, not prevented |
+| `POST /rest/api/3/version` with `name` and `projectId` creates a version; `GET /rest/api/3/project/{key}/versions` lists them; names are unique per project | ensure_release | no |
+| `fixVersions` can be set in the create call by name or id | create item | no |
+| Team-managed projects expose versions only when the Releases feature is on | readiness | no |
 | Labels may not contain spaces | key label format | no (Groundwork's labels never contain spaces) |
 | JQL search may lag new issues | search_consistency | no |
 | Team-managed projects name the points field "Story point estimate" | readiness | no |

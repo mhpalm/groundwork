@@ -96,7 +96,8 @@ def step(text, refs=(), from_evidence=None):
 def task(pid, tid, order, title, kind, role, hours, deps, steps, purpose, accept, verify, done_today, visible,
          prereq=(), waits=(), access=(), evidence=(), produces=(), pattern="core.generic"):
     return {
-        "id": tid, "order": order, "key": f"gw:{pid}:{tid}", "phase": tid.split("-")[0], "title": title, "kind": kind,
+        "id": tid, "order": order, "key": f"gw:{pid}:{tid}", "phase": tid.split("-")[0], "title": title,
+        "work_type": "story" if kind == "build" else "task", "kind": kind,
         "role_key": role, "points": 1, "estimate_hours": hours, "parallel_group": None,
         "depends_on": [{"task": d, "satisfied_by": s} for d, s in deps], "waits_on": list(waits), "access": list(access),
         "evidence_refs": list(evidence), "produces": [{"type": ty, "name": nm} for ty, nm in produces],

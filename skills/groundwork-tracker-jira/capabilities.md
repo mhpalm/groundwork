@@ -4,7 +4,9 @@ Rows marked (verify) are listed in `VERIFY.md`.
 
 | Capability | Jira Cloud |
 | --- | --- |
-| Item types | From the project: Epic, Task, Sub-task, and others |
+| Item types | From the project: Epic, Story, Task, Sub-task, and others. Story and Task sit at the same level under an epic |
+| `work_type` | Story or Task issue type, per `field_map.work_types` |
+| Phase release | A fix version per phase (`phase_release: version`); team-managed projects need the Releases feature on (verify) |
 | `task_to_epic: parent` | The task's `parent` is the epic (verify) |
 | `task_to_epic: linked` | An issue link of the overlay's chosen type to the epic |
 | `steps_as: checklist` | Task list inside the owned description |
@@ -35,5 +37,7 @@ Read-only: `GET /rest/api/3/project/{key}`, the project's issue types and create
 | Blocked | `Flagged` available | Label `gw-blocked` | none |
 | Dependencies | A link type that means "blocks" | Dependencies listed in the owned description | A link type, by a Jira admin |
 | Epic and parent | Epic type exists and Task can have a parent | `task_to_epic: linked` | none |
+| Work types | A Story type and a Task type the epic can parent | Map both to Task | none |
+| Phase releases | Versions (Releases) available in the project | `phase_release: label` | Turn on Releases, by a project admin |
 | Not-ready | Labels enabled | none | none |
 | Plan store | Attachments enabled | none: setup blocks | none |
