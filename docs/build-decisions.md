@@ -20,3 +20,7 @@ These were settled while building v1 against spec draft 0.3. Each is a candidate
 13. Preflight stops a task in the phase being written when it depends on a task a person deleted by hand. The split recommendation for a task whose points a person raised is posted once, whatever phase is being written, and recorded in the manifest (`split_comment`).
 14. Offering an outline phase is refused at every stage, not only at Proposal.
 15. G2 details P0 to P3 and leaves P4 and P5 as outline, because the shared G1 base puts its release in P3. The spec's "P0 to P2" is read as an example of the rule, not a fixed count.
+
+## Found in the first sandbox run, 2026-11-15
+
+16. A skill folder holds exactly one `SKILL.md`, at its root. The Claude app's skill upload rejects a ZIP with more than one ("Zip must contain exactly one SKILL.md file"), so templates that become skills are named `SKILL.template.md` and setup mode renames the copy. Enforced by `build_release.py`, `lint_boundaries.py` and `test_release.py`.

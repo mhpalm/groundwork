@@ -5,6 +5,7 @@
 
 - System and tracker skills never restate a core rule (normative sentences in
   the core's reference/rules.md).
+- Exactly one SKILL.md per skill folder, at its root.
 - Frontmatter: name <= 64 chars and equal to the folder, description <= 200
   chars and starting "Groundwork", license and metadata.version/contract set.
 - groundwork.yaml validates and agrees with frontmatter and the handshake block.
@@ -41,6 +42,10 @@ def main():
         if not os.path.isdir(d):
             continue
         skill_md = os.path.join(d, "SKILL.md")
+        extra = [os.path.relpath(os.path.join(r, f), d) for r, _ds, fs in os.walk(d) for f in fs
+                 if f.lower() == "skill.md" and os.path.join(r, f) != skill_md]
+        if extra:
+            errors.append(f"{name}: only the root SKILL.md may exist (the Claude app rejects the ZIP); found {', '.join(sorted(extra))}")
         if not os.path.exists(skill_md):
             errors.append(f"{name}: no SKILL.md")
             continue

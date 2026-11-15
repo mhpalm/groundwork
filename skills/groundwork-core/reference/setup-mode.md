@@ -100,7 +100,7 @@ run_storage: {claude-code-local: "~/groundwork/runs"}
 
 ## Producing the overlay skill
 
-1. Start from `templates/overlay-skill/`: copy it to `groundwork-overlay-<org-slug>/`, fill `overlay.yaml` with the confirmed values, and keep the `SKILL.md` template's wording (it only says which overlay this is and that it is used inside Groundwork runs).
+1. Start from `templates/overlay-skill/`: copy it to `groundwork-overlay-<org-slug>/`, rename `SKILL.template.md` to `SKILL.md`, fill `overlay.yaml` with the confirmed values, and keep the template's wording (it only says which overlay this is and that it is used inside Groundwork runs). The template is not named `SKILL.md` in the core because the Claude app rejects a skill ZIP that holds more than one `SKILL.md`.
 2. Run `validate_overlay.py overlay.yaml` until it reports valid, then show the numbered write list to the admin.
 3. After the admin approves, set the hash with `validate_overlay.py overlay.yaml --set-hash`, write the files, and post the overlay record on the anchor issue from the admin's own account: a fenced `json` block `{overlay_id, version, hash, gates: {gate_id: [account ids]}}`.
 4. Package the folder as a ZIP whose root is the folder, for upload as a skill.

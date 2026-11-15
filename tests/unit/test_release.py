@@ -44,6 +44,14 @@ class Release(unittest.TestCase):
             self.assertTrue(all(n.startswith(name + "/") for n in names))
             self.assertIn(f"{name}/SKILL.md", names)
 
+    def test_every_zip_has_exactly_one_skill_md(self):
+        import zipfile
+        for z in sorted(f for f in os.listdir(self.rel) if f.endswith(".zip")):
+            name = z[:-4]
+            names = zipfile.ZipFile(os.path.join(self.rel, z)).namelist()
+            found = [n for n in names if n.rsplit("/", 1)[-1].lower() == "skill.md"]
+            self.assertEqual(found, [f"{name}/SKILL.md"], z)
+
     def test_wrong_contract_major_refused(self):
         hs = [dict(h) for h in self.hs]
         hs[1]["contract"] = "2.0"
