@@ -100,7 +100,7 @@ def release_name(plan, phase):
 REVISE_CLOSE_REASONS = ("not_planned", "superseded", "duplicate")
 
 
-def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None):
+def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None, relinks=None, unblocks=None):
     """The numbered write list for the offered phases. Hashing it binds approval to exactly these writes.
 
     closes: [{key, reason}] for items to close (revise); rendered as the close procedure:
@@ -109,6 +109,10 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None):
     decided_by from the verified proposal, so the write list never names its own proposal hash.
     edits: task ids whose plan-owned text changed (revise_diff `changed`); each gets an update_item
     write binding the new plan-owned hash, in its phase's scope, so its phase must be offered.
+    relinks: [{task, added, removed}] for written tasks whose dependencies a revise re-pointed
+    (revise_diff `relinks`): each removed dependency gets an unlink_dependency write and each added one
+    a link_dependency write, plan-scoped, so a written task never stays blocked by work the plan dropped.
+    unblocks: written task ids whose waits a revise removed; each gets a clear_blocked write.
     """
     if overlay.get("provisional"):
         raise ValueError("a provisional overlay has no tracker, so there is no write list (D-54)")
@@ -132,6 +136,10 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None):
         if tasks_by_id[tid]["phase"] not in offer:
             raise ValueError(f"the edit to {tid} needs phase {tasks_by_id[tid]['phase']} in the offer")
     writes = [{"kind": "lock_claim", "on": "epic"}]
+    if cr_entry is not None:
+        # the decision is written first, so a crash later leaves it decided by this set (and the resume
+        # finishes the work) rather than pending, where another set could decide it the other way
+        writes.append({"kind": "cr_log_put", "entry": cr_entry, "note": "latest log file plus this entry; number allocated under the lock"})
     for phase in [p for p in sorted(plan["phases"], key=lambda p: p["order"]) if p["id"] in offer]:
         pid = phase["id"]
         first = len(writes)
@@ -165,6 +173,23 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None):
         writes.append({"kind": "snapshot_put", "phase": pid})
         for w in writes[first:]:
             w["scope"] = f"phase:{pid}"
+    for r in sorted(relinks or [], key=lambda r: r["task"]):
+        t = tasks_by_id.get(r["task"])
+        if t is None:
+            raise ValueError(f"relink {r['task']} is not a task in this plan")
+        now = {d["task"] for d in t["depends_on"]}
+        if set(r["removed"]) & now or not set(r["added"]) <= now:
+            raise ValueError(f"the relink of {r['task']} does not match its dependencies in the plan")
+        for d in sorted(r["removed"]):
+            writes.append({"kind": "unlink_dependency", "key": t["key"], "blocked_by": f"gw:{plan['id']}:{d}"})
+        if t["phase"] not in offer:  # an offered phase links every dependency already
+            for d in sorted(r["added"]):
+                writes.append({"kind": "link_dependency", "key": t["key"], "blocked_by": f"gw:{plan['id']}:{d}"})
+    for tid in sorted(unblocks or []):
+        t = tasks_by_id.get(tid)
+        if t is None or t.get("waits_on"):
+            raise ValueError(f"{tid} still waits on something, so its blocked state stays")
+        writes.append({"kind": "clear_blocked", "key": t["key"], "field": tr["field_map"]["blocked"]})
     if closes:
         prefix = tr["field_map"].get("close_label_prefix", "gw-closed:")
         writes.append({"kind": "manifest_put", "note": "close intent for " + ", ".join(c["key"] for c in closes)})
@@ -172,8 +197,6 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None):
             writes.append({"kind": "add_label", "key": c["key"], "label": prefix + c["reason"]})
             writes.append({"kind": "close_item", "key": c["key"], "reason": c["reason"]})
         writes.append({"kind": "manifest_put", "note": "closes done"})
-    if cr_entry is not None:
-        writes.append({"kind": "cr_log_put", "entry": cr_entry, "note": "latest log file plus this entry; number allocated under the lock"})
     if not any(p["state"] in ("writing", "released") for p in plan["phases"]):
         writes.append({"kind": "remove_label", "on": "epic", "label": overlay.get("labels", {}).get("draft", "gw-draft")})
     # preflight finds these at write time; the write list names the procedure so the approval covers it
@@ -355,6 +378,14 @@ def other_writes(plan, wl):
     if ups:
         out.append("**Tasks whose plan-owned text is updated:** "
                    + ", ".join(f"{by_key.get(w['key'], w['key'])} (`{w['owned_hash'][:12]}`)" for w in ups) + ".")
+    rel = [w for w in wl["writes"] if w["kind"] in ("unlink_dependency", "link_dependency") and w.get("scope") == "plan"]
+    if rel:
+        out.append("**Dependencies re-pointed on written tasks:** " + ", ".join(
+            f"{by_key.get(w['key'], w['key'])} {'no longer' if w['kind'] == 'unlink_dependency' else 'now'} waits on "
+            f"{by_key.get(w['blocked_by'], w['blocked_by'])}" for w in rel) + ".")
+    unb = [w for w in wl["writes"] if w["kind"] == "clear_blocked"]
+    if unb:
+        out.append("**Blocked state cleared (the wait was removed):** " + ", ".join(by_key.get(w["key"], w["key"]) for w in unb) + ".")
     if closes:
         out.append("**Tasks closed:** " + ", ".join(f"`{w['key']}` as {w['reason'].replace('_', ' ')}" for w in closes) + ".")
     for w in crs:
@@ -540,6 +571,8 @@ def main(argv=None):
     ap.add_argument("--task")
     ap.add_argument("--write-list")
     ap.add_argument("--closes", help="JSON file of [{key, reason}] to close (revise)")
+    ap.add_argument("--relinks", help="JSON file of revise_diff relinks [{task, added, removed}] (revise)")
+    ap.add_argument("--unblocks", help="comma-separated written task ids whose waits a revise removed (revise_diff unblocks)")
     ap.add_argument("--edits", help="comma-separated task ids whose plan-owned text changed (revise_diff changed)")
     ap.add_argument("--out")
     a = ap.parse_args(argv)
@@ -572,7 +605,10 @@ def main(argv=None):
         entry = json.load(open(a.entry, encoding="utf-8")) if a.entry else None
         if entry is not None and entry.get("outcome") != "added":
             raise SystemExit("a revision write list binds a change request only with outcome added")
-        text = json.dumps(write_list(plan, overlay, offer, closes, cr_entry=entry, edits=edits), indent=2)
+        relinks = json.load(open(a.relinks, encoding="utf-8")) if a.relinks else None
+        unblocks = [x.strip() for x in (a.unblocks or "").split(",") if x.strip()]
+        text = json.dumps(write_list(plan, overlay, offer, closes, cr_entry=entry, edits=edits, relinks=relinks,
+                                     unblocks=unblocks), indent=2)
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(text)

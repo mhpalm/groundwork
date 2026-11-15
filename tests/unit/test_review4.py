@@ -21,7 +21,7 @@ import render_proposal  # noqa: E402
 import retire  # noqa: E402
 import revise_diff  # noqa: E402
 from fake_tracker import FakeTracker, latest_manifest, run_create  # noqa: E402
-from test_approval_sets import (DECLINE_SUMMARY, NOW, PD, base, comment, decline_case, drev, dstored,  # noqa: E402
+from test_approval_sets import (DECLINE_SUMMARY, NOW, PD, base, comment, dassess, decline_case, drev, dstored,  # noqa: E402
                                 phase_case, phases_ok, plan_ok, record)
 
 T0 = dt.datetime(2026, 11, 15, 10, 0, 0, tzinfo=dt.timezone.utc)
@@ -123,8 +123,8 @@ class Preflight(unittest.TestCase):
         json.dump(render_proposal.write_list(plan, ov, ["P0"]), open(P("wl.json"), "w"))
         for phases, rc in (("P0,P1", 1), ("P1", 1), ("P0", 0)):
             with self.subTest(phases=phases), redirect_stdout(io.StringIO()):
-                self.assertEqual(create_steps.main(["preflight", P("planned.json"), P("found.json"), "-", "--phases", phases,
-                                                    "--write-list", P("wl.json")]), rc)
+                self.assertEqual(create_steps.main(["preflight", P("planned.json"), P("found.json"), "--phases", phases,
+                                                    "--plan-id", plan["id"], "--manifests", "--write-list", P("wl.json")]), rc)
 
 
 def mitem(key, tid, **extra):
@@ -302,7 +302,7 @@ class PlanLevelWriteListsAreRebuilt(unittest.TestCase):
 
     def check(self, wl, items=()):
         prop = render_proposal.plan_level_proposal(self.plan, self.ov, wl, render_proposal.proposal_context(
-            self.plan, wl["kind"], DECLINE_SUMMARY, items=items))
+            self.plan, wl["kind"], DECLINE_SUMMARY, items=items), dassess(self.plan, wl))
         rev = drev(self.plan, wl) if not items else {"view_hash": check_hashes.view_hash(
             __import__("gw_hash").plan_level_bundle(self.plan, wl, dstored(self.plan, wl, items)["context"],
                                                      check_hashes.CHECKLIST_VERSION, [])), "findings": []}

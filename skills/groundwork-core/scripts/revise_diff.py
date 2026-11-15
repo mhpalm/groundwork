@@ -11,7 +11,7 @@ TRACKER.json is what read_epic returned, normalized by the tracker skill:
   (owned_hash from check_hashes.py owned on each item's normalized fields; status and drift from
   create_steps.py status, so a gw-closed label only counts when the manifest recorded the close)
 
-Prints {ok, added, changed, close, close_items, deps_changed, phases_offered, drift, refused, relies_on}.
+Prints {ok, added, changed, close, close_items, deps_changed, relinks, unblocks, phases_offered, drift, refused, relies_on}.
 - drift: a person changed a plan-owned field. The tracker wins: the revised plan
   must carry exactly the tracker's text for that task (marked from_tracker), or the
   diff is refused.
@@ -65,7 +65,7 @@ def model_changes(base, new):
 def diff(base, new, tracker, overlay, manifest=None):
     """manifest: the latest manifest. A task is "never written" only when neither the tracker read
     nor the manifest knows its key; without the manifest, nothing is dropped."""
-    out = {"added": [], "changed": [], "close": [], "close_items": [], "dropped": [], "adopted": [], "changed_unwritten": [], "deps_changed": [], "phases_offered": [],
+    out = {"added": [], "changed": [], "close": [], "close_items": [], "dropped": [], "adopted": [], "changed_unwritten": [], "deps_changed": [], "relinks": [], "unblocks": [], "phases_offered": [],
            "drift": [], "refused": [], "relies_on": []}
     if new["id"] != base["id"]:
         out["refused"].append({"task": None, "why": "the revised plan has a different plan id; revise keeps the epic's plan id"})
@@ -134,6 +134,11 @@ def diff(base, new, tracker, overlay, manifest=None):
                 continue
             out["deps_changed"].append({"task": tid, "added": sorted(nd - bd), "removed": sorted(bd - nd)})
             touched.add(b["key"])
+            if item is not None:  # written: its tracker links move with the plan
+                out["relinks"].append({"task": tid, "added": sorted(nd - bd), "removed": sorted(bd - nd)})
+        if item is not None and b.get("waits_on") and not t.get("waits_on") and not finished(item):
+            out["unblocks"].append(tid)
+            touched.add(b["key"])
     for tid, b in sorted(bt.items()):
         if tid in nt:
             continue
@@ -177,11 +182,17 @@ def main(argv=None):
     ap.add_argument("new")
     ap.add_argument("tracker")
     ap.add_argument("--overlay", required=True)
-    ap.add_argument("--manifest", required=True, help="the latest manifest, or - when nothing was written yet")
+    import check_hashes
+    check_hashes.add_manifests_arg(ap)
     a = ap.parse_args(argv)
     J = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
-    manifest = {"items": []} if a.manifest == "-" else J(a.manifest)
-    out = diff(J(a.base), J(a.new), J(a.tracker), gw_yaml.load(a.overlay), manifest)
+    base = J(a.base)
+    try:
+        manifest = check_hashes.latest_manifest_of(a.manifests, base["id"]) or {"items": []}
+    except ValueError as e:
+        print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
+        return 1
+    out = diff(base, J(a.new), J(a.tracker), gw_yaml.load(a.overlay), manifest)
     print(json.dumps(out, indent=2))
     return 0 if out["ok"] else 1
 

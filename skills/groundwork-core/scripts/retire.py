@@ -8,9 +8,9 @@ Usage:
   retire.py write-list PLAN.json --overlay OVERLAY.yaml --plan-out RETIRE_PLAN.json [--draft-label]
             [--pending PHASE_ID ...]
   retire.py status PLAN.json --n N --proposal-hash HEX --at TS   (at write time, under the lock)
-  retire.py rebuild PLAN_ID MANIFEST.json      (resume: the status file from the manifest's intent)
+  retire.py rebuild PLAN_ID --manifests M_1.json ... M_n.json   (resume: the status file from the latest manifest's intent)
   retire.py recheck VERIFIED_WRITE_LIST.json ITEMS.json CONTEXT.json   (at write time, before any write)
-  retire.py gate OP --plan PLAN.json --manifest MANIFEST.json|- --status STATUS.json|- --epic open|closed
+  retire.py gate OP --plan PLAN.json --manifests M_1.json ... --status STATUS.json|- --epic open|closed
             [--resuming PLAN_VERSION:PROPOSAL_HASH]
 
 Retire writes no plan version. The status lives in status-<n>.json; the latest one
@@ -136,7 +136,10 @@ def write_list(plan, overlay, retire_plan, draft_label=False, pending_sets=()):
     tr = overlay["skills"]["tracker"]
     target = f"{tr['skill'].replace('groundwork-tracker-', '')}:{tr['instance']['id']}:{tr['instance']['project']}"
     prefix = tr["field_map"].get("close_label_prefix", "gw-closed:")
-    writes = [{"kind": "lock_claim", "on": "epic"}]
+    writes = [{"kind": "lock_claim", "on": "epic"},
+              # the status intent comes first, so from the retire's first write every other operation,
+              # including the creates of the pending sets it voids, is refused (fifth review, finding 2)
+              {"kind": "manifest_put", "note": "status intent: the status file's number, set_by, at and hash"}]
     if draft_label:
         writes.append({"kind": "remove_label", "on": "epic", "label": overlay.get("labels", {}).get("draft", "gw-draft")})
     closes = retire_plan["closes"]
@@ -146,7 +149,6 @@ def write_list(plan, overlay, retire_plan, draft_label=False, pending_sets=()):
             writes.append({"kind": "add_label", "key": c["key"], "label": prefix + c["reason"]})
             writes.append({"kind": "close_item", "key": c["key"], "reason": c["reason"]})
         writes.append({"kind": "manifest_put", "note": "closes done"})
-    writes.append({"kind": "manifest_put", "note": "status intent: the status file's number, set_by, at and hash"})
     writes.append({"kind": "status_put", "status": status_template(plan)})
     writes.append({"kind": "manifest_put", "note": "records the status file's hash"})
     writes.append({"kind": "snapshot_put"})
@@ -208,8 +210,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["plan", "write-list", "status", "rebuild", "recheck", "gate"])
     ap.add_argument("files", nargs="*")
-    for x in ("--overlay", "--plan-out", "--proposal-hash", "--at", "--plan", "--manifest", "--status", "--epic", "--resuming"):
+    for x in ("--overlay", "--plan-out", "--proposal-hash", "--at", "--plan", "--status", "--epic", "--resuming"):
         ap.add_argument(x)
+    import check_hashes
+    check_hashes.add_manifests_arg(ap)
     ap.add_argument("--draft-label", action="store_true")
     ap.add_argument("--pending", nargs="*", default=[])
     ap.add_argument("--n", type=int, help="status: the latest status file's number plus one (1 when there is none)")
@@ -221,7 +225,9 @@ def main(argv=None):
         out = write_list(J(a.files[0]), gw_yaml.load(a.overlay), J(a.plan_out), a.draft_label, a.pending)
     elif a.cmd == "rebuild":
         try:
-            out = {"ok": True, "status_record": rebuild_status(a.files[0], J(a.files[1])["status_file"])}
+            import check_hashes
+            m = check_hashes.latest_manifest_of(a.manifests, a.files[0])
+            out = {"ok": True, "status_record": rebuild_status(a.files[0], (m or {}).get("status_file"))}
         except (ValueError, KeyError, TypeError) as e:
             out = {"ok": False, "problems": [f"cannot rebuild the status file: {e}"]}
     elif a.cmd == "recheck":
@@ -238,7 +244,14 @@ def main(argv=None):
         if a.resuming:
             v, h = a.resuming.split(":", 1)
             res = (int(v), h)
-        out = gate(a.files[0], J(a.plan), J(a.manifest), J(a.status), a.epic, res)
+        import check_hashes
+        plan = J(a.plan)
+        try:
+            manifest = check_hashes.latest_manifest_of(a.manifests, plan["id"])
+        except ValueError as e:
+            out = {"ok": False, "problems": [str(e)]}
+        else:
+            out = gate(a.files[0], plan, manifest, J(a.status), a.epic, res)
     print(json.dumps(out, indent=2))
     if a.cmd == "write-list":
         from gw_hash import write_list_hash

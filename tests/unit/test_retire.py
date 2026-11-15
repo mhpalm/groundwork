@@ -76,7 +76,7 @@ class WriteList(unittest.TestCase):
         rp = approve(tr, plan, ov)
         wl = retire.write_list(plan, ov, rp, draft_label=True)
         kinds = [w["kind"] for w in wl["writes"]]
-        self.assertEqual(kinds[:3], ["lock_claim", "remove_label", "manifest_put"])
+        self.assertEqual(kinds[:4], ["lock_claim", "manifest_put", "remove_label", "manifest_put"])  # status intent first
         self.assertEqual(kinds[-6:], ["manifest_put", "status_put", "manifest_put", "snapshot_put", "close_epic", "lock_release"])
         closes = [w for w in wl["writes"] if w["kind"] == "close_item"]
         self.assertEqual(len(closes), len(rp["closes"]))
@@ -190,10 +190,9 @@ class Crash(unittest.TestCase):
             with self.subTest(where=where):
                 tr, plan, ov, rp = self.crash_then_resume(where)
                 own = (plan["version"], PH_HASH)
-                if where != "closes":
-                    self.assertFalse(gate(tr, plan, "create")["ok"])
-                    self.assertFalse(gate(tr, plan, "resume", (plan["version"], "b" * 64))["ok"])
-                r = run_retire(tr, plan, ov, rp, PH_HASH, resuming=own if where != "closes" else None)
+                self.assertFalse(gate(tr, plan, "create")["ok"])  # the intent is the first write, so even a crash
+                self.assertFalse(gate(tr, plan, "resume", (plan["version"], "b" * 64))["ok"])  # mid-close blocks others
+                r = run_retire(tr, plan, ov, rp, PH_HASH, resuming=own)
                 self.assertTrue(r["ok"], (where, r))
                 self.assertEqual(tr.epic_state["VOL-1"], "closed")
                 self.assertEqual(latest_manifest(tr, plan["id"])["status_file"]["state"], "recorded")
@@ -335,13 +334,17 @@ class Scripts(unittest.TestCase):
         self.assertEqual(rc, 0)
         json.dump(st["intent"], open(P("sf.json"), "w"))
         m = latest_manifest(tr, plan["id"])
-        json.dump(m, open(P("m.json"), "w"))
+        chain = []
+        for k, v in sorted(tr.store.items()):
+            if k.startswith(f"{plan['id']}-manifest-"):
+                json.dump(v, open(P(f"{k}.json"), "w"))
+                chain.append(P(f"{k}.json"))
         json.dump(m["items"], open(P("items.json"), "w"))
-        rc, m2 = run(create_steps, ["manifest", P("m.json"), P("items.json"), "--plan-id", plan["id"], "--run", "run-r",
-                                    "--seq", str(m["seq"] + 1), "--now", AT, "--status-file", P("sf.json")])
-        self.assertEqual((rc, m2["status_file"]), (0, st["intent"]))
+        rc, m2 = run(create_steps, ["manifest", P("items.json"), "--plan-id", plan["id"], "--manifests", *chain, "--run", "run-r",
+                                    "--now", AT, "--status-file", P("sf.json")])
+        self.assertEqual((rc, m2["status_file"], m2["seq"]), (0, st["intent"], m["seq"] + 1))
         json.dump(m2, open(P("m2.json"), "w"))
-        rc, rb = run(retire, ["rebuild", plan["id"], P("m2.json")])
+        rc, rb = run(retire, ["rebuild", plan["id"], "--manifests", *chain, P("m2.json")])
         self.assertEqual((rc, rb["status_record"]), (0, st["status_record"]))
         rp = approve(tr, plan, ov)
         import render_proposal

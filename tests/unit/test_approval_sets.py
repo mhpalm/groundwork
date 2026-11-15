@@ -60,11 +60,22 @@ def phase_case(plan, overlay, phases=("P1",)):
     return wl, prop
 
 
+def dassess(plan, wl):
+    """The stored assessment of the change request a plan-level write list decides (None when it decides none)."""
+    ids = [w["entry"]["id"] for w in wl["writes"] if w["kind"] == "cr_log_put"]
+    if not ids:
+        return None
+    import change_request as cr
+    log, _ = cr.allocate(cr.empty_log(plan["id"]), "Also export the sign-up list", "runner", "business_user",
+                         plan["version"], 2)
+    return dict(cr.assess(plan, plan, log, "CR-1", "unknown"), cr=ids[0])
+
+
 def decline_case(plan, overlay, items=()):
     wl = render_proposal.plan_write_list(plan, overlay, "decline", cr_entry={"id": "CR-1", "outcome": "declined",
                                                                                 "reason": "Outside the brief's scope"})
     ctx = render_proposal.proposal_context(plan, "decline", DECLINE_SUMMARY, items=items)
-    return wl, ctx, render_proposal.plan_level_proposal(plan, overlay, wl, ctx)
+    return wl, ctx, render_proposal.plan_level_proposal(plan, overlay, wl, ctx, dassess(plan, wl))
 
 
 def phases_ok(plan, overlay, anchor, comments, prop, wl, review, phases=("P1",), latest=None, info=None):
@@ -79,13 +90,13 @@ def dbundle(plan, wl, items=()):
     """The closes-and-decisions bundle a decline's review is made from."""
     ctx = render_proposal.proposal_context(plan, wl["kind"], DECLINE_SUMMARY, items=items)
     from gw_hash import plan_level_bundle
-    return plan_level_bundle(plan, wl, ctx, check_hashes.CHECKLIST_VERSION, [])
+    return plan_level_bundle(plan, wl, ctx, check_hashes.CHECKLIST_VERSION, [], dassess(plan, wl))
 
 
 def dstored(plan, wl, items=()):
     """What create reads from the plan store for a plan-level set."""
     return {"context": render_proposal.proposal_context(plan, wl["kind"], DECLINE_SUMMARY, items=items),
-            "assessment": None, "rules": []}
+            "assessment": dassess(plan, wl), "rules": []}
 
 
 def drev(plan, wl):
@@ -263,7 +274,8 @@ class StoredInputs(unittest.TestCase):
         wl, ctx, text = decline_case(self.plan, self.ov, items)
         self.assertEqual(validate(ctx, load_schema("proposal-context")), [])
         stored = json.loads(json.dumps({"plan": self.plan, "wl": wl, "ctx": ctx}))  # what the plan store gives back
-        again = render_proposal.plan_level_proposal(stored["plan"], self.ov, stored["wl"], stored["ctx"])
+        again = render_proposal.plan_level_proposal(stored["plan"], self.ov, stored["wl"], stored["ctx"],
+                                                    json.loads(json.dumps(dassess(self.plan, wl))))
         self.assertEqual(again.encode("utf-8"), text.encode("utf-8"))
         self.assertIn("added by a person", text)
 
@@ -336,7 +348,7 @@ class RetireGateInApprovals(unittest.TestCase):
         with redirect_stdout(buf):
             rc = check_hashes.main(["approvals", "plan.json", "--phases", "P1"])
         self.assertEqual(rc, 1)
-        self.assertIn("--latest-version, --manifest, --status, --epic, --rules, --evidence required", buf.getvalue())
+        self.assertIn("--latest-version, --manifests, --status, --epic, --rules, --evidence required", buf.getvalue())
 
 
 class KindBinding(unittest.TestCase):

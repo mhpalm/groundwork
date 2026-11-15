@@ -32,8 +32,8 @@ class Idempotency(unittest.TestCase):
         self.assertTrue(pf["ok"])
         self.assertEqual(len(tr.items), n_items)
         self.assertTrue(all(a["action"] == "skip" for a in pf["actions"]))
-        # only housekeeping writes: lock claim, two manifests, lock release
-        self.assertEqual(tr.writes - before, 4)
+        # only housekeeping writes: lock claim, two manifests each followed by a renew, lock release
+        self.assertEqual(tr.writes - before, 6)
 
     def test_partial_failure_then_resume_has_no_duplicates(self):
         plan, ov = g1()

@@ -31,9 +31,10 @@ Read-only, for assess. Scope is one epic (its sub-issues) or one repo plus a sea
 | update owned fields | Replace only the owned section of the body, keeping everything outside the markers |
 | link parent | `POST repos/{owner}/{repo}/issues/{epic}/sub_issues` with the child's issue id |
 | link dependency | `POST repos/{owner}/{repo}/issues/{n}/dependencies/blocked_by` with the blocking issue id |
+| unlink dependency | `DELETE repos/{owner}/{repo}/issues/{n}/dependencies/blocked_by/{issue_id}` with the blocking issue's id ([issue dependencies API](https://docs.github.com/en/rest/issues/issue-dependencies)); read back `GET .../dependencies/blocked_by` and confirm it is gone. Only from a revise's approved `unlink_dependency` write |
 | comment | `gh issue comment {n} --body-file ...` |
 | set or clear not-ready | `gh issue edit {n} --add-label` / `--remove-label` |
-| set_blocked | `gh issue edit {n} --add-label "<field_map.blocked>"` (default `gw-blocked`); read back with `gh issue view {n} --json labels`. Clearing (`--remove-label`) is the assignee's or the wait owner's act, never Groundwork's |
+| set_blocked | `gh issue edit {n} --add-label "<field_map.blocked>"` (default `gw-blocked`); read back with `gh issue view {n} --json labels`. Clearing (`--remove-label`) is the assignee's or the wait owner's act, except for a revise's approved `clear_blocked` write, when the plan no longer waits on anything for that task |
 | add label | `gh issue edit {n} --add-label "<label>"`, used for `gw-closed:<reason>` before a close |
 | close | `PATCH repos/{owner}/{repo}/issues/{n}` with `state: closed` and `state_reason`: `not_planned` for not_planned and superseded, `duplicate` for duplicate, `completed` for completed (verify). Read back `state` and `state_reason`. Skip an issue that is already closed |
 

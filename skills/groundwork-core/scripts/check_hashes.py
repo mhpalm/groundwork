@@ -210,9 +210,20 @@ def rebuilt_write_list_problems(plan, overlay, wl):
     closes = [{"key": w["key"], "reason": w["reason"]} for w in wl.get("writes", []) if w.get("kind") == "close_item"]
     edits = [task_of.get(w["key"], w["key"]) for w in wl.get("writes", []) if w.get("kind") == "update_item"]
     entries = [w["entry"] for w in wl.get("writes", []) if w.get("kind") == "cr_log_put"]
+    rel = {}
+    for w in wl.get("writes", []):
+        if w.get("kind") == "unlink_dependency" or (w.get("kind") == "link_dependency" and w.get("scope") == "plan"):
+            r = rel.setdefault(task_of.get(w["key"], w["key"]), {"added": [], "removed": []})
+            # a removed dependency may be a task the plan dropped, so its id comes from its key
+            prefix = f"gw:{plan['id']}:"
+            dep = w["blocked_by"][len(prefix):] if w["blocked_by"].startswith(prefix) else w["blocked_by"]
+            r["removed" if w["kind"] == "unlink_dependency" else "added"].append(dep)
+    for tid, r in rel.items():  # a relink with only additions on an offered phase renders no write; keep it out
+        r["task"] = tid
+    unblocks = [task_of.get(w["key"], w["key"]) for w in wl.get("writes", []) if w.get("kind") == "clear_blocked"]
     try:
         again = render_proposal.write_list(plan, overlay, set(wl.get("phases", [])), closes or None,
-                                           entries[0] if len(entries) == 1 else None, edits)
+                                           entries[0] if len(entries) == 1 else None, edits, list(rel.values()), unblocks)
     except (ValueError, KeyError) as e:
         return [f"the write list can't be rebuilt from the plan of record: {e}"]
     if len(entries) > 1 or hash_value(again) != hash_value(wl):
@@ -343,6 +354,13 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
         probs.append("a plan-level set is verified only against its stored proposal context")
     else:
         probs += rebuilt_plan_level_problems(plan, overlay, wl, stored["context"])
+        # a set that decides a change request shows that request's assessment (fit, cost, options):
+        # approvers never decide one without it (fifth review, finding 8)
+        decided = [w["entry"]["id"] for w in wl.get("writes", []) if w.get("kind") == "cr_log_put"]
+        a = stored.get("assessment")
+        if decided and (a is None or a.get("cr") != decided[0]):
+            probs.append(f"a set that decides {decided[0]} is verified only with that request's stored assessment "
+                         "(--assessment), which its proposal shows")
         import render_proposal
         try:
             again = render_proposal.plan_level_proposal(plan, overlay, wl, stored["context"], stored.get("assessment"))
@@ -439,13 +457,36 @@ def verify_chain(manifests, plan_id=None):
     return latest, probs
 
 
+def latest_manifest_of(paths, plan_id):
+    """The latest manifest, derived from every manifest file in the plan store, never taken from one
+    file the runner names (fifth review, finding 5). None when none is written yet. Any problem in the
+    chain raises, because no write may run on a broken or hand-edited chain."""
+    if paths is None:
+        raise ValueError("--manifests required: every manifest file in the plan store (none: --manifests with no files)")
+    ms = [json.load(open(p, encoding="utf-8")) for p in paths]
+    latest, probs = verify_chain(ms, plan_id)
+    if probs:
+        raise ValueError("; ".join(probs))
+    if ms and latest is None:
+        raise ValueError("manifest files were given but none starts the chain at seq 1")
+    if latest is not None and max(m["seq"] for m in ms) != latest["seq"]:
+        raise ValueError(f"a manifest after seq {latest['seq']} does not chain to it; stop")
+    return latest
+
+
+def add_manifests_arg(ap):
+    ap.add_argument("--manifests", nargs="*", default=None,
+                    help="every <plan.id>-manifest-<seq> file in the plan store (with no files when none is written yet); "
+                         "the latest is derived by verifying the chain")
+
+
 def cli_rules(a):
     return [r for p in a.rules for r in json.load(open(p, encoding="utf-8")).get("rules", [])]
 
 
-def cli_plan_state(a):
+def cli_plan_state(a, plan_id):
     load = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
-    return {"manifest": load(a.manifest), "status": load(a.status), "epic": a.epic}
+    return {"manifest": latest_manifest_of(a.manifests, plan_id), "status": load(a.status), "epic": a.epic}
 
 
 def main(argv=None):
@@ -469,7 +510,7 @@ def main(argv=None):
     ap.add_argument("--plan-level", action="store_true", help="view: the closes-and-decisions bundle of a plan-level set")
     ap.add_argument("--context", help="view --plan-level: the stored proposal context")
     ap.add_argument("--assessment", help="view --plan-level: the change request's stored assessment, if any")
-    ap.add_argument("--manifest", help="the latest manifest (JSON), or - when none is written yet")
+    add_manifests_arg(ap)
     ap.add_argument("--status", help="the latest status file (JSON), or - when the plan store has none")
     ap.add_argument("--epic", choices=["open", "closed"], help="the epic's tracker state")
     a = ap.parse_args(argv)
@@ -503,7 +544,7 @@ def main(argv=None):
         print(review_hash(rev))
         return 0
     if a.cmd in ("approvals", "plan-level"):
-        need = [("--latest-version", a.latest_version), ("--manifest", a.manifest), ("--status", a.status),
+        need = [("--latest-version", a.latest_version), ("--manifests", a.manifests), ("--status", a.status),
                 ("--epic", a.epic), ("--rules", a.rules or None), ("--evidence", a.evidence)]
         if a.cmd == "plan-level":
             need.append(("--context", a.context))
@@ -513,6 +554,14 @@ def main(argv=None):
                                                          "without the latest stored version, the retire gate and the "
                                                          "stored inputs the proposal and review are rebuilt from"]}, indent=2))
             return 1
+    try:
+        return _run(a, J)
+    except ValueError as e:  # a broken or hand-edited manifest chain stops the check
+        print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
+        return 1
+
+
+def _run(a, J):
     if a.cmd == "approvals":
         plan = J(a.files[0])
         overlay = gw_yaml.load(a.overlay)
@@ -521,7 +570,7 @@ def main(argv=None):
         info = []
         phases = [x.strip() for x in (a.phases or "").split(",") if x.strip()]
         ok, probs, accepted = verify_approvals(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
-                                               phases, ts(a.now), unverified, info, a.latest_version, cli_plan_state(a),
+                                               phases, ts(a.now), unverified, info, a.latest_version, cli_plan_state(a, plan["id"]),
                                                {"evidence": load_evidence(a.evidence), "rules": cli_rules(a)})
         print(json.dumps({"ok": ok, "accepted_phases": accepted, "problems": probs, "superseded": info}, indent=2))
         return 0 if ok else 1
@@ -532,7 +581,7 @@ def main(argv=None):
         unverified = any(s["verified"] != "verified" and s["name"] == overlay["skills"]["tracker"]["skill"] for s in plan["stamps"]["skills"])
         info = []
         ok, probs, kind = verify_plan_level(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
-                                            ts(a.now), unverified, info, a.latest_version, cli_plan_state(a),
+                                            ts(a.now), unverified, info, a.latest_version, cli_plan_state(a, plan["id"]),
                                             {"context": J(a.context), "assessment": J(a.assessment) if a.assessment else None,
                                              "rules": cli_rules(a)},
                                             {"evidence": load_evidence(a.evidence), "rules": cli_rules(a)})

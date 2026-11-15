@@ -8,12 +8,16 @@ mean, so the decision is the same on every tracker and every surface.
 
 Usage:
   create_steps.py lock LOCK_COMMENTS.json --run RUN_ID --account ACCOUNT --now TS
-  create_steps.py preflight PLANNED.json FOUND.json MANIFEST.json --phases P1,P2 --write-list VERIFIED_WRITE_LIST.json
+  Every command that reads the manifest takes --plan-id ID --manifests M_1.json ... M_n.json (every manifest
+  file in the plan store; --manifests alone when none is written yet): the latest is derived from the chain.
+  create_steps.py preflight PLANNED.json FOUND.json --phases P1,P2 --write-list VERIFIED_WRITE_LIST.json
       [--relies-on DIFF_RELIES_ON.json]   (first preflight of a revise apply: stops if any item moved since the diff)
-  create_steps.py manifest PREV_MANIFEST.json|- ITEMS.json --plan-id ID --run RUN_ID --seq N --now TS [--relies-on REFS.json]
+  create_steps.py manifest ITEMS.json --run RUN_ID --now TS [--relies-on REFS.json]   (seq is the latest + 1)
                   [--status-file STATUS_FILE_ENTRY.json]
-  create_steps.py status RAW.json MANIFEST.json|- --overlay OVERLAY.yaml
-  create_steps.py close CLOSES.json MANIFEST.json|- FOUND.json
+  create_steps.py status RAW.json --overlay OVERLAY.yaml
+  create_steps.py close VERIFIED_WRITE_LIST.json FOUND.json   (the closes are the write list's close_item writes)
+  create_steps.py done VERIFIED_WRITE_LIST.json [--logs LOG_1.json ...]   (before the lock release: stops with
+                  every approved write the manifest or the change-request log doesn't show as done)
   create_steps.py scope COUNT --overlay OVERLAY.yaml [--limit N]
   create_steps.py recheck CONTEXT.json OPEN_ITEMS.json
 
@@ -38,7 +42,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gw_hash import item_hash  # noqa: E402
 
-CLOSE_REASONS = ("not_planned", "superseded", "duplicate", "completed")
+CLOSE_REASONS = ("not_planned", "superseded", "duplicate")  # never completed: it reads back as done (review 4, item 74)
 DEFAULT_CLOSE_PREFIX = "gw-closed:"
 READ_SCOPE_MAX = 200
 
@@ -379,6 +383,45 @@ def item_history_problems(prev_items, items):
             raise ValueError(f"the manifest changes or clears the recorded close of {p['key']}")
 
 
+def unfinished(wl, manifest, cr_log=None):
+    """Every write of the verified write list that the latest manifest (and the change-request log)
+    does not show as done. Create runs this before its lock release and stops with "resume" if
+    anything is listed, so an approved write is never skipped silently (fifth review, finding 7)."""
+    items = {i["key"]: i for i in (manifest or {}).get("items", [])}
+    has = lambda key, kind, to: any(l["type"] == kind and l["to_key"] == to for l in items.get(key, {}).get("links", []))
+    left = []
+    for w in wl.get("writes", []):
+        k, key = w["kind"], w.get("key")
+        why = None
+        if k == "create_item" and key not in items:
+            why = "not recorded as created"
+        elif k == "clear_not_ready" and items.get(key, {}).get("not_ready", True):
+            why = "still not ready"
+        elif k == "link_parent" and not has(key, "parent", w.get("to")):
+            why = "no parent link recorded"
+        elif k == "link_dependency" and not has(key, "blocked_by", w["blocked_by"]):
+            why = f"no link to {w['blocked_by']} recorded"
+        elif k == "unlink_dependency" and has(key, "blocked_by", w["blocked_by"]):
+            why = f"the link to {w['blocked_by']} is still recorded"
+        elif k == "set_blocked" and not items.get(key, {}).get("blocked_set"):
+            why = "blocked state not recorded"
+        elif k == "update_item" and items.get(key, {}).get("owned_hash") != w["owned_hash"]:
+            why = "the approved text is not recorded"
+        elif k == "close_item" and (items.get(key, {}).get("close") or {}).get("state") != "closed":
+            why = "not recorded as closed"
+        elif k == "status_put" and ((manifest or {}).get("status_file") or {}).get("state") != "recorded":
+            why = "the status file is not recorded"
+        elif k == "cr_log_put":
+            e = next((x for x in (cr_log or {}).get("entries", []) if x["id"] == w["entry"]["id"]), None)
+            if cr_log is None:
+                why = "the change-request log was not given"
+            elif not e or e["outcome"] != w["entry"]["outcome"] or (e.get("decided_by") or {}).get("plan_version") != wl["plan_version"]:
+                why = "the decision is not in the log"
+        if why:
+            left.append({"no": w.get("no"), "kind": k, "key": key, "why": why})
+    return left
+
+
 def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_KEEP):
     """status_file: the retire record to set; by default it is carried forward from prev, so a later
     manifest can never drop a recorded or intended status file."""
@@ -401,7 +444,8 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_K
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["lock", "preflight", "manifest", "status", "close", "scope", "recheck"])
+    ap.add_argument("cmd", choices=["lock", "preflight", "manifest", "status", "close", "scope", "recheck", "done"])
+    ap.add_argument("--logs", nargs="*", default=None, help="done: every change-request log file, when the write list decides one")
     ap.add_argument("--overlay")
     ap.add_argument("--limit", type=int)
     ap.add_argument("files", nargs="*")
@@ -413,10 +457,21 @@ def main(argv=None):
     ap.add_argument("--seq", type=int)
     ap.add_argument("--relies-on")
     ap.add_argument("--write-list", help="preflight: the verified write list (its update_item writes)")
+    import check_hashes
+    check_hashes.add_manifests_arg(ap)
     ap.add_argument("--status-file", help="manifest: the retire status_file entry to set (JSON, from retire.py status "
                                          "or with state recorded); omitted, it is carried forward from the previous manifest")
     a = ap.parse_args(argv)
     J = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
+    try:
+        latest = None
+        if a.cmd in ("preflight", "manifest", "status", "close", "done"):
+            if not a.plan_id:
+                raise ValueError("--plan-id required")
+            latest = check_hashes.latest_manifest_of(a.manifests, a.plan_id)
+    except (ValueError, OSError) as e:
+        print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
+        return 1
     if a.cmd == "lock":
         out = lock_decision(J(a.files[0]), a.run, a.account, ts(a.now))
     elif a.cmd == "preflight":
@@ -431,15 +486,28 @@ def main(argv=None):
                                                         f"list's offer ({','.join(wl.get('phases', [])) or 'none'})"]}))
             return 1
         ups = {w["key"]: w["owned_hash"] for w in wl["writes"] if w["kind"] == "update_item"}
-        out = preflight(J(a.files[0]), J(a.files[1]), J(a.files[2]), phases, ups,
+        out = preflight(J(a.files[0]), J(a.files[1]), latest, phases, ups,
                         J(a.relies_on) if a.relies_on else None)
     elif a.cmd == "status":
         import gw_yaml
         fm = gw_yaml.load(a.overlay)["skills"]["tracker"]["field_map"]
-        written = {i["key"]: i for i in (J(a.files[1]) or {}).get("items", [])}
+        written = {i["key"]: i for i in (latest or {}).get("items", [])}
         out = {"items": [read_status(r, written.get(r["key"]), fm) for r in J(a.files[0])]}
     elif a.cmd == "close":
-        out = close_steps(J(a.files[0]), J(a.files[1]), J(a.files[2]))
+        wl = J(a.files[0])
+        closes = [{"key": w["key"], "reason": w["reason"]} for w in wl.get("writes", []) if w.get("kind") == "close_item"]
+        out = close_steps(closes, latest, J(a.files[1]))
+    elif a.cmd == "done":
+        wl = J(a.files[0])
+        log = None
+        if any(w["kind"] == "cr_log_put" for w in wl.get("writes", [])):
+            import change_request
+            log, chain = change_request.verify_log_chain([J(p) for p in (a.logs or [])], a.plan_id)
+            if chain:
+                print(json.dumps({"ok": False, "problems": chain}, indent=2))
+                return 1
+        left = unfinished(wl, latest, log)
+        out = {"ok": not left, "unfinished": left}
     elif a.cmd == "recheck":
         out = plan_level_recheck(J(a.files[0]), J(a.files[1]))
     elif a.cmd == "scope":
@@ -447,7 +515,10 @@ def main(argv=None):
         out = scope_decision(int(a.files[0]), gw_yaml.load(a.overlay), a.limit)
     else:
         try:
-            out = make_manifest(J(a.files[0]), J(a.files[1]), a.plan_id, a.run, a.seq, ts(a.now),
+            seq = (latest or {}).get("seq", 0) + 1
+            if a.seq is not None and a.seq != seq:
+                raise ValueError(f"--seq {a.seq} is not the next sequence ({seq})")
+            out = make_manifest(latest, J(a.files[0]), a.plan_id, a.run, seq, ts(a.now),
                                 J(a.relies_on) if a.relies_on else [],
                                 status_file=J(a.status_file) if a.status_file else _KEEP)
         except ValueError as e:

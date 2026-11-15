@@ -19,6 +19,10 @@ from render_proposal import task_body
 T0 = dt.datetime(2026, 11, 15, 12, 0, 0, tzinfo=dt.timezone.utc)
 
 
+class LockLost(Exception):
+    pass
+
+
 class WriteFailed(RuntimeError):
     pass
 
@@ -68,6 +72,10 @@ class FakeTracker:
     def clear_not_ready(self, tid):
         self._write()
         self.items[tid]["not_ready"] = False
+
+    def unlink_dependency(self, tid, other):
+        self._write()
+        self.items[tid]["links"] = [x for x in self.items[tid]["links"] if x != other]
 
     def set_blocked(self, tid, on=True):
         self._write()
@@ -170,7 +178,7 @@ def latest_manifest(tr, plan_id):
 
 
 def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic="VOL-1", hard_crash=False, updates=(),
-               crash_after_update=False, relies_on=None):
+               crash_after_update=False, relies_on=None, write_list=None, on_checkpoint=None):
     fm = overlay["skills"]["tracker"]["field_map"]
     """Follow the core's create procedure. Returns the preflight result."""
     decision = create_steps.lock_decision(tr.comments, run, account, tr.clock)
@@ -182,7 +190,9 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
     planned = [p for p in planned_items(plan, overlay, phases)]
     found = []
     children = {i["key"] for i in tr.list_children(epic)}
-    for p in planned:
+    # FOUND holds every planned key and every key the write list closes (a revise's relies_on names both)
+    close_keys = [w["key"] for w in (write_list or {}).get("writes", []) if w["kind"] == "close_item"]
+    for p in planned + [{"key": k} for k in close_keys if k not in {q["key"] for q in planned}]:
         hits = tr.find_by_key(p["key"])
         for h in hits:
             found.append({"key": h["key"], "tracker_id": h["tracker_id"], "owned_hash": owned_hash(tr.normalize(h)),
@@ -210,6 +220,13 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
         seq += 1
         prev = m
         pending = 0
+        if on_checkpoint:
+            on_checkpoint(tr)
+        # renew, then read the lock again: a run that stalled past its expiry learns it lost the lock and stops
+        tr.comment(account, create_steps.lock_line("renew", run, account, tr.clock))
+        d = create_steps.lock_decision(tr.comments, run, account, tr.clock)
+        if d["decision"] != "held":
+            raise LockLost(d)
 
     try:
         for a in pf["actions"]:
@@ -253,6 +270,25 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
                     pending += 1
             if pending >= create_steps.BATCH:
                 checkpoint()
+        # the revise's plan-scoped dependency and wait changes on written tasks, each idempotent through the manifest
+        for w in (write_list or {}).get("writes", []):
+            if w["kind"] not in ("unlink_dependency", "link_dependency", "clear_blocked") or w.get("scope") != "plan":
+                continue
+            it = items[w["key"]]
+            if w["kind"] == "clear_blocked":
+                if tr.items[it["tracker_id"]]["blocked"]:
+                    tr.set_blocked(it["tracker_id"], False)
+                    pending += 1
+                continue
+            has = any(l["type"] == "blocked_by" and l["to_key"] == w["blocked_by"] for l in it["links"])
+            if w["kind"] == "unlink_dependency" and has:
+                tr.unlink_dependency(it["tracker_id"], items[w["blocked_by"]]["tracker_id"])
+                it["links"] = [l for l in it["links"] if not (l["type"] == "blocked_by" and l["to_key"] == w["blocked_by"])]
+                pending += 1
+            elif w["kind"] == "link_dependency" and not has:
+                tr.link_dependency(it["tracker_id"], items[w["blocked_by"]]["tracker_id"])
+                it["links"].append({"type": "blocked_by", "to_key": w["blocked_by"]})
+                pending += 1
         for a in pf["actions"]:
             if a["action"] == "set_blocked" and not items[a["key"]].get("blocked_set"):
                 tr.set_blocked(items[a["key"]]["tracker_id"])
@@ -270,6 +306,8 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
                 if pending >= create_steps.BATCH:
                     checkpoint()
         checkpoint()
+    except LockLost as e:
+        return {"ok": False, "lock_lost": e.args[0]}  # stop at once; the release is not ours to post
     except WriteFailed as e:
         tr.fail_at = None
         if hard_crash:
@@ -372,14 +410,6 @@ def run_retire(tr, plan, overlay, approved, proposal_hash, run="run-r", account=
         decision = create_steps.lock_decision(tr.comments, run, account, tr.clock)
     if decision["decision"] != "held":
         return {"ok": False, "lock": decision}
-    if draft_label and draft_label in tr.epic_labels.get(epic, set()):
-        tr.remove_epic_label(epic, draft_label)
-    res = run_close(tr, plan, overlay, approved["closes"], run=run, account=account)
-    if not res["ok"]:
-        return res
-    if crash_after == "closes":
-        return {"ok": False, "crashed": "closes"}
-    manifest = latest_manifest(tr, plan["id"])
 
     def put(sf):
         nonlocal manifest
@@ -389,12 +419,21 @@ def run_retire(tr, plan, overlay, approved, proposal_hash, run="run-r", account=
         manifest = m
 
     sf = manifest.get("status_file")
-    if sf is None:
+    if sf is None:  # the status intent is the retire's first write after the lock
         n = (status["n"] + 1) if status else 1
         sf = retire.status_intent(retire.status_record(plan, n, proposal_hash, create_steps.fmt(tr.clock)))
         put(sf)
     if crash_after == "intent":
         return {"ok": False, "crashed": "intent"}
+    if draft_label and draft_label in tr.epic_labels.get(epic, set()):
+        tr.remove_epic_label(epic, draft_label)
+    res = run_close(tr, plan, overlay, approved["closes"], run=run, account=account)
+    if not res["ok"]:
+        return res
+    if crash_after == "closes":
+        return {"ok": False, "crashed": "closes"}
+    manifest = latest_manifest(tr, plan["id"])
+    sf = manifest["status_file"]
     if latest_status(tr, plan["id"]) is None:
         tr.put(f"{plan['id']}-status-{sf['n']}", retire.rebuild_status(plan["id"], sf))
     if crash_after == "status":
