@@ -8,7 +8,7 @@ Approval releases specific phases at a specific plan version, authenticated by t
 Hashes are SHA-256 over RFC 8785 canonical JSON, computed by `check_hashes.py`. The hashed subset is normative and listed below and defined by `scripts/gw_hash.py`:
 
 - `phase_hash`: the phase's id, name, goal, order, `depends_on` and `task_ids`, plus every field of each of its tasks (role by `role_key`, evidence by id). It excludes phase `state`, plan `status` and `version`, `stamps`, `review`, `history`, `coverage`, `epic.tracker_ref` and approvals, so moving a phase through its states never changes it.
-- `plan_hash`: every `phase_hash`, plus `scope`, `epic.title`, `epic.summary`, `open_questions` and `access_list`.
+- `plan_hash`: every `phase_hash`, plus `scope`, `request.starting_point`, `epic.title`, `epic.summary`, `open_questions` and `access_list`.
 - `proposal_hash`: the bytes of `proposal.md` as rendered from the plan by `render_proposal.py`; create re-renders and compares.
 - `write_list_hash`: the numbered write list, which names every write including lock comments, plan store files, manifest updates and labels.
 
