@@ -233,6 +233,8 @@ change_requests = {
             "base": obj({"plan_version": {"type": "integer", "minimum": 1}, "manifest_seq": {"type": "integer", "minimum": 0}}),
             "decided_by": nullable(obj({"plan_version": {"type": "integer", "minimum": 1}, "proposal_hash": HEX})),
         })),
+        "prev_hash": nullable(HEX),                  # the previous log file's hash; null for the first
+        "hash": HEX,                                 # item_hash of the file without this field
     }),
 }
 

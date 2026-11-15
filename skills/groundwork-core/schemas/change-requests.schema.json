@@ -145,6 +145,21 @@
           "decided_by"
         ]
       }
+    },
+    "prev_hash": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     }
   },
   "additionalProperties": false,
@@ -152,6 +167,8 @@
     "schema_version",
     "plan_id",
     "n",
-    "entries"
+    "entries",
+    "prev_hash",
+    "hash"
   ]
 }

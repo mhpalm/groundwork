@@ -97,6 +97,9 @@ def release_name(plan, phase):
     return f"{plan['epic']['title']} {phase['id']} {phase['name']}"[:255]
 
 
+REVISE_CLOSE_REASONS = ("not_planned", "superseded", "duplicate")
+
+
 def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None):
     """The numbered write list for the offered phases. Hashing it binds approval to exactly these writes.
 
@@ -109,6 +112,16 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None):
     """
     if overlay.get("provisional"):
         raise ValueError("a provisional overlay has no tracker, so there is no write list (D-54)")
+    # a revise closes only tasks the revised plan drops, never as completed: a completed close reads
+    # back as done and would satisfy its dependents without the work (fourth review, M6)
+    in_plan = {t["key"] for t in plan["tasks"]} | {f"gw:{plan['id']}:{t['id']}" for t in plan["tasks"]}
+    for c in closes or []:
+        if c["key"] in in_plan:
+            raise ValueError(f"{c['key']} is still a task in the plan; a revise closes only tasks the plan drops")
+        if not c["key"].startswith(f"gw:{plan['id']}:"):
+            raise ValueError(f"{c['key']} is not one of this plan's keys")
+        if c["reason"] not in REVISE_CLOSE_REASONS:
+            raise ValueError(f"a revise closes as {', '.join(REVISE_CLOSE_REASONS)}, not {c['reason']}")
     tr = overlay["skills"]["tracker"]
     target = f"{tr['skill'].replace('groundwork-tracker-', '')}:{tr['instance']['id']}:{tr['instance']['project']}"
     edits = set(edits or ())
@@ -163,6 +176,9 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None):
         writes.append({"kind": "cr_log_put", "entry": cr_entry, "note": "latest log file plus this entry; number allocated under the lock"})
     if not any(p["state"] in ("writing", "released") for p in plan["phases"]):
         writes.append({"kind": "remove_label", "on": "epic", "label": overlay.get("labels", {}).get("draft", "gw-draft")})
+    # preflight finds these at write time; the write list names the procedure so the approval covers it
+    writes.append({"kind": "comment_split", "on": "written items whose points a person raised",
+                   "note": "one comment recommending a split, never repeated (recorded as split_comment); points are never changed"})
     writes.append({"kind": "lock_release", "on": "epic"})
     for i, w in enumerate(writes, 1):
         w["no"] = i

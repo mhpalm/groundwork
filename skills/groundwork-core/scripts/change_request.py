@@ -4,20 +4,23 @@
 """Change requests: the front end to revise (planning model section 3).
 
 Usage:
-  change_request.py allocate LOG.json|- --plan-id ID --restatement TEXT --source runner|pasted
+  Every command that reads the log takes --plan-id ID --logs LOG_1.json ... LOG_n.json (every log file in
+  the plan store; --logs alone when there is none). The latest is found by verifying the chain.
+  change_request.py allocate --restatement TEXT --source runner|pasted
                     --origin ROLE --plan-version N --manifest-seq N [--derived-from EV1,EV2]
-  change_request.py base LOG.json CR-n --plan-version N --manifest-seq N
-  change_request.py assess BASE_PLAN.json NEW_PLAN.json LOG.json CR-n --cost drafted|outline|unknown
+  change_request.py base CR-n --plan-version N --manifest-seq N
+  change_request.py assess BASE_PLAN.json NEW_PLAN.json CR-n --cost drafted|outline|unknown
                     [--approved-unwritten P1,P2]
-  change_request.py bind LOG.json CR-n --outcome declined --reason TEXT   (the entry a write list binds)
-  change_request.py decide LOG.json CR-n --write-list VERIFIED_WRITE_LIST.json --proposal-hash HEX
+  change_request.py bind CR-n --outcome declined --reason TEXT   (the entry a write list binds)
+  change_request.py decide CR-n --write-list VERIFIED_WRITE_LIST.json --proposal VERIFIED_PROPOSAL.md
                     [--restricted RESTRICTED.json]   (outcome and reason come from the bound entry)
   change_request.py basis RELEASED_PLAN.json CURRENT_PLAN.json --phase P
   change_request.py release-check CURRENT_PLAN.json --phase P --released P1=PLAN_AT_RELEASE.json ...
 
 The log is change-requests-<n>.json in the plan store, outside plan_hash. Each
 write is the latest file plus one entry, numbered under the lock, so two sets at
-the same base never drop each other's entry. A CR id is allocated under the lock
+the same base never drop each other's entry. Each file names the previous
+file's hash, and every read verifies the chain and the append-only rules. A CR id is allocated under the lock
 by writing a pending entry. Cost is counted in one-day tasks; waits count 0 days.
 """
 
@@ -31,7 +34,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import gw_model  # noqa: E402
-from gw_hash import basis_hash  # noqa: E402
+from gw_hash import basis_hash, item_hash  # noqa: E402
+from gw_schema import load_schema, validate  # noqa: E402
 
 OUTCOMES = ("added", "later", "own_epic", "declined")
 # The four options an assessment always shows (3.3 step 6), with the approval each needs (3.4).
@@ -51,12 +55,73 @@ def empty_log(plan_id):
 
 
 def next_log(latest, entry):
-    """The latest log file plus this set's own entry (replacing its pending entry, if any)."""
+    """The latest log file plus this set's own entry (replacing its pending entry, if any), chained to
+    the latest by its hash."""
     log = copy.deepcopy(latest)
+    log.pop("hash", None)
     log["entries"] = [e for e in log["entries"] if e["id"] != entry["id"]] + [entry]
     log["entries"].sort(key=lambda e: int(e["id"].split("-")[1]))
     log["n"] = latest["n"] + 1
+    log["prev_hash"] = latest.get("hash")
+    log["hash"] = item_hash(log)
+    successor_problems(latest, log)
     return log
+
+
+def successor_problems(prev, log):
+    """The log is append-only: every entry the previous file holds is kept, a decided entry never
+    changes, and a pending entry changes only by being decided (outcome, reason, decided_by)."""
+    if log["plan_id"] != prev["plan_id"]:
+        raise ValueError(f"the log names plan {log['plan_id']}, not {prev['plan_id']}")
+    now = {e["id"]: e for e in log["entries"]}
+    for e in prev["entries"]:
+        n = now.get(e["id"])
+        if n is None:
+            raise ValueError(f"the log drops {e['id']}")
+        if e["outcome"] != "pending" and n != e:
+            raise ValueError(f"the log changes {e['id']}, which was already decided ({e['outcome']})")
+        keep = lambda x: {k: v for k, v in x.items() if k not in ("outcome", "reason", "decided_by")}
+        if keep(n) != keep(e):
+            raise ValueError(f"the log changes the request {e['id']} itself, not only its decision")
+
+
+def verify_log_chain(logs, plan_id):
+    """The latest change-request log: the highest n whose chain back to n 1 is intact, each file
+    matching its own hash and keeping the append-only rules. Any problem stops the run."""
+    schema = load_schema("change-requests")
+    by_n, probs = {}, []
+    for log in logs:
+        errs = validate(log, schema)
+        if errs:
+            probs.append(f"change-request log {log.get('n')}: {errs[0]}")
+            continue
+        if item_hash(log) != log["hash"]:
+            probs.append(f"change-request log {log['n']}: hash does not match contents (edited after writing)")
+            continue
+        if log["plan_id"] != plan_id:
+            probs.append(f"change-request log {log['n']}: names plan {log['plan_id']}, not {plan_id}")
+            continue
+        if log["n"] in by_n:
+            probs.append(f"change-request log {log['n']}: two files with one number")
+            continue
+        by_n[log["n"]] = log
+    latest, n = None, 1
+    while n in by_n:
+        log = by_n[n]
+        if log["prev_hash"] != (latest or {}).get("hash"):
+            probs.append(f"change-request log {n}: prev_hash does not match log {n - 1}; chain broken")
+            break
+        try:
+            if latest:
+                successor_problems(latest, log)
+        except ValueError as e:
+            probs.append(f"change-request log {n}: {e}")
+            break
+        latest, n = log, n + 1
+    extra = sorted(k for k in by_n if k >= n)
+    if extra and not probs:
+        probs.append(f"change-request log {extra[0]} does not chain to log {n - 1}")
+    return (latest or empty_log(plan_id)), probs
 
 
 def allocate(latest, restatement, source, origin_role_key, plan_version, manifest_seq, derived_from=()):
@@ -304,6 +369,8 @@ def decide_bound(latest, wl, proposal_hash, cr_id=None):
     if not re.fullmatch(r"[0-9a-f]{64}", proposal_hash or ""):
         raise ValueError("decided_by names the verified proposal's full sha256 (64 hex characters)")
     e = bound_entry(wl)
+    if wl.get("plan_id") != latest["plan_id"]:
+        raise ValueError(f"the write list is for plan {wl.get('plan_id')}, not {latest['plan_id']}")
     if cr_id is not None and cr_id != e["id"]:
         raise ValueError(f"the write list decides {e['id']}, not {cr_id}")
     if "decided_by" in e:
@@ -357,8 +424,11 @@ def main(argv=None):
     ap.add_argument("cmd", choices=["allocate", "base", "assess", "bind", "decide", "basis", "release-check"])
     ap.add_argument("--released", nargs="*", default=[], help="release-check: PHASE=PLAN_AT_RELEASE.json for each released phase")
     ap.add_argument("files", nargs="*")
+    ap.add_argument("--logs", nargs="*", default=None,
+                    help="every change-requests-<n>.json in the plan store (none: --logs with no files); the latest is "
+                         "found by verifying the chain, never taken from one file")
     for a in ("--plan-id", "--restatement", "--source", "--origin", "--derived-from", "--cost", "--approved-unwritten",
-              "--proposal-hash", "--phase", "--write-list", "--restricted", "--outcome", "--reason"):
+              "--proposal", "--phase", "--write-list", "--restricted", "--outcome", "--reason"):
         ap.add_argument(a)
     ap.add_argument("--plan-version", type=int)
     ap.add_argument("--manifest-seq", type=int)
@@ -366,20 +436,27 @@ def main(argv=None):
     J = lambda p: json.load(open(p, encoding="utf-8"))
     restricted = lambda a: J(a.restricted) if a.restricted else None
     split = lambda s: [x.strip() for x in (s or "").split(",") if x.strip()]
+    if a.cmd in ("allocate", "base", "assess", "bind", "decide"):
+        if a.logs is None or not a.plan_id:
+            print(json.dumps({"ok": False, "problems": ["--plan-id and --logs (every log file in the plan store) are required"]}))
+            return 1
+        latest, chain = verify_log_chain([J(p) for p in a.logs], a.plan_id)
+        if chain:
+            print(json.dumps({"ok": False, "problems": chain}, indent=2))
+            return 1
     if a.cmd == "allocate":
-        latest = J(a.files[0]) if a.files[0] != "-" else empty_log(a.plan_id)
         log, entry = allocate(latest, a.restatement, a.source, a.origin, a.plan_version, a.manifest_seq, split(a.derived_from))
         out = {"log": log, "entry": entry, "similar_declined": similar_declined(latest, entry["restatement"]),
                "problems": log_problems(log, restricted(a))}
     elif a.cmd == "base":
-        probs = base_problems(entry_of(J(a.files[0]), a.files[1]), a.plan_version, a.manifest_seq)
+        probs = base_problems(entry_of(latest, a.files[0]), a.plan_version, a.manifest_seq)
         out = {"ok": not probs, "problems": probs}
     elif a.cmd == "assess":
-        res = assess(J(a.files[0]), J(a.files[1]), J(a.files[2]), a.files[3], a.cost, split(a.approved_unwritten))
+        res = assess(J(a.files[0]), J(a.files[1]), latest, a.files[2], a.cost, split(a.approved_unwritten))
         out = {"assessment": res, "markdown": render(res)}
     elif a.cmd == "bind":
         try:
-            out = {"entry": to_bind(J(a.files[0]), a.files[1], a.outcome, a.reason)}
+            out = {"entry": to_bind(latest, a.files[0], a.outcome, a.reason)}
         except (ValueError, KeyError) as e:
             print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
             return 1
@@ -388,7 +465,11 @@ def main(argv=None):
             print(json.dumps({"ok": False, "problems": ["--write-list required: the outcome comes from the verified write list"]}))
             return 1
         try:
-            log, entry = decide_bound(J(a.files[0]), J(a.write_list), a.proposal_hash, a.files[1])
+            if not a.proposal:
+                raise ValueError("--proposal required: decided_by is the hash of the verified proposal file itself")
+            from gw_canon import sha256_hex
+            ph = sha256_hex(open(a.proposal, "rb").read())
+            log, entry = decide_bound(latest, J(a.write_list), ph, a.files[0])
         except (ValueError, KeyError) as e:
             print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
             return 1

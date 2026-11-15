@@ -233,7 +233,7 @@ class PlanLevel(unittest.TestCase):
         self.assertTrue(check_hashes.write_list_scope_problems(unscoped, "phases", ["P1", "P2"]))
 
     def test_every_write_in_a_phase_list_is_scoped(self):
-        wl = render_proposal.write_list(self.plan, self.ov, ["P1"], closes=[{"key": "k", "reason": "not_planned"}])
+        wl = render_proposal.write_list(self.plan, self.ov, ["P1"], closes=[{"key": f"gw:{self.plan['id']}:P9-T01", "reason": "not_planned"}])
         scopes = {w["kind"]: w["scope"] for w in wl["writes"]}
         self.assertEqual(scopes["create_item"], "phase:P1")
         self.assertEqual(scopes["link_dependency"], "phase:P1")
@@ -531,7 +531,7 @@ class ReviewThreeBindings(unittest.TestCase):
 
     def test_the_proposal_names_updates_closes_and_the_decision(self):
         t = next(t for t in self.plan["tasks"] if t["phase"] == "P1")
-        other = next(t for t in self.plan["tasks"] if t["phase"] == "P0")
+        other = {"key": f"gw:{self.plan['id']}:P0-T99"}  # a task the revised plan dropped
         entry = {"id": "CR-3", "outcome": "added", "reason": "Fits the brief.", "restatement": "Add a export."}
         wl = render_proposal.write_list(self.plan, self.ov, ["P1"], [{"key": other["key"], "reason": "not_planned"}],
                                         entry, [t["id"]])

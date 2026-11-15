@@ -162,7 +162,7 @@ class Close(unittest.TestCase):
 
     def test_write_list_close_sequence(self):
         plan, ov = g1()
-        k = self.key(plan, "P1-T05")
+        k = f"gw:{plan['id']}:P1-T99"  # a task the revised plan dropped
         wl = render_proposal.write_list(plan, ov, ["P1"], closes=[{"key": k, "reason": "duplicate"}])
         kinds = [w["kind"] for w in wl["writes"]]
         i = kinds.index("add_label")

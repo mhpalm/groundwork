@@ -163,7 +163,7 @@ def planned_items(plan, overlay, phases):
 def latest_manifest(tr, plan_id):
     ms = [v for k, v in tr.store.items() if k.startswith(f"{plan_id}-manifest-")]
     from check_hashes import verify_chain
-    latest, probs = verify_chain(ms)
+    latest, probs = verify_chain(ms, plan_id)
     if probs:
         raise RuntimeError("; ".join(probs))
     return copy.deepcopy(latest)

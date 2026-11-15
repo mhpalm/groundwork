@@ -20,7 +20,7 @@ Usage:
 LOCK_COMMENTS: [{ref, author_account_id, created_at, body}] where body holds
   a gw-lock line: "gw-lock claim|renew|release run=<id> account=<id> expires=<ts>".
 PLANNED: [{key, phase, owned_hash, points, depends_on?: [keys], waits?: bool}]   (owned_hash from check_hashes.py owned)
-FOUND:   [{key, tracker_id, owned_hash, under_epic, points, status?}]   (find_by_key across the project, cross-checked by
+FOUND:   [{key, tracker_id, owned_hash, under_epic, points, status, updated_at?}]   (find_by_key across the project, cross-checked by
          list_children; status from `status`)
 RAW:     [{key, state: open|closed, category?: todo|in_progress, closed_as?: [tracker status, resolution or
          state_reason], labels: [..]}]   (what the tracker skill reads back; labels are untrusted)
@@ -44,6 +44,7 @@ READ_SCOPE_MAX = 200
 
 LOCK_LINE = re.compile(r"gw-lock (claim|renew|release) run=(\S+) account=(\S+)(?: expires=(\S+))?")
 LOCK_MINUTES = 30
+STATUSES = ("todo", "in_progress", "done", "closed_not_done")  # what create_steps.py status reports
 RENEW_EVERY_WRITES = 10
 BATCH = 10
 
@@ -66,7 +67,8 @@ def lock_state(comments, now):
 
     Comments are ordered by created_at, then by tracker ref, so two runners that read
     the same list reach the same answer even when their claims land in the same second.
-    A release ends that run's claim; a renew extends only the current holder.
+    A release ends that run's claim. A renew extends a claim only while it is live; a claim posted
+    after the run's earlier claim expired starts again at its own time.
     """
     events = []
     for c in comments:
@@ -80,9 +82,14 @@ def lock_state(comments, now):
     claims = {}
     for when, _ref, kind, run, account, exp in events:
         if kind == "claim":
-            claims.setdefault(run, {"run": run, "account": account, "at": when, "expires": exp})
+            # a claim posted after this run's earlier claim expired is a fresh claim, ordered by its own time
+            if run not in claims or claims[run]["expires"] <= when:
+                claims[run] = {"run": run, "account": account, "at": when, "expires": exp}
         elif kind == "renew" and run in claims and claims[run]["account"] == account:
-            claims[run]["expires"] = max(claims[run]["expires"], exp)
+            # a renew extends only a claim still live when it is posted; a late renew never revives one,
+            # so a run that stalled past expiry can't take the lock back from the run that claimed after it
+            if when < claims[run]["expires"]:
+                claims[run]["expires"] = max(claims[run]["expires"], exp)
         elif kind == "release" and run in claims and claims[run]["account"] == account:
             claims.pop(run)
     live = sorted((c for c in claims.values() if c["expires"] > now), key=lambda c: c["at"])
@@ -155,10 +162,20 @@ def preflight(planned, found, manifest, phases, approved_updates=(), relies_on=N
         if key in dupes:
             report("stop", "more than one item carries this key")
             continue
+        if f is not None and f.get("status") not in STATUSES:
+            # the finished-work and closed_not_done rules read status; without it they would pass silently
+            report("stop", "the found item has no status from create_steps.py status; read it before preflight")
+            continue
         gone = sorted(set(p.get("depends_on", [])) & deleted)
         if in_scope and gone:
             report("stop", f"depends on {', '.join(gone)}, which was written and then deleted by hand; "
                            "never recreated silently, so revise the plan first")
+            continue
+        creating = {q["key"] for q in planned if q["phase"] in phases}
+        unwritten = sorted(d for d in p.get("depends_on", []) if d not in found_by_key and d not in written and d not in creating)
+        if in_scope and unwritten:
+            report("stop", f"depends on {', '.join(unwritten)}, which is neither written nor in this offer, so its "
+                           "dependency link can't be made; write that phase first or offer it with this one")
             continue
         dead = sorted(d for d in p.get("depends_on", []) if found_by_key.get(d, {}).get("status") == "closed_not_done")
         if in_scope and dead:
@@ -317,6 +334,32 @@ _KEEP = object()
 CLOSE_ORDER = {"intent": 0, "closed": 1}
 
 
+def status_file_problems(prior, sf):
+    """Once a manifest names a retire status file, every later one carries it; only its state may
+    move, from intent to recorded."""
+    if prior is None:
+        return
+    same = lambda x: {k: v for k, v in (x or {}).items() if k != "state"}
+    if sf is None or same(prior) != same(sf):
+        raise ValueError("the status_file differs from the one the previous manifest names; "
+                         "only its state may move from intent to recorded")
+    if prior["state"] == "recorded" and sf["state"] != "recorded":
+        raise ValueError("a recorded status file never goes back to intent")
+
+
+def successor_problems(prev, m):
+    """Every rule make_manifest enforces when writing, checked again when reading the chain, so a
+    manifest edited by hand (with its self-hash recomputed) is refused at every read."""
+    try:
+        if m["plan_id"] != prev["plan_id"]:
+            raise ValueError(f"names plan {m['plan_id']}, not {prev['plan_id']}")
+        status_file_problems(prev.get("status_file"), m.get("status_file"))
+        item_history_problems(prev["items"], m["items"])
+    except ValueError as e:
+        return [str(e)]
+    return []
+
+
 def item_history_problems(prev_items, items):
     """Third review, finding 7: a manifest is the record of what Groundwork wrote and did once. A later
     manifest keeps every item the previous one records, under the same tracker id, and never forgets a
@@ -343,13 +386,7 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_K
          "written_at": fmt(now), "run_id": run, "relies_on": relies_on, "items": items}
     prior = (prev or {}).get("status_file")
     sf = prior if status_file is _KEEP else status_file
-    if prior is not None and status_file is not _KEEP:
-        same = lambda x: {k: v for k, v in (x or {}).items() if k != "state"}
-        if sf is None or same(prior) != same(sf):
-            raise ValueError("the status_file differs from the one the previous manifest names; "
-                             "only its state may move from intent to recorded")
-        if prior["state"] == "recorded" and sf["state"] != "recorded":
-            raise ValueError("a recorded status file never goes back to intent")
+    status_file_problems(prior, sf)
     if sf is not None:
         m["status_file"] = sf
     if prev:
@@ -386,8 +423,15 @@ def main(argv=None):
         if not a.write_list:
             print(json.dumps({"ok": False, "problems": ["--write-list required: preflight updates only what it approves"]}))
             return 1
-        ups = {w["key"]: w["owned_hash"] for w in J(a.write_list)["writes"] if w["kind"] == "update_item"}
-        out = preflight(J(a.files[0]), J(a.files[1]), J(a.files[2]), [x.strip() for x in a.phases.split(",")], ups,
+        wl = J(a.write_list)
+        phases = [x.strip() for x in (a.phases or "").split(",") if x.strip()]
+        if sorted(phases) != sorted(wl.get("phases", [])):
+            # the phases written are exactly the phases the verified write list offers (fourth review, M8)
+            print(json.dumps({"ok": False, "problems": [f"--phases {','.join(phases) or '(none)'} is not the verified write "
+                                                        f"list's offer ({','.join(wl.get('phases', [])) or 'none'})"]}))
+            return 1
+        ups = {w["key"]: w["owned_hash"] for w in wl["writes"] if w["kind"] == "update_item"}
+        out = preflight(J(a.files[0]), J(a.files[1]), J(a.files[2]), phases, ups,
                         J(a.relies_on) if a.relies_on else None)
     elif a.cmd == "status":
         import gw_yaml

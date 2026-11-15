@@ -233,10 +233,11 @@ class BoundDecision(unittest.TestCase):
         json.dump(self.wl, open(wp, "w"))
         json.dump({"B-12": "sign-up list"}, open(rp, "w"))
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(cr.main(["decide", lp, "CR-1", "--proposal-hash", "d" * 64]), 1)
+            self.assertEqual(cr.main(["decide", "CR-1", "--plan-id", self.plan["id"], "--logs", lp, "--proposal", wp]), 1)
         buf = io.StringIO()
         with redirect_stdout(buf):
-            rc = cr.main(["decide", lp, "CR-1", "--write-list", wp, "--proposal-hash", "d" * 64, "--restricted", rp])
+            rc = cr.main(["decide", "CR-1", "--plan-id", self.plan["id"], "--logs", lp, "--write-list", wp,
+                          "--proposal", wp, "--restricted", rp])
         self.assertEqual(rc, 1)
         self.assertIn("restricted value of B-12", buf.getvalue())
 

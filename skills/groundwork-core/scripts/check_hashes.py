@@ -16,7 +16,7 @@ Usage:
                   --evidence DIR [--rules RULES.json ...]
   check_hashes.py plan-level PLAN.json  (the same flags, without --phases, plus --context CONTEXT.json
                   [--assessment A.json]: the stored inputs the proposal is re-rendered from)
-  check_hashes.py manifest-chain MANIFEST.json [MANIFEST.json ...]
+  check_hashes.py manifest-chain MANIFEST.json [MANIFEST.json ...] --plan-id ID   (any problem stops the run)
   check_hashes.py owned FIELDS.json            plan-owned hash of normalized item fields
 
 COMMENTS.json is what the tracker skill's read procedure returns for epic
@@ -225,6 +225,40 @@ def open_blockers(review):
     return [f["id"] for f in review.get("findings", []) if f.get("severity") == "blocker" and f.get("resolution") != "fixed"]
 
 
+def rebuilt_plan_level_problems(plan, overlay, wl, context):
+    """A plan-level write list must be the one Groundwork renders for this plan, kind and stored context
+    (fourth review, M7): for a retire, the closes follow from the items the proposal showed and the
+    runner's leave-open choices; for the others, from the change-request entry it binds."""
+    import render_proposal
+    import retire
+    if wl.get("plan_id") != plan["id"] or wl.get("plan_version") != plan["version"]:
+        return [f"the write list is for plan {wl.get('plan_id')} version {wl.get('plan_version')}, "
+                f"not {plan['id']} version {plan['version']}"]
+    kind = wl.get("kind")
+    try:
+        if kind == "retire":
+            choices = {x["key"]: {"leave": x["owner_role_key"]} for x in wl.get("left_open", [])}
+            for i in context["items"]:
+                if i["status"] == "in_progress" and not i["person_added"]:
+                    choices.setdefault(i["key"], "close")
+            rp = retire.plan_retire(context["items"], choices)
+            if not rp["ok"]:
+                return [f"the retire can't be rebuilt from the stored context: {'; '.join(rp['problems'])}"]
+            draft = any(w["kind"] == "remove_label" for w in wl.get("writes", []))
+            again = retire.write_list(plan, overlay, rp, draft, wl.get("voids_pending", []))
+        else:
+            entries = [w["entry"] for w in wl.get("writes", []) if w.get("kind") == "cr_log_put"]
+            if len(entries) > 1:
+                return ["the write list binds more than one change-request entry"]
+            again = render_proposal.plan_write_list(plan, overlay, kind, entries[0] if entries else None)
+    except (ValueError, KeyError) as e:
+        return [f"the write list can't be rebuilt from the plan of record and the stored context: {e}"]
+    if hash_value(again) != hash_value(wl):
+        return ["the write list is not the one Groundwork renders for this plan, kind and stored context; "
+                "approvals bind only what Groundwork rendered"]
+    return []
+
+
 def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review, phases, now, unverified_writer, info=None,
                      latest_stored_version=None, plan_state=None, view=None):
     """Return (ok, problems, accepted_phases) for a phase set (initial, release, revision).
@@ -308,6 +342,7 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
     if stored is None:
         probs.append("a plan-level set is verified only against its stored proposal context")
     else:
+        probs += rebuilt_plan_level_problems(plan, overlay, wl, stored["context"])
         import render_proposal
         try:
             again = render_proposal.plan_level_proposal(plan, overlay, wl, stored["context"], stored.get("assessment"))
@@ -337,9 +372,10 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
 # snapshot) goes with every kind; only retire closes items, writes the status file or touches the epic.
 _PLAN_BOOKKEEPING = ("lock_claim", "lock_release", "manifest_put", "snapshot_put")
 PLAN_LEVEL_WRITES_BY_KIND = {
-    "decline": _PLAN_BOOKKEEPING + ("cr_log_put",),
-    "own_epic": _PLAN_BOOKKEEPING + ("cr_log_put",),
-    "later": _PLAN_BOOKKEEPING + ("cr_log_put",),
+    # decline, own epic and later write nothing to the tracker, so they write no manifest
+    "decline": ("lock_claim", "lock_release", "snapshot_put", "cr_log_put"),
+    "own_epic": ("lock_claim", "lock_release", "snapshot_put", "cr_log_put"),
+    "later": ("lock_claim", "lock_release", "snapshot_put", "cr_log_put"),
     "retire": _PLAN_BOOKKEEPING + ("add_label", "close_item", "status_put", "remove_label", "close_epic"),
 }
 PLAN_LEVEL_WRITES = tuple(sorted({k for v in PLAN_LEVEL_WRITES_BY_KIND.values() for k in v}))
@@ -367,8 +403,11 @@ def write_list_scope_problems(wl, scope, phases):
     return probs
 
 
-def verify_chain(manifests):
-    """Latest manifest = highest seq whose prev_hash chain back to seq 1 is intact."""
+def verify_chain(manifests, plan_id=None):
+    """Latest manifest = highest seq whose prev_hash chain back to seq 1 is intact, where every link also
+    keeps the append-only rules make_manifest writes by (no item dropped or moved, nothing done once
+    forgotten, the status file carried forward) and every manifest names the same plan."""
+    import create_steps
     schema = load_schema("manifest")
     by_seq = {}
     probs = []
@@ -386,11 +425,16 @@ def verify_chain(manifests):
     prev = None
     while seq in by_seq:
         m = by_seq[seq]
-        if m["prev_hash"] != prev:
+        if m["prev_hash"] != (prev or {}).get("hash"):
             probs.append(f"manifest seq {seq}: prev_hash does not match seq {seq - 1}; chain broken")
             break
+        bad = ([f"names plan {m['plan_id']}, not {plan_id}"] if plan_id and m["plan_id"] != plan_id else []) + \
+            (create_steps.successor_problems(prev, m) if prev else [])
+        if bad:
+            probs.append(f"manifest seq {seq}: {bad[0]}; refused as edited by hand; stop and resolve before any write")
+            break
         latest = m
-        prev = m["hash"]
+        prev = m
         seq += 1
     return latest, probs
 
@@ -407,6 +451,7 @@ def cli_plan_state(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["summary", "view", "review", "approvals", "plan-level", "manifest-chain", "owned"])
+    ap.add_argument("--plan-id", help="manifest-chain: the plan every manifest must name")
     ap.add_argument("--latest-version", type=int, help="the latest plan-of-record version in the plan store")
     ap.add_argument("files", nargs="*")
     ap.add_argument("--evidence")
@@ -494,8 +539,11 @@ def main(argv=None):
         print(json.dumps({"ok": ok, "kind": kind, "problems": probs, "other_sets": info}, indent=2))
         return 0 if ok else 1
     if a.cmd == "manifest-chain":
-        latest, probs = verify_chain([J(p) for p in a.files])
-        print(json.dumps({"latest_seq": latest["seq"] if latest else None, "problems": probs}, indent=2))
+        if not a.plan_id:
+            print(json.dumps({"ok": False, "problems": ["--plan-id required: every manifest in the chain must name this plan"]}))
+            return 1
+        latest, probs = verify_chain([J(p) for p in a.files], a.plan_id)
+        print(json.dumps({"ok": not probs, "latest_seq": latest["seq"] if latest else None, "problems": probs}, indent=2))
         return 0 if not probs else 1
     if a.cmd == "owned":
         print(owned_hash(J(a.files[0])))
