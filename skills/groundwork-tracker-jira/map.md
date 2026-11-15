@@ -27,6 +27,7 @@ People read these issues in Jira, so the owned description is written as Jira fo
 | `\| a \| b \|` lines with a `\| --- \|` row | Table with a header row |
 | `---` | Rule |
 | `**bold**`, `` `code` `` and bare web addresses | Strong, code and link marks |
+| The **Type** and **Depends on** lines | Not shown in the description: type, role, estimate, points and phase are Jira fields and labels, and dependencies are Blocks links, so these lines move into the details expand |
 | The two owned markers, the key line and the lines after it | Not shown as text: the key, overlay and stamps lines go in a collapsed expand titled "Groundwork details", which ends the owned section |
 
 The owned section is the description from the top through that expand; anything a person adds below it is theirs and is kept on every update. `jira_body.py check BODY.md` confirms the round trip is exact; when it is not, both writers fall back to the 1.0.0 form (one paragraph per line, markers as text), so a stored owned hash can always be recomputed.
@@ -36,7 +37,7 @@ The owned section is the description from the top through that expand; anything 
 Return `{title, body_owned, role_key, phase, key}`:
 
 - `title`: `summary`.
-- `body_owned`: `scripts/jira_body.py read FILE`, where FILE is the description as ADF (REST) or as the connector returns it (HTML, or Markdown for a 1.0.0-form body). It rebuilds exactly the Markdown the core rendered, markers included: ticked steps read back as `- [ ] ` so a person ticking steps is not drift, blank paragraphs are skipped, and any node Groundwork never writes inside the owned section reads as drift. Bodies in the 1.0.0 form are read too. No "Groundwork details" expand and no markers give an empty string.
+- `body_owned`: `scripts/jira_body.py read FILE`, where FILE is the description as ADF (REST) or as the connector returns it. The connector returns Markdown even when HTML is asked for, and flattens the details expand into plain paragraphs with its title dropped (verify); the reader finds the details again by the key line, so the field lines, key, overlay and stamps all read back in place. It rebuilds exactly the Markdown the core rendered, markers included: ticked steps read back as `- [ ] ` so a person ticking steps is not drift, blank paragraphs are skipped, and any node Groundwork never writes inside the owned section reads as drift. Bodies in the 1.0.0 form are read too. No "Groundwork details" expand and no markers give an empty string.
 - `role_key`, `phase`: from the labels.
 - `key`: from the owned description's last line; it must agree with the key label.
 

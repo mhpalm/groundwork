@@ -27,6 +27,43 @@ def golden_bodies():
         yield g, "epic-frozen", rp.epic_description(plan, overlay, released=[p["id"] for p in plan["phases"]])
 
 
+def connector_markdown(body):
+    """What the Atlassian connector hands back for a new-form body, as observed on a live site:
+    headings as '#### ', bullets as '* ', hard breaks as two trailing spaces, '~ [ ]' escaped outside
+    code, links as [u](u), and the details expand flattened to one paragraph per line, title dropped."""
+    def md(parts):
+        out = []
+        for t, m in parts:
+            if m == "code":
+                out.append(f"`{t}`")
+            elif m == "link":
+                out.append(f"[{t}]({t})")
+            else:
+                e = t.replace("~", "\\~").replace("[", "\\[").replace("]", "\\]")
+                out.append(f"**{e}**" if m == "strong" else e)
+        return "".join(out)
+    blocks = []
+    for n in jb.parse(body):
+        t = n["t"]
+        if t == "heading":
+            blocks.append("#### " + n["text"])
+        elif t == "rule":
+            blocks.append("---")
+        elif t == "para":
+            blocks.append("  \n".join(md(l) for l in n["lines"]))
+        elif t == "bullets":
+            blocks.append("\n".join("* " + md(i) for i in n["items"]))
+        elif t == "tasks":
+            blocks.append("\n".join("- [ ] " + md(i) for i in n["items"]))
+        elif t == "table":
+            rows = [n["head"]] + n["rows"]
+            lines = ["| " + " | ".join(md(c) for c in r) + " |" for r in rows]
+            blocks.append("\n".join(lines[:1] + ["|" + " --- |" * len(n["head"])] + lines[1:]))
+        elif t == "details":
+            blocks.extend("---" if l == "---" else md(jb.inline(l)) for l in n["lines"])
+    return "\n\n".join(blocks) + "\n"
+
+
 def kinds(doc):
     return [c["type"] for c in doc["content"]]
 
@@ -42,6 +79,16 @@ class RoundTrip(unittest.TestCase):
                 self.assertEqual(jb.from_html(jb.to_html(body)), body)
                 self.assertEqual(jb.read(json.dumps(jb.to_adf(body))), body)
                 self.assertEqual(jb.read(jb.to_html(body)), body)
+        self.assertGreater(n, 50)
+
+    def test_connector_markdown_read_back(self):
+        n = 0
+        for g, tid, body in golden_bodies():
+            if not jb.exact(body):
+                continue
+            n += 1
+            with self.subTest(golden=g, item=tid):
+                self.assertEqual(jb.read(connector_markdown(body)), body)
         self.assertGreater(n, 50)
 
     def test_owned_hash_survives(self):
@@ -82,6 +129,19 @@ class LooksLikeJira(unittest.TestCase):
             h = jb.to_html(body)
             self.assertNotIn("<p></p>", h)
             self.assertNotIn("&lt;!--", h)
+
+
+    def test_field_and_link_lines_only_in_the_details(self):
+        # Type, points, estimate and dependencies live in Jira fields and Blocks links, so the lines
+        # repeating them move into the collapsed details instead of the visible description.
+        plan, overlay, _e = fresh("G1")
+        dep = next(t for t in plan["tasks"] if "**Depends on:**" in rp.task_body(plan, overlay, t))
+        doc = jb.to_adf(rp.task_body(plan, overlay, dep))
+        top = json.dumps([c for c in doc["content"] if c["type"] != "expand"])
+        details = json.dumps(doc["content"][-1])
+        for label in ("Type:", "Depends on:"):
+            self.assertNotIn(label, top)
+            self.assertIn(label, details)
 
 
 class Drift(unittest.TestCase):

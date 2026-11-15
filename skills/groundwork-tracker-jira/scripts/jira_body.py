@@ -34,6 +34,9 @@ START = "<!-- groundwork:owned:start -->"
 END = "<!-- groundwork:owned:end -->"
 DETAILS = "Groundwork details"
 KEY_LINE = re.compile(r"^`gw:[^`]+`")
+# Lines that repeat what Jira already shows as fields (type, points, estimate, fix version, labels)
+# or as Blocks links. They move into the collapsed details so they are not shown twice.
+FIELD_LINE = re.compile(r"^\*\*(Type|Depends on):\*\* ")
 TASK = re.compile(r"^- \[[ xX]\] ")
 URL = re.compile(r"https?://[^\s<>()]+[^\s<>().,;:]")
 
@@ -115,6 +118,12 @@ def parse(md):
         else:
             cur.append(l)
     blocks.append(cur)
+    hidden = []
+    if len(blocks) > 1 and blocks[1] and FIELD_LINE.match(blocks[1][0]):
+        while blocks[1] and FIELD_LINE.match(blocks[1][0]):
+            hidden.append(blocks[1].pop(0))
+        if not blocks[1]:
+            blocks.pop(1)
     for b in blocks:
         if not b:
             return None  # two blank lines in a row: not a shape the inverse can rebuild
@@ -157,12 +166,24 @@ def parse(md):
                 if not para:
                     return None
                 nodes.append({"t": "para", "lines": para})
-    nodes.append({"t": "details", "lines": tail})
+    nodes.append({"t": "details", "lines": hidden + tail})
     return nodes
 
 
 def render_md(nodes):
     """Nodes -> the core's Markdown, markers included. The exact inverse of parse."""
+    nodes = list(nodes)
+    det = nodes[-1] if nodes and nodes[-1]["t"] == "details" else None
+    if det is not None:
+        k = next((i for i, l in enumerate(det["lines"]) if KEY_LINE.match(l)), len(det["lines"]))
+        hidden = det["lines"][:k]
+        if hidden:
+            nodes[-1] = dict(det, lines=det["lines"][k:])
+            lead = [inline(l) for l in hidden]
+            if len(nodes) > 1 and nodes[1]["t"] == "para":
+                nodes[1] = dict(nodes[1], lines=lead + nodes[1]["lines"])
+            else:
+                nodes.insert(1, {"t": "para", "lines": lead})
     out = [START]
     prev = None
     for n in nodes:
@@ -387,33 +408,26 @@ def assemble(nodes):
     d = next((i for i, n in enumerate(nodes) if n[0] == "details" and n[1] == DETAILS), None)
     if d is None:
         return ""
-    out = [START]
-    prev = None
+    def plain(x):
+        return [(x, None)]
+    pn = []
     for n in nodes[:d + 1]:
-        if prev is not None and prev[0] != "heading":
-            out.append("")
         k = n[0]
         if k == "heading":
-            out.append(f"**{n[1]}**")
+            pn.append({"t": "heading", "text": n[1]})
         elif k == "rule":
-            out.append("---")
+            pn.append({"t": "rule"})
         elif k == "para":
-            out.append(n[1])
-        elif k == "bullets":
-            out.extend("- " + x for x in n[1])
-        elif k == "tasks":
-            out.extend("- [ ] " + x for x in n[1])
+            pn.append({"t": "para", "lines": [plain(x) for x in n[1].split("\n")]})
+        elif k in ("bullets", "tasks"):
+            pn.append({"t": k, "items": [plain(x) for x in n[1]]})
         elif k == "table":
-            out.append("| " + " | ".join(n[1][0]) + " |")
-            out.append("|" + " --- |" * len(n[1][0]))
-            out.extend("| " + " | ".join(r) + " |" for r in n[1][1:])
+            pn.append({"t": "table", "head": [plain(c) for c in n[1][0]], "rows": [[plain(c) for c in r] for r in n[1][1:]]})
         elif k == "details":
-            out.extend(n[2])
+            pn.append({"t": "details", "lines": n[2]})
         else:
-            out.append("\x00")  # a node Groundwork never writes inside the owned section: drift
-        prev = n
-    out.append(END)
-    return "\n".join(out)
+            pn.append({"t": "para", "lines": [plain("\x00")]})  # a node Groundwork never writes in the owned section: drift
+    return render_md(pn)
 
 
 class _H(HTMLParser):
@@ -508,26 +522,64 @@ def from_html(h):
 _UNESC = re.compile(r"\\([!-/:-@\[-`{-~])")
 
 
+def _unesc(l):
+    l = re.sub(r"\[([^\]]+)\]\(\1\)", r"\1", l)  # a link whose text is its address
+    return "".join(p if p.startswith("`") else _UNESC.sub(r"\1", p) for p in re.split(r"(`[^`]*`)", l))
+
+
 def from_connector_markdown(md):
-    """The connector's Markdown read-back of a 1.0.0-form body (paragraphs and a task list only)."""
-    def unesc(l):
-        return "".join(p if p.startswith("`") else _UNESC.sub(r"\1", p) for p in re.split(r"(`[^`]*`)", l))
+    """The connector's Markdown read-back. A 1.0.0-form body is paragraphs and a task list with the
+    markers as text. A new-form body comes back with headings as '#### ', bullets as '* ', hard
+    breaks as two trailing spaces, and the Groundwork details expand flattened: its title is dropped
+    and its lines come back as paragraphs (verify)."""
+    md = md.replace("\r\n", "\n").replace("\u200c", "")
+    if START not in md:
+        return _connector_new(md)
     lines = []
-    for b in md.replace("\r\n", "\n").split("\n\n"):
-        b = b.replace("\u200c", "")
+    for b in md.split("\n\n"):
         if b.strip() == "":
             lines.append("")
             continue
         rows = b.split("\n")
         if all(TASK.match(x) for x in rows):
-            lines += ["- [ ] " + unesc(x[6:]) for x in rows]
+            lines += ["- [ ] " + _unesc(x[6:]) for x in rows]
         else:
-            lines += [unesc(x.rstrip()) for x in rows]
+            lines += [_unesc(x.rstrip()) for x in rows]
     try:
         a, z = lines.index(START), lines.index(END)
     except ValueError:
         return ""
     return "\n".join(lines[a:z + 1])
+
+
+def _connector_new(md):
+    blocks = [b for b in re.split(r"\n\s*\n", md.strip("\n")) if b.strip()]
+    nodes = []
+    for b in blocks:
+        rows = b.split("\n")
+        if len(rows) == 1 and rows[0].startswith("#### "):
+            nodes.append(("heading", _unesc(rows[0][5:].strip())))
+        elif len(rows) == 1 and rows[0].strip() in ("---", "\\---", "***"):
+            nodes.append(("rule", None))
+        elif all(TASK.match(x) for x in rows):
+            nodes.append(("tasks", [_unesc(x[6:].rstrip()) for x in rows]))
+        elif all(x.startswith(("* ", "- ")) for x in rows):
+            nodes.append(("bullets", [_unesc(x[2:].rstrip()) for x in rows]))
+        elif len(rows) > 1 and all(x.startswith("|") for x in rows) and re.fullmatch(r"\|( *:?-+:? *\|)+", rows[1].strip()):
+            nodes.append(("table", [[_unesc(c.strip()) for c in r.strip()[1:-1].split("|")] for r in [rows[0]] + rows[2:]]))
+        else:
+            nodes.append(("para", "\n".join(_unesc(x.rstrip()) for x in rows)))
+    k = next((i for i, n in enumerate(nodes) if n[0] == "para" and KEY_LINE.match(n[1])), None)
+    if k is None:
+        return ""
+    start = k
+    while start > 0 and nodes[start - 1][0] == "para" and FIELD_LINE.match(nodes[start - 1][1]):
+        start -= 1
+    end = k + 1
+    while end < len(nodes) and (nodes[end][0] == "rule" or (nodes[end][0] == "para" and nodes[end][1].startswith("Groundwork "))):
+        end += 1
+    lines = ["---" if n[0] == "rule" else n[1] for n in nodes[start:end]]
+    return assemble(nodes[:start] + [("details", DETAILS, lines)])
 
 
 def read(text):
