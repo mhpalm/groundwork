@@ -69,6 +69,11 @@ def main(argv):
                 for f in sorted(files):
                     full = os.path.join(root, f)
                     z.write(full, os.path.relpath(full, stage))
+        skill_mds = [n for n in zipfile.ZipFile(os.path.join(out, f"{name}.zip")).namelist()
+                     if n.rsplit("/", 1)[-1].lower() == "skill.md"]
+        if skill_mds != [f"{name}/SKILL.md"]:
+            print(f"{name}.zip must hold exactly one SKILL.md, at {name}/SKILL.md; found {skill_mds}")
+            return 1
     plugin = os.path.join(out, "plugin")
     shutil.copytree(os.path.join(ROOT, "plugin"), plugin)
     shutil.copytree(stage, os.path.join(plugin, "skills"))
