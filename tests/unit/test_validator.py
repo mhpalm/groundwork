@@ -51,6 +51,31 @@ class PlanFormat21(unittest.TestCase):
     def test_code_has_no_fence(self):
         self.assertIn("GR-35", self.check(lambda ins: ins["steps"][0].update(code="```\nx\n```")))
 
+    def minors(self, mutate):
+        plan, overlay, evidence = fresh("G1")
+        plan["stamps"]["plan_format"] = "2.1"
+        mutate(plan["tasks"][0]["instructions"])
+        R = validate_plan.check(plan, overlay, evidence, now=NOW)
+        return [f["what"] for f in R.items if f["check"] == "GR-36"]
+
+    def test_placeholder_in_runnable_code_is_flagged(self):
+        got = self.minors(lambda ins: ins["steps"][0].update(code="jira.sh GET '/issue/<V01 key>'", lang="bash"))
+        self.assertTrue(any("placeholder" in w for w in got))
+
+    def test_placeholder_the_step_says_to_replace_is_fine(self):
+        got = self.minors(lambda ins: ins["steps"][0].update(text="Replace the email, then run this.", code="export E='<your email>'", lang="bash"))
+        self.assertEqual(got, [])
+
+    def test_placeholder_in_plain_text_block_is_fine(self):
+        self.assertEqual(self.minors(lambda ins: ins["steps"][0].update(code="Vnn | <verdict> | what you saw")), [])
+
+    def test_bookkeeping_id_in_executor_text_is_flagged(self):
+        got = self.minors(lambda ins: ins["steps"][0].update(text="Use R3 as decided in AD-2."))
+        self.assertTrue(any("R3" in w for w in got))
+
+    def test_task_ids_are_fine(self):
+        self.assertEqual(self.minors(lambda ins: ins["steps"][0].update(text="Use the file from P0-T01.")), [])
+
     def test_step_text_is_one_line(self):
         self.assertIn("GR-35", self.check(lambda ins: ins["steps"][0].update(text="Run this:\ngh api x")))
 

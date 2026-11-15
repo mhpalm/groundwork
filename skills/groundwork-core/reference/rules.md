@@ -36,6 +36,16 @@ Overlays cannot override any part of this rule.
 
 Each task's instructions are written so the assumed executor can finish in one day without asking anyone. They always have: the purpose in plain language; prerequisites and access needed; numbered steps; acceptance criteria as bullets; how to verify; and what "done today" looks like. Groundwork asks the runner for what it needs (repo access, base branch, links) instead of guessing.
 
+How steps are written (plan format 2.1), because a junior pastes what they see:
+
+- One action per step, in one sentence, saying what to expect ("Expect `HTTP 201` and a key"). A command, file content or exact text goes in the step's `code`, never in the sentence.
+- Commands run as pasted. A value an earlier step produced is captured by that step (a shell variable, a saved file) and used by name later, never left as `<the key from step 2>` to fill in. Only values the executor must supply themselves (their own email, a token) are placeholders, and the step says to replace them.
+- Output is cut down to what the step checks (for example a `jq` filter), and the step says what a good result looks like. A failure leaves something to read, and a caution says where.
+- A judgement is its own step that names the steps to look back at ("Decide the V07 verdict: confirmed when step 2 answered 201 and..."). A step that only describes an outcome has nothing to tick.
+- An expected format comes with an example the executor cannot mistake for an answer.
+- Text the executor reads carries no plan bookkeeping: no resource, decision, question or blocker ids (R3, AD-2, Q-1, B-4), no "the runner chose", no pipeline stage names. Task ids (P0-T01) are fine, because the tracker shows them.
+- Steps that depend on each other's variables say so in the prerequisites ("run the steps in one terminal").
+
 ## Work every plan includes
 
 - A setup phase, P0, that requests every access, account and environment later tasks need, so day-one work isn't blocked.

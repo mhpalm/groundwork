@@ -30,6 +30,9 @@ from gw_schema import load_schema, validate  # noqa: E402
 
 VERSION = "1.0.0"
 STANDARD_KINDS = ["test", "uat", "cutover", "rollback", "docs", "handoff"]
+# GR-36: a placeholder like <the key> in runnable code, and plan bookkeeping ids in text an executor reads.
+PLACEHOLDER = re.compile(r"<[A-Za-z][^<>\n]*>")
+BOOKKEEPING_ID = re.compile(r"\b(?:R\d+|AD-\d+|O-\d+|Q-\d+|B-\d+|C-\d+|REC-\d+)\b")
 INSTRUCTION_PARTS = ["purpose", "prerequisites", "steps", "acceptance_criteria", "verify", "done_today"]
 
 SECRET_PATTERNS = [
@@ -345,6 +348,19 @@ def _check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", p
         for c in ins.get("cautions", []):
             if "\n" in c:
                 R.add("GR-35", "blocker", tid, "a caution spans more than one line", "Keep each caution to one line", phase=ph)
+        # GR-36 (minor): what a junior would paste or read, in 2.1 plans
+        if gw_model.body_layout(plan) >= 2:
+            for i, st in enumerate(ins["steps"], 1):
+                if st.get("lang") and PLACEHOLDER.search(st.get("code", "")) and "replace" not in st["text"].lower():
+                    R.add("GR-36", "minor", tid, f"step {i} code has a placeholder the executor must fill in by hand",
+                          "Capture the value in an earlier step and use it by name, or tell the executor to replace it", phase=ph)
+            reader = [ins["purpose"], *ins["prerequisites"], *ins.get("cautions", []), *ins["acceptance_criteria"], *ins["verify"],
+                      *(st["text"] for st in ins["steps"])]
+            for line in reader:
+                m = BOOKKEEPING_ID.search(line)
+                if m:
+                    R.add("GR-36", "minor", tid, f"executor text names the plan id {m.group(0)}", "Say what it is in plain words", phase=ph)
+                    break
         # GR-07
         produced = {p["name"] for a in anc[tid] if a in tasks for p in tasks[a]["produces"]}
         for i, st in enumerate(ins["steps"], 1):
