@@ -37,6 +37,7 @@ def plan_subset(plan):
     return {
         "phase_hashes": phase_hashes(plan),
         "scope": plan["scope"],
+        "starting_point": plan["request"].get("starting_point"),
         "epic": {"title": plan["epic"]["title"], "summary": plan["epic"]["summary"]},
         "open_questions": plan["open_questions"],
         "access_list": plan["access_list"],
