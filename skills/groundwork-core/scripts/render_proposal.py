@@ -26,6 +26,10 @@ OWNED_START = "<!-- groundwork:owned:start -->"
 OWNED_END = "<!-- groundwork:owned:end -->"
 
 
+PROVISIONAL_BANNER = ("> **Provisional: not connected to a tracker.** Planned with default settings and no inspected systems. "
+                      "It cannot be approved or created until Groundwork is set up for your tracker and this plan is re-checked.")
+
+
 def role_name(overlay, key):
     for r in overlay.get("roles", []):
         if r["key"] == key:
@@ -89,6 +93,8 @@ def release_name(plan, phase):
 
 def write_list(plan, overlay, offer):
     """The numbered write list for the offered phases. Hashing it binds approval to exactly these writes."""
+    if overlay.get("provisional"):
+        raise ValueError("a provisional overlay has no tracker, so there is no write list (D-54)")
     tr = overlay["skills"]["tracker"]
     target = f"{tr['skill'].replace('groundwork-tracker-', '')}:{tr['instance']['id']}:{tr['instance']['project']}"
     writes = [{"kind": "lock_claim", "on": "epic"}]
@@ -126,6 +132,8 @@ def proposal(plan, overlay, offer, wl=None):
     phases = sorted(plan["phases"], key=lambda p: p["order"])
     ph = phase_hashes(plan)
     out = [f"# Proposal: {plan['title']}", ""]
+    if overlay.get("provisional"):
+        out += [PROVISIONAL_BANNER, ""]
     out.append(f"Plan {plan['id']} version {plan['version']}, overlay {plan['overlay']['id']} v{plan['overlay']['version']}.")
     out.append("")
     open_q = [q for q in plan["open_questions"] if q["status"] == "open"]
@@ -207,6 +215,12 @@ def proposal(plan, overlay, offer, wl=None):
         out.append(body.replace(OWNED_START + "\n", "").replace("\n" + OWNED_END, ""))
         out.append("")
     out.append("## Approval")
+    if overlay.get("provisional"):
+        out.append("None yet. This plan was drafted without a tracker connection, so nothing can be approved or written. "
+                   "Set up Groundwork for your tracker, then resume: the plan is re-checked against the real tracker and reviewed again.")
+        out.append("")
+        out.append(stamps_footer(plan))
+        return "\n".join(out) + "\n"
     out.append(f"Phases offered: {', '.join(sorted(offer))}. plan_hash {short(plan_hash(plan))}.")
     if wl:
         out.append(f"Write list: {len(wl['writes'])} numbered writes, write_list_hash {short(write_list_hash(wl))}.")
@@ -259,7 +273,10 @@ def main(argv=None):
     overlay = gw_yaml.load(a.overlay)
     offer = set(x.strip() for x in a.offer.split(",")) if a.offer else {p["id"] for p in plan["phases"] if p["state"] != "outline"}
     if a.what == "proposal":
-        wl = json.load(open(a.write_list, encoding="utf-8")) if a.write_list else write_list(plan, overlay, offer)
+        if overlay.get("provisional"):
+            wl = None
+        else:
+            wl = json.load(open(a.write_list, encoding="utf-8")) if a.write_list else write_list(plan, overlay, offer)
         text = proposal(plan, overlay, offer, wl)
     elif a.what == "task":
         text = task_body(plan, overlay, next(t for t in plan["tasks"] if t["id"] == a.task))

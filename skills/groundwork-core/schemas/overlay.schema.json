@@ -56,8 +56,10 @@
           "account_id",
           "name"
         ]
-      },
-      "minItems": 1
+      }
+    },
+    "provisional": {
+      "type": "boolean"
     },
     "skills": {
       "type": "object",
@@ -326,7 +328,6 @@
           "required": [
             "skill",
             "version",
-            "instance",
             "field_map"
           ]
         }
@@ -453,8 +454,7 @@
           "applies_to",
           "approvers"
         ]
-      },
-      "minItems": 1
+      }
     },
     "evidence_max_age_days": {
       "type": "integer",

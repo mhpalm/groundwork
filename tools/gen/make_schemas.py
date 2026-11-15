@@ -216,7 +216,8 @@ overlay = {
     **obj({
         "schema_version": {"const": "1.0"}, "overlay_format": {"type": "string", "pattern": r"^1\.\d+$"},
         "id": SLUG, "version": {"type": "integer", "minimum": 1}, "hash": nullable(HEX), "org_name": STR,
-        "admins": arr(ACCOUNT, minItems=1),
+        "admins": arr(ACCOUNT),
+        "provisional": {"type": "boolean"},
         "skills": obj({
             "core": STR,
             "systems": arr(obj({"skill": {"type": "string", "pattern": "^groundwork-system-[a-z0-9-]+$"}, "version": STR,
@@ -232,7 +233,8 @@ overlay = {
                                               "depends_on": STR, "not_ready": STR, "role": nullable(STR),
                                               "work_types": obj({"story": STR, "task": STR}),
                                               "phase_release": {"enum": ["version", "milestone", "label"]}},
-                                             required=["key", "points", "phase", "blocked", "depends_on", "not_ready"])}),
+                                             required=["key", "points", "phase", "blocked", "depends_on", "not_ready"])},
+                           required=["skill", "version", "field_map"]),
         }),
         "working_day_hours": {"type": "number", "minimum": 1, "maximum": 8},
         "assumed_executor": {"enum": ["junior_no_context", "junior_with_context", "mid_no_context"]},
@@ -240,7 +242,7 @@ overlay = {
         "task_hierarchy": obj({"task_to_epic": {"enum": ["parent", "linked"]}, "steps_as": {"enum": ["checklist", "subtasks"]}}),
         "approval_gates": arr(obj({"id": STR, "applies_to": {"enum": ["all_phases", "one_day_exceptions", "overlay_changes"]},
                                    "approvers": arr(ACCOUNT, minItems=1), "min_approvers": {"type": "integer", "minimum": 1}},
-                                  required=["id", "applies_to", "approvers"]), minItems=1),
+                                  required=["id", "applies_to", "approvers"])),
         "evidence_max_age_days": {"type": "integer", "minimum": 1, "maximum": 90},
         "create_window_days": {"type": "integer", "minimum": 1, "maximum": 30},
         "anchor": obj({"tracker_ref": nullable(STR)}),

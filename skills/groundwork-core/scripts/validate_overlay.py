@@ -23,6 +23,7 @@ import gw_yaml  # noqa: E402
 from gw_hash import item_hash  # noqa: E402
 from gw_schema import load_schema, validate  # noqa: E402
 
+PROVISIONAL_ID = "provisional"
 CORE_FORMAT_MAJOR = 1
 CORE_FORMAT_MINOR = 0
 SECRETISH = re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key|private[_-]?key)")
@@ -50,6 +51,15 @@ def problems(ov):
     out.extend(errs)
     if errs:
         return out
+    if ov.get("provisional"):
+        out.extend(provisional_problems(ov))
+    else:
+        if ov["id"] == PROVISIONAL_ID:
+            out.append(f"id '{PROVISIONAL_ID}' is reserved for provisional overlays")
+        if not ov["admins"]:
+            out.append("admins: an approved overlay names at least one admin")
+        if "instance" not in ov["skills"]["tracker"]:
+            out.append("skills.tracker.instance: an approved overlay names the tracker instance")
     roles = {r["key"] for r in ov["roles"]}
     if len(roles) != len(ov["roles"]):
         out.append("roles: a role key is listed twice")
@@ -59,7 +69,7 @@ def problems(ov):
         if rh["role_key"] not in roles:
             out.append(f"role_holders: '{rh['role_key']}' is not a mapped role")
     gates = {g["id"]: g for g in ov["approval_gates"]}
-    if not any(g["applies_to"] == "all_phases" for g in gates.values()):
+    if not ov.get("provisional") and not any(g["applies_to"] == "all_phases" for g in gates.values()):
         out.append("approval_gates: no gate applies to all_phases, so no phase can be approved")
     for g in gates.values():
         n = g.get("min_approvers", 1)
@@ -78,6 +88,23 @@ def problems(ov):
             out.append(f"{path}: looks like a credential; overlays never hold credentials (CR-08)")
     if ov.get("hash") and ov["hash"] != overlay_hash(ov):
         out.append("hash does not match the overlay's contents; it was edited outside setup mode")
+    return out
+
+
+def provisional_problems(ov):
+    """D-54: a provisional overlay lets a run plan before any connection. It reaches no system,
+    names no approver and can never approve or write; setup replaces it with an approved overlay."""
+    out = []
+    if ov["id"] != PROVISIONAL_ID:
+        out.append(f"a provisional overlay has id '{PROVISIONAL_ID}'")
+    if any(s["instances"] for s in ov["skills"].get("systems", [])):
+        out.append("a provisional overlay names no system instances; systems are not inspected until setup connects them")
+    if "instance" in ov["skills"]["tracker"]:
+        out.append("a provisional overlay names no tracker instance")
+    if ov["approval_gates"] or ov["admins"]:
+        out.append("a provisional overlay names no admins or approvers; it can never approve")
+    if ov["anchor"].get("tracker_ref"):
+        out.append("a provisional overlay has no anchor")
     return out
 
 

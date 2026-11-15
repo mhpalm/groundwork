@@ -70,6 +70,8 @@ def owned_hash(fields):
 def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review, phases, now, unverified_writer):
     """Return (ok, problems, accepted_phases). Implements section 8 of the spec."""
     probs = []
+    if overlay.get("provisional"):
+        return False, ["a provisional overlay names no approvers; set up Groundwork for the tracker first (D-54)"], []
     schema = load_schema("approval")
     if anchor["overlay_id"] != overlay["id"] or anchor["version"] != overlay["version"] or anchor["hash"] != overlay.get("hash"):
         probs.append("the loaded overlay does not match the latest admin-anchored overlay record (CR-12)")

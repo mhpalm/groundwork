@@ -109,3 +109,74 @@ class HashScope(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlanWithoutConnection(unittest.TestCase):
+    """D-54: a run can plan through Proposal with no tracker connection."""
+
+    def setUp(self):
+        import gw_yaml
+        root = os.path.join(os.path.dirname(__file__), "..", "..", "skills", "groundwork-core")
+        self.prov = gw_yaml.load(os.path.join(root, "templates", "provisional-overlay.yaml"))
+        self.g1 = gw_yaml.load(os.path.join(os.path.dirname(__file__), "..", "golden", "G1", "overlay", "overlay.yaml"))
+
+    def test_provisional_overlay_is_valid_and_plan_only(self):
+        import check_identity
+        import validate_overlay
+        self.assertEqual([p for p in validate_overlay.problems(self.prov) if not p.startswith("note")], [])
+        self.assertEqual(check_identity.check(self.prov, [])["run"], "plan_only")
+
+    def test_provisional_overlay_cannot_hold_approvers_or_instances(self):
+        import copy
+        import validate_overlay
+        bad = copy.deepcopy(self.prov)
+        bad["approval_gates"] = copy.deepcopy(self.g1["approval_gates"])
+        bad["skills"]["tracker"]["instance"] = copy.deepcopy(self.g1["skills"]["tracker"]["instance"])
+        probs = validate_overlay.problems(bad)
+        self.assertTrue(any("no tracker instance" in p for p in probs))
+        self.assertTrue(any("can never approve" in p for p in probs))
+        real = copy.deepcopy(self.g1)
+        real["id"] = "provisional"
+        real["hash"] = None
+        self.assertTrue(any("reserved" in p for p in validate_overlay.problems(real)))
+
+    def test_unconnected_tracker_defers_but_wrong_project_stops(self):
+        import check_identity
+        gh = {"skill": "groundwork-system-github", "instance": "gh", "url": "https://github.com/example-org",
+              "account": "dev", "identity": {"org": "example-org"}}
+        out = check_identity.check(self.g1, [gh, {"skill": "groundwork-tracker-jira", "instance": "main", "status": "not_connected"}])
+        self.assertEqual(out["run"], "plan_only")
+        wrong = {"skill": "groundwork-tracker-jira", "instance": "main", "url": "https://example-org.atlassian.net",
+                 "account": "dev", "identity": {"project": "OTHER"}}
+        self.assertEqual(check_identity.check(self.g1, [gh, wrong])["run"], "stop")
+        self.assertEqual(check_identity.check(self.g1, [gh])["run"], "stop")
+
+    def test_provisional_has_no_write_list_or_approvals(self):
+        import check_hashes
+        import render_proposal
+        with self.assertRaises(ValueError):
+            render_proposal.write_list({}, self.prov, [])
+        ok, probs, _ = check_hashes.verify_approvals({}, self.prov, {}, [], "", {}, {}, [], None, False)
+        self.assertFalse(ok)
+
+    def test_provisional_run_promotes_without_evidence_only(self):
+        import json
+        import shutil
+        import tempfile
+        import run_bundle
+        src = tempfile.mkdtemp()
+        plan = json.load(open(os.path.join(os.path.dirname(__file__), "..", "golden", "G1", "expected", "plan.json"), encoding="utf-8"))
+        plan["overlay"] = {"id": "provisional", "version": 1, "hash": None}
+        with open(os.path.join(src, "plan.json"), "w", encoding="utf-8") as f:
+            json.dump(plan, f)
+        runs = tempfile.mkdtemp()
+        out = run_bundle.do_import(run_bundle.export(src), self.g1, runs)
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(out["rerun_from"], "discover")
+        os.makedirs(os.path.join(src, "evidence"))
+        with open(os.path.join(src, "evidence", "x.json"), "w", encoding="utf-8") as f:
+            json.dump({"id": "x"}, f)
+        out = run_bundle.do_import(run_bundle.export(src), self.g1, tempfile.mkdtemp())
+        self.assertFalse(out["ok"])
+        shutil.rmtree(src)
+        shutil.rmtree(runs)
