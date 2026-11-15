@@ -108,7 +108,9 @@ def catch_up(out, new, tr, manifest, touched, finished):
     project-wide find_by_key confirms it is gone (eighth review, M3)."""
     prefix = f"gw:{new['id']}:"
     have = {c["key"] for c in out["close_items"]}
-    for c in required_closes(new, manifest):
+    found_again = [{"key": w["key"], "reason": w["close"]["reason"]} for w in manifest.get("items", [])
+                   if (w.get("close") or {}).get("state") == "missing" and w["key"] in tr]
+    for c in required_closes(new, manifest) + found_again:
         if c["key"] in have:
             continue
         tid = c["key"][len(prefix):]
@@ -229,11 +231,13 @@ def diff(base, new, tracker, overlay, manifest=None):
             continue
         if item is None:
             recorded = b["key"] in {i["key"] for i in (manifest or {}).get("items", [])}
-            if manifest is None or recorded:
-                out["refused"].append({"task": tid, "why": "the tracker read doesn't show this task but "
-                                       + ("the manifest records it as written: find it by key before removing it"
-                                          if recorded else "no manifest was given, so it can't be told apart from a "
-                                          "written task: pass the latest manifest")})
+            if manifest is None:
+                out["refused"].append({"task": tid, "why": "the tracker read doesn't show this task but no manifest was "
+                                       "given, so it can't be told apart from a written task: pass the latest manifest"})
+                continue
+            if recorded:
+                # written, and the read doesn't show it: closed as missing once a project-wide find_by_key
+                # confirms it is gone (ninth review, M1); catch_up adds the close
                 continue
             out["dropped"].append(tid)  # never written: removing it from the plan is enough, there is nothing to close
             continue

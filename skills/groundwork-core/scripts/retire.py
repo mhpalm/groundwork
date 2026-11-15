@@ -47,7 +47,8 @@ def plan_retire(items, choices, manifest=None):
 
     manifest: the latest manifest (the CLI always passes it). A key it records is Groundwork's, even
     when the plan of record no longer has it, so it is closed like any other, never named as a person's
-    (seventh review, M1); a recorded key the read didn't find stops."""
+    (seventh review, M1); a recorded key the read didn't find is closed too, listed under missing, and the
+    close procedure records it as missing once a project-wide find_by_key confirms it is gone."""
     closes, left, person, probs = [], [], [], []
     recorded = {w["key"]: w for w in (manifest or {}).get("items", [])}
     items = [dict(i, person_added=False) if i.get("person_added") and i["key"] in recorded else i for i in items]
@@ -179,7 +180,7 @@ def write_list(plan, overlay, retire_plan, draft_label=False, pending_sets=()):
         w.update(no=i, target=target, scope="plan")
     return {"schema_version": "1.0", "plan_id": plan["id"], "plan_version": plan["version"], "phases": [], "kind": "retire",
             "writes": writes, "left_open": retire_plan["left_open"], "person_added": retire_plan["person_added"],
-            "voids_pending": sorted(pending_sets)}
+            "missing": retire_plan.get("missing", []), "voids_pending": sorted(pending_sets)}
 
 
 def status_state(manifest, status):

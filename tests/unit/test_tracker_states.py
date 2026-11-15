@@ -243,7 +243,9 @@ class ClosedNotDone(unittest.TestCase):
             ph["task_ids"] = [x for x in ph["task_ids"] if x != mt["id"]]
         d3 = revise_diff.diff(base, n3, [i for i in tracker if i is not missing], ov, {"items": [{"key": i["key"]} for i in tracker]})
         self.assertNotIn(mt["id"], d3["dropped"])
-        self.assertTrue(any(r["task"] == mt["id"] and "manifest records it" in r["why"] for r in d3["refused"]))
+        # ninth review, M1: it is closed, and listed missing for a project-wide find_by_key to confirm
+        self.assertIn(mt["key"], d3["missing"])
+        self.assertIn(mt["key"], [c["key"] for c in d3["close_items"]])
         self.assertFalse(revise_diff.diff(base, n2, tracker, ov)["ok"])  # no manifest: nothing is dropped
 
 

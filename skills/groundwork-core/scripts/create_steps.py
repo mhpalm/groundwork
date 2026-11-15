@@ -220,7 +220,8 @@ def preflight(planned, found, manifest, phases, approved_updates=(), relies_on=N
                 report("stop", "an item with this key exists that Groundwork never recorded and it differs from the plan: drift")
                 continue
         elif f["owned_hash"] != w["owned_hash"]:
-            if in_scope and f["owned_hash"] == p["owned_hash"] and update_problem(p, f) is None:
+            if in_scope and f["owned_hash"] == p["owned_hash"] and approved_updates.get(key) == p["owned_hash"]:
+                # recording it writes nothing, so a task finished since is no reason to stop (ninth review, M2)
                 # the approved update reached the tracker, but the session ended before the manifest
                 actions.append({"key": key, "action": "adopt_update", "tracker_id": f["tracker_id"]})
             else:
@@ -273,7 +274,7 @@ def read_status(raw, written, field_map):
     # a close recorded as finished was a person's: it reads by the tracker's own status
     # an intent with the gw-closed label is Groundwork's close even when the tracker shows Done (a workflow can
     # force a Done resolution); reading it as not done never satisfies a dependent with no work done
-    ours = close["reason"] if close and close["state"] != "finished" and (close["reason"] in labels or close["state"] == "closed") else None
+    ours = close["reason"] if close and close["state"] not in ("finished", "missing") and (close["reason"] in labels or close["state"] == "closed") else None
     if raw["state"] == "closed":
         if ours:
             status = "done" if ours == "completed" else "closed_not_done"
@@ -282,6 +283,10 @@ def read_status(raw, written, field_map):
             status = "closed_not_done" if names & set(field_map["statuses"]["closed_not_done"]) else "done"
         return {"key": raw["key"], "status": status, "close_pending": False, "drift": None, "closed_by_groundwork": bool(ours)}
     category = raw.get("category", "todo")
+    if close and close["state"] == "missing":
+        # recorded as gone but found again: its close is open again (ninth review, M3)
+        return {"key": raw["key"], "status": category, "close_pending": True,
+                "drift": "found after its close was recorded as missing; the close procedure closes it"}
     if close and close["state"] == "closed":
         return {"key": raw["key"], "status": category, "close_pending": False,
                 "drift": "reopened after Groundwork closed it"}
@@ -316,6 +321,8 @@ def close_steps(closes, manifest, found, missing=()):
             if f is not None or key not in written:
                 stops.append({"key": key, "why": "named missing, but " + ("the read found it" if f is not None
                                                                          else "no manifest records it")})
+            elif (written[key].get("close") or {}).get("reason", reason) != reason:
+                stops.append({"key": key, "why": f"a close as {written[key]['close']['reason']} is already recorded"})
             elif (written[key].get("close") or {}).get("state") not in ("closed", "finished", "missing"):
                 gone.append(key)
             continue
@@ -326,7 +333,7 @@ def close_steps(closes, manifest, found, missing=()):
         if prior and prior["reason"] != reason:
             stops.append({"key": key, "why": f"a close as {prior['reason']} is already recorded; finish or revise it first"})
             continue
-        if prior and prior["state"] in ("closed", "finished", "missing"):
+        if prior and prior["state"] in ("closed", "finished"):
             skipped.append({"key": key, "why": f"its close is already recorded ({prior['state']})"})
             continue
         if f["status"] in ("done", "closed_not_done") and not f.get("close_pending"):
@@ -481,7 +488,9 @@ def item_history_problems(prev_items, items):
             raise ValueError(why)
         pc, nc = p.get("close"), n.get("close")
         if pc and (not nc or nc["reason"] != pc["reason"] or CLOSE_ORDER[nc["state"]] < CLOSE_ORDER[pc["state"]]
-                   or (CLOSE_ORDER[pc["state"]] == 1 and nc["state"] != pc["state"])):
+                   or (CLOSE_ORDER[pc["state"]] == 1 and nc["state"] != pc["state"]
+                       # an item recorded missing that is found again may then be closed (ninth review, M3)
+                       and not (pc["state"] == "missing" and nc["state"] in ("closed", "finished")))):
             raise ValueError(f"the manifest changes or clears the recorded close of {p['key']}")
 
 
@@ -597,6 +606,14 @@ def main(argv=None):
         return 1
     if a.cmd == "lock":
         out = lock_decision(J(a.files[0]), a.run, a.account, ts(a.now))
+    elif latest is None and (a.cmd == "close" or (a.cmd == "preflight" and a.write_list and not any(
+            w["kind"] == "remove_label" for w in J(a.write_list)["writes"]))):
+        # ninth review, m3: only written items are closed, and a write list with no draft-label removal is
+        # for a plan already written, so both always have a manifest; an empty --manifests would turn off
+        # every never-recreate rule
+        print(json.dumps({"ok": False, "problems": ["this plan is already written but no manifest was given: "
+                                                    "pass every manifest file"]}, indent=2))
+        return 1
     elif a.cmd == "preflight":
         if not a.write_list:
             print(json.dumps({"ok": False, "problems": ["--write-list required: preflight updates only what it approves"]}))
