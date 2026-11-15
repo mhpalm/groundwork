@@ -153,7 +153,8 @@ def find_cycle(deps):
 def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", proposal_text=None):
     phases = {p["id"]: p for p in plan.get("phases", [])}
     drafted = [p["id"] for p in plan.get("phases", []) if p.get("state") != "outline"]
-    offered = set(offered_arg) if offered_arg else set(drafted)
+    # None means "not given": offer every drafted phase. An empty list means no phases.
+    offered = set(offered_arg) if offered_arg is not None else set(drafted)
     R = Results(offered)
 
     # Schema first: if the shape is wrong, later checks can't be trusted.
@@ -522,7 +523,7 @@ def main(argv=None):
         print(f"cannot read inputs: {e}", file=sys.stderr)
         return 2
     now = parse_ts(a.now) if a.now else None
-    offer = [x.strip() for x in a.offer.split(",")] if a.offer else None
+    offer = [x.strip() for x in a.offer.split(",") if x.strip()] if a.offer is not None else None
     R = check(plan, overlay, evidence, offer, now, a.stage, proposal)
     blockers = R.blocking()
     out = {"version": VERSION, "passed": not blockers, "results": R.export()}

@@ -67,9 +67,18 @@ def owned_hash(fields):
     return hash_value(norm)
 
 
-def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review, phases, now, unverified_writer):
-    """Return (ok, problems, accepted_phases). Implements section 8 of the spec."""
+def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review, phases, now, unverified_writer, info=None):
+    """Return (ok, problems, accepted_phases). Implements section 8 of the spec.
+
+    Only records for the plan's current version count. Records for earlier
+    versions were consumed or voided when that version was replaced; they are
+    reported in `info` as superseded, never as problems, so a release after a
+    create is not blocked by the earlier phase's approvals.
+    """
     probs = []
+    info = info if info is not None else []
+    if not phases:
+        return False, ["no phases were named for create; name the approved phases to write"], []
     if overlay.get("provisional"):
         return False, ["a provisional overlay names no approvers; set up Groundwork for the tracker first (D-54)"], []
     schema = load_schema("approval")
@@ -95,6 +104,9 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
             probs.append(f"comment {c['ref']}: approval block is not valid JSON")
             continue
         if rec.get("plan_id") != plan["id"]:
+            continue
+        if rec.get("plan_version") != plan["version"]:
+            info.append(f"comment {c['ref']}: approval for plan version {rec.get('plan_version')} is superseded by version {plan['version']}")
             continue
         errs = validate(rec, schema)
         if errs:
@@ -136,15 +148,18 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
             continue
         records.append((c, rec, gate))
     accepted = set()
+    phase_gates = [g for g in gates.values() if g["applies_to"] == "all_phases"]
     for pid in phases:
-        for gid, gate in gates.items():
-            if gate["applies_to"] != "all_phases":
-                continue
-            who = {c["author_account_id"] for c, rec, g in records if g["id"] == gid and pid in rec["phases"] and rec["kind"] != "exception"}
-            if len(who) >= gate.get("min_approvers", 1):
-                accepted.add(pid)
-        if pid not in accepted:
-            probs.append(f"phase {pid} has no valid approval quorum")
+        # Every gate that applies to all phases must reach its own quorum.
+        short = []
+        for gate in phase_gates:
+            who = {c["author_account_id"] for c, rec, g in records if g["id"] == gate["id"] and pid in rec["phases"] and rec["kind"] != "exception"}
+            if len(who) < gate.get("min_approvers", 1):
+                short.append(gate["id"])
+        if phase_gates and not short:
+            accepted.add(pid)
+        else:
+            probs.append(f"phase {pid} has no valid approval quorum" + (f" on gate(s) {', '.join(short)}" if short else ""))
     needed_ex = {t["exception"]["id"] for t in plan["tasks"] if t["phase"] in phases and t["exception"]}
     ok_ex = set()
     for c, rec, gate in records:
@@ -232,9 +247,11 @@ def main(argv=None):
         overlay = gw_yaml.load(a.overlay)
         proposal_text = open(a.proposal, encoding="utf-8").read()
         unverified = any(s["verified"] != "verified" and s["name"] == overlay["skills"]["tracker"]["skill"] for s in plan["stamps"]["skills"])
+        info = []
+        phases = [x.strip() for x in (a.phases or "").split(",") if x.strip()]
         ok, probs, accepted = verify_approvals(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
-                                               [x.strip() for x in a.phases.split(",")], ts(a.now), unverified)
-        print(json.dumps({"ok": ok, "accepted_phases": accepted, "problems": probs}, indent=2))
+                                               phases, ts(a.now), unverified, info)
+        print(json.dumps({"ok": ok, "accepted_phases": accepted, "problems": probs, "superseded": info}, indent=2))
         return 0 if ok else 1
     if a.cmd == "manifest-chain":
         latest, probs = verify_chain([J(p) for p in a.files])
