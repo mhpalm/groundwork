@@ -16,7 +16,17 @@
         "initial",
         "release",
         "revision",
-        "exception"
+        "exception",
+        "decline",
+        "own_epic",
+        "retire",
+        "later"
+      ]
+    },
+    "scope": {
+      "enum": [
+        "phases",
+        "plan_level"
       ]
     },
     "plan_id": {

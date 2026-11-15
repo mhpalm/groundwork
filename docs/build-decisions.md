@@ -44,3 +44,11 @@ These were settled while building v1 against spec draft 0.3. Each is a candidate
 28. The fake tracker applies `set_blocked` after the links, in the same order as the write list, so existing crash-point tests keep their meaning.
 29. The tracker contract stays at 1.0 although `read_scope`, `set_blocked` and `close` are new required sections: no tracker skill has been released, so nothing depends on the old shape.
 
+## Planning model build 3, 2026-11-15
+
+30. The approval grouping key is `(plan_id, plan_version, proposal_hash)`. An invalid-JSON approval block is now information rather than a problem: it can't be tied to any set, and failing every set on it would let one bad comment block all creates.
+31. "Current version" is passed to verification as the latest plan-of-record version in the plan store (`--latest-version`). The plan file alone can't say whether a newer one was stored.
+32. A phase proposal's session-dependent lines (validator `not_run`, reviewer `not_performed`) already live in the plan of record's review section, so only plan-level proposals need a proposal context file today. The context schema allows phase kinds so a later change can move those lines without a format change.
+33. The integrity profile is the full validator with its findings filtered to schema, evidence integrity, CR-12, GR-17, GR-25 and GR-34, offering no phase. Running the same code and filtering keeps one implementation of each check.
+34. Plan-level records must all name the same kind. Mixed kinds for one proposal mean approvers disagree about what they approve, so the set fails.
+

@@ -50,7 +50,8 @@ Groundwork's only writes are the ones a person approved from a numbered list:
 | --- | --- | --- |
 | Setup | Overlay files; tracker fields or labels through the tracker skill's `configure`; the overlay anchor issue | An overlay admin |
 | Proposal | The draft epic with the proposal and the plan of record in the plan store | The runner |
-| Create and freeze | Items, links, manifests, lock comments, not-ready flips, the snapshot, removing the draft label | Approvers on the gate, by authenticated comment |
+| Create and freeze | Items, links, manifests, lock comments, not-ready flips, the blocked state, closes, the snapshot, removing the draft label | Approvers on the gate, by authenticated comment |
+| Plan-level | Closes, the change-request log, the plan status file, the snapshot | Approvers on the plan gates, by authenticated comment |
 
 Settings changes on the runner's own machine (for example a permission profile) are the runner's own writes, never Groundwork's.
 

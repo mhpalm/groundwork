@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "groundwork/proposal-context/1.0",
+  "title": "Groundwork proposal context (stored at Proposal; create renders only from stored inputs)",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^gw-[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "plan_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "kind": {
+      "enum": [
+        "initial",
+        "release",
+        "revision",
+        "decline",
+        "own_epic",
+        "retire",
+        "later"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "degraded": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "todo",
+              "in_progress",
+              "done",
+              "closed_not_done"
+            ]
+          },
+          "person_added": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "status",
+          "person_added"
+        ]
+      }
+    },
+    "voided_sets": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "plan_version",
+    "kind",
+    "summary",
+    "degraded",
+    "items",
+    "voided_sets"
+  ]
+}

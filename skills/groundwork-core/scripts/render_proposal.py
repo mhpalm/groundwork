@@ -110,6 +110,7 @@ def write_list(plan, overlay, offer, closes=None):
     writes = [{"kind": "lock_claim", "on": "epic"}]
     for phase in [p for p in sorted(plan["phases"], key=lambda p: p["order"]) if p["id"] in offer]:
         pid = phase["id"]
+        first = len(writes)
         release = release_name(plan, phase)
         writes.append({"kind": "ensure_release", "phase": pid, "name": release,
                        "how": tr.get("field_map", {}).get("phase_release", "label")})
@@ -132,6 +133,8 @@ def write_list(plan, overlay, offer, closes=None):
         for tid in tids:
             writes.append({"kind": "clear_not_ready", "key": f"gw:{plan['id']}:{tid}"})
         writes.append({"kind": "snapshot_put", "phase": pid})
+        for w in writes[first:]:
+            w["scope"] = f"phase:{pid}"
     if closes:
         prefix = tr["field_map"].get("close_label_prefix", "gw-closed:")
         writes.append({"kind": "manifest_put", "note": "close intent for " + ", ".join(c["key"] for c in closes)})
@@ -145,7 +148,95 @@ def write_list(plan, overlay, offer, closes=None):
     for i, w in enumerate(writes, 1):
         w["no"] = i
         w["target"] = target
+        w.setdefault("scope", "plan")
     return {"schema_version": "1.0", "plan_id": plan["id"], "plan_version": plan["version"], "phases": sorted(offer), "writes": writes}
+
+
+PLAN_LEVEL_TITLES = {"decline": "Decline a change request", "own_epic": "Move a change request to its own epic",
+                     "retire": "Retire this plan", "later": "Record later work as an outline phase"}
+
+
+def plan_write_list(plan, overlay, kind, closes=(), cr_entry=None, status=None):
+    """The write list for a plan-level set (planning model 4.3): only plan entries.
+
+    closes: [{key, reason}]; cr_entry: the change-request log entry this set adds (the
+    entry is bound, not the file number, which is allocated under the lock);
+    status: the plan status record retire writes.
+    """
+    if overlay.get("provisional"):
+        raise ValueError("a provisional overlay has no tracker, so there is no write list (D-54)")
+    tr = overlay["skills"]["tracker"]
+    target = f"{tr['skill'].replace('groundwork-tracker-', '')}:{tr['instance']['id']}:{tr['instance']['project']}"
+    writes = [{"kind": "lock_claim", "on": "epic"}]
+    if closes:
+        prefix = tr["field_map"].get("close_label_prefix", "gw-closed:")
+        writes.append({"kind": "manifest_put", "note": "close intent for " + ", ".join(c["key"] for c in closes)})
+        for c in closes:
+            writes.append({"kind": "add_label", "key": c["key"], "label": prefix + c["reason"]})
+            writes.append({"kind": "close_item", "key": c["key"], "reason": c["reason"]})
+        writes.append({"kind": "manifest_put", "note": "closes done"})
+    if cr_entry is not None:
+        writes.append({"kind": "cr_log_put", "entry": cr_entry, "note": "latest log file plus this entry; number allocated under the lock"})
+    if status is not None:
+        writes.append({"kind": "status_put", "status": status, "note": "after a status intent in the manifest"})
+    writes.append({"kind": "snapshot_put"})
+    writes.append({"kind": "lock_release", "on": "epic"})
+    for i, w in enumerate(writes, 1):
+        w.update(no=i, target=target, scope="plan")
+    return {"schema_version": "1.0", "plan_id": plan["id"], "plan_version": plan["version"], "phases": [], "kind": kind,
+            "writes": writes}
+
+
+def proposal_context(plan, kind, summary, degraded=(), items=(), voided_sets=()):
+    """proposal-context-<n>.json: every session- or tracker-dependent fact a proposal shows.
+
+    Stored in the plan store at Proposal; create renders only from the plan of record,
+    the write list and this file, never from session state or a fresh tracker read.
+    items: [{key, status, person_added}] read from the tracker at Proposal (keys only;
+    titles are untrusted and never rendered). voided_sets: pending sets this replaces.
+    """
+    return {"schema_version": "1.0", "plan_id": plan["id"], "plan_version": plan["version"], "kind": kind,
+            "summary": summary, "degraded": sorted(degraded),
+            "items": sorted(({"key": i["key"], "status": i["status"], "person_added": bool(i.get("person_added"))} for i in items),
+                            key=lambda i: i["key"]),
+            "voided_sets": sorted(voided_sets)}
+
+
+def plan_level_proposal(plan, overlay, wl, context):
+    """A plan-level proposal, rendered only from stored inputs."""
+    if context["plan_id"] != plan["id"] or context["plan_version"] != plan["version"] or context["kind"] != wl.get("kind"):
+        raise ValueError("the proposal context, plan and write list do not belong together")
+    out = [f"# Proposal: {PLAN_LEVEL_TITLES[context['kind']]}", "",
+           f"Plan {plan['id']} version {plan['version']}, plan hash {short(plan_hash(plan))}. "
+           "This is a plan-level change: it offers no phase.", "", "## What and why", context["summary"], ""]
+    closes = [w for w in wl["writes"] if w["kind"] == "close_item"]
+    out.append("## Items this closes")
+    out += [f"- `{w['key']}`, as {w['reason'].replace('_', ' ')}" for w in closes] or ["None."]
+    out.append("")
+    out.append("## Items on the epic when this was proposed")
+    if context["items"]:
+        for i in context["items"]:
+            out.append(f"- `{i['key']}`: {i['status'].replace('_', ' ')}" + (", added by a person, not by Groundwork" if i["person_added"] else ""))
+        out.append("")
+        out.append("Create stops and asks for a new proposal if an open plan-owned item exists that is not in this list.")
+    else:
+        out.append("None.")
+    out.append("")
+    if context["voided_sets"]:
+        out.append("## Pending approvals this replaces")
+        out += [f"- {v}" for v in context["voided_sets"]]
+        out.append("")
+    if context["degraded"]:
+        out.append("## Checks not fully run")
+        out += [f"- {d}" for d in context["degraded"]]
+        out.append("")
+    out.append("## Write list")
+    for w in wl["writes"]:
+        detail = ", ".join(f"{k} {v}" for k, v in w.items() if k not in ("no", "kind", "target", "scope", "note") and not isinstance(v, (dict, list)))
+        out.append(f"{w['no']}. {w['kind']}" + (f" ({detail})" if detail else ""))
+    out.append("")
+    out.append(f"Write list hash {short(write_list_hash(wl))}.")
+    return "\n".join(out) + "\n"
 
 
 def brief_value(f):
@@ -341,7 +432,8 @@ def proposal_hash(text):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("what", choices=["proposal", "task", "epic", "write-list"])
+    ap.add_argument("what", choices=["proposal", "task", "epic", "write-list", "plan-level"])
+    ap.add_argument("--context", help="proposal-context JSON (plan-level proposals)")
     ap.add_argument("plan")
     ap.add_argument("--overlay", required=True)
     ap.add_argument("--offer")
@@ -361,6 +453,9 @@ def main(argv=None):
         text = proposal(plan, overlay, offer, wl)
     elif a.what == "task":
         text = task_body(plan, overlay, next(t for t in plan["tasks"] if t["id"] == a.task))
+    elif a.what == "plan-level":
+        text = plan_level_proposal(plan, overlay, json.load(open(a.write_list, encoding="utf-8")),
+                                   json.load(open(a.context, encoding="utf-8")))
     elif a.what == "epic":
         text = epic_description(plan, overlay)
     else:
@@ -371,7 +466,7 @@ def main(argv=None):
             f.write(text)
     else:
         sys.stdout.write(text)
-    if a.what == "proposal":
+    if a.what in ("proposal", "plan-level"):
         print(f"proposal_hash {proposal_hash(text)}", file=sys.stderr)
     return 0
 

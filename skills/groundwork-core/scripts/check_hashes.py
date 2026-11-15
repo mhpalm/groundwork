@@ -67,25 +67,33 @@ def owned_hash(fields):
     return hash_value(norm)
 
 
-def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review, phases, now, unverified_writer, info=None):
-    """Return (ok, problems, accepted_phases). Implements section 8 of the spec.
+PHASE_KINDS = ("initial", "release", "revision", "exception")
+# Plan-level kinds: decline, own_epic and retire change no plan version; later stores a new
+# version that adds only outline content and offers no phase (planning model 4.3).
+PLAN_LEVEL_KINDS = ("decline", "own_epic", "retire", "later")
 
-    Only records for the plan's current version count. Records for earlier
-    versions were consumed or voided when that version was replaced; they are
-    reported in `info` as superseded, never as problems, so a release after a
-    create is not blocked by the earlier phase's approvals.
+
+def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info,
+                  latest_stored_version, scope):
+    """The records of one approval set, after every per-record check. Returns (records, problems).
+
+    The grouping filter runs first: a record counts toward this set only when its
+    plan_id, plan_version and proposal_hash match. Every other record is reported
+    in `info` (superseded, another proposal at this version, or unreadable) and is
+    never a problem, so a malformed or edited record in another set cannot fail
+    this one. A record in this set that fails any later check is a problem.
     """
     probs = []
-    info = info if info is not None else []
-    if not phases:
-        return False, ["no phases were named for create; name the approved phases to write"], []
     if overlay.get("provisional"):
-        return False, ["a provisional overlay names no approvers; set up Groundwork for the tracker first (D-54)"], []
-    schema = load_schema("approval")
+        return [], ["a provisional overlay names no approvers; set up Groundwork for the tracker first (D-54)"]
+    if latest_stored_version is not None and latest_stored_version > plan["version"]:
+        return [], [f"plan version {latest_stored_version} is stored, so every pending set at version {plan['version']} "
+                    "is void; re-propose against the current version"]
     if anchor["overlay_id"] != overlay["id"] or anchor["version"] != overlay["version"] or anchor["hash"] != overlay.get("hash"):
         probs.append("the loaded overlay does not match the latest admin-anchored overlay record (CR-12)")
     if anchor.get("author_account_id") not in {a["account_id"] for a in overlay["admins"]}:
         probs.append("the anchored overlay record was not authored by an overlay admin")
+    schema = load_schema("approval")
     p_hash = plan_hash(plan)
     ph = phase_hashes(plan)
     prop_hash = sha256_hex(proposal_text.encode("utf-8"))
@@ -101,12 +109,15 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
         try:
             rec = json.loads(m.group(1))
         except ValueError:
-            probs.append(f"comment {c['ref']}: approval block is not valid JSON")
+            info.append(f"comment {c['ref']}: an approval block that is not valid JSON was ignored")
             continue
-        if rec.get("plan_id") != plan["id"]:
+        if not isinstance(rec, dict) or rec.get("plan_id") != plan["id"]:
             continue
         if rec.get("plan_version") != plan["version"]:
             info.append(f"comment {c['ref']}: approval for plan version {rec.get('plan_version')} is superseded by version {plan['version']}")
+            continue
+        if rec.get("proposal_hash") != prop_hash:
+            info.append(f"comment {c['ref']}: approval belongs to another proposal at version {plan['version']}")
             continue
         errs = validate(rec, schema)
         if errs:
@@ -123,14 +134,21 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
         if not gate or c["author_account_id"] not in {a["account_id"] for a in gate["approvers"]} or c["author_account_id"] not in anchored:
             probs.append(f"comment {c['ref']}: {c['author_account_id']} is not an anchored approver on gate {rec['gate']}")
             continue
+        rec_scope = rec.get("scope", "phases")
+        if scope == "plan_level":
+            if rec_scope != "plan_level" or rec["kind"] not in PLAN_LEVEL_KINDS or rec["phases"]:
+                probs.append(f"comment {c['ref']}: a plan-level set takes only plan_level records with no phases "
+                             f"(found {rec_scope}, {rec['kind']})")
+                continue
+        elif rec_scope != "phases" or rec["kind"] not in PHASE_KINDS:
+            probs.append(f"comment {c['ref']}: a phase set takes only phase records (found {rec_scope}, {rec['kind']})")
+            continue
         stale = []
         if rec["plan_hash"] != p_hash:
             stale.append("plan_hash")
         for pid in rec["phases"]:
             if rec["phase_hashes"].get(pid) != ph.get(pid):
                 stale.append(f"phase_hashes.{pid}")
-        if rec["proposal_hash"] != prop_hash:
-            stale.append("proposal_hash")
         if rec["write_list_hash"] != wl_hash:
             stale.append("write_list_hash")
         if rec["review_hash"] != r_hash:
@@ -147,10 +165,27 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
             probs.append(f"comment {c['ref']}: older than create_window_days ({window}); approvers must post fresh records")
             continue
         records.append((c, rec, gate))
+    return records, probs
+
+
+def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review, phases, now, unverified_writer, info=None,
+                     latest_stored_version=None):
+    """Return (ok, problems, accepted_phases) for a phase set (initial, release, revision).
+
+    Only records for the plan's current version and this proposal count (the
+    grouping filter, planning model 4.1). Older versions are superseded; a record
+    for another proposal at this version (a decline beside a pending release) is
+    information. Every all_phases gate must reach its own quorum for every phase.
+    """
+    info = info if info is not None else []
+    if not phases:
+        return False, ["no phases were named for create; name the approved phases to write"], []
+    records, probs = _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info,
+                                   latest_stored_version, "phases")
+    gates = {g["id"]: g for g in overlay["approval_gates"]}
     accepted = set()
     phase_gates = [g for g in gates.values() if g["applies_to"] == "all_phases"]
     for pid in phases:
-        # Every gate that applies to all phases must reach its own quorum.
         short = []
         for gate in phase_gates:
             who = {c["author_account_id"] for c, rec, g in records if g["id"] == gate["id"] and pid in rec["phases"] and rec["kind"] != "exception"}
@@ -169,7 +204,59 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
             probs.append(f"comment {c['ref']}: a phase-release record cannot accept an exception; use the exception gate")
     for ex in sorted(needed_ex - ok_ex):
         probs.append(f"exception {ex} has not been accepted on the exception gate")
+    probs += write_list_scope_problems(wl, "phases", phases)
     return (not probs), probs, sorted(accepted)
+
+
+def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info=None,
+                      latest_stored_version=None):
+    """Return (ok, problems, kind) for a plan-level set (decline, own_epic, retire, later).
+
+    The same grouping filter and per-record checks as a phase set. Every all_phases
+    gate must reach min_approvers on plan-level records, zero records never pass,
+    all records agree on the kind, no record accepts an exception, and the write
+    list holds only plan entries.
+    """
+    info = info if info is not None else []
+    records, probs = _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info,
+                                   latest_stored_version, "plan_level")
+    if not records:
+        probs.append("no valid plan-level approval records for this proposal; zero records is never a pass")
+    kinds = sorted({rec["kind"] for _c, rec, _g in records})
+    if len(kinds) > 1:
+        probs.append(f"the records disagree on the kind of plan-level change ({', '.join(kinds)})")
+    for c, rec, _g in records:
+        if rec["exceptions_accepted"]:
+            probs.append(f"comment {c['ref']}: a plan-level record cannot accept an exception")
+    for gate in [g for g in overlay["approval_gates"] if g["applies_to"] == "all_phases"]:
+        who = {c["author_account_id"] for c, rec, g in records if g["id"] == gate["id"]}
+        if len(who) < gate.get("min_approvers", 1):
+            probs.append(f"gate {gate['id']} has no plan-level quorum ({len(who)} of {gate.get('min_approvers', 1)})")
+    probs += write_list_scope_problems(wl, "plan_level", [])
+    return (not probs), probs, (kinds[0] if len(kinds) == 1 else None)
+
+
+# Writes a plan-level set may authorize (planning model 4.3): closes, the change-request log,
+# the plan status file and the snapshot, plus the lock and manifest bookkeeping around them.
+PLAN_LEVEL_WRITES = ("lock_claim", "lock_release", "manifest_put", "add_label", "close_item", "cr_log_put", "status_put",
+                     "snapshot_put")
+
+
+def write_list_scope_problems(wl, scope, phases):
+    """Every write carries scope phase:<id> or plan; a set authorizes only its own scopes."""
+    probs = []
+    allowed = {f"phase:{p}" for p in phases} | {"plan"}
+    for w in wl.get("writes", []):
+        sc = w.get("scope")
+        if sc is None:
+            probs.append(f"write {w.get('no')}: has no scope")
+        elif sc not in allowed:
+            probs.append(f"write {w.get('no')}: scope {sc} is not covered by this set")
+        elif scope == "plan_level" and w["kind"] not in PLAN_LEVEL_WRITES:
+            probs.append(f"write {w.get('no')}: a plan-level set cannot authorize a {w['kind']} write")
+    if scope == "plan_level" and wl.get("phases"):
+        probs.append("a plan-level write list offers no phases")
+    return probs
 
 
 def verify_chain(manifests):
@@ -202,7 +289,8 @@ def verify_chain(manifests):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["summary", "view", "review", "approvals", "manifest-chain", "owned"])
+    ap.add_argument("cmd", choices=["summary", "view", "review", "approvals", "plan-level", "manifest-chain", "owned"])
+    ap.add_argument("--latest-version", type=int, help="the latest plan-of-record version in the plan store")
     ap.add_argument("files", nargs="*")
     ap.add_argument("--evidence")
     ap.add_argument("--rules", action="append", default=[])
@@ -250,8 +338,18 @@ def main(argv=None):
         info = []
         phases = [x.strip() for x in (a.phases or "").split(",") if x.strip()]
         ok, probs, accepted = verify_approvals(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
-                                               phases, ts(a.now), unverified, info)
+                                               phases, ts(a.now), unverified, info, a.latest_version)
         print(json.dumps({"ok": ok, "accepted_phases": accepted, "problems": probs, "superseded": info}, indent=2))
+        return 0 if ok else 1
+    if a.cmd == "plan-level":
+        plan = J(a.files[0])
+        overlay = gw_yaml.load(a.overlay)
+        proposal_text = open(a.proposal, encoding="utf-8").read()
+        unverified = any(s["verified"] != "verified" and s["name"] == overlay["skills"]["tracker"]["skill"] for s in plan["stamps"]["skills"])
+        info = []
+        ok, probs, kind = verify_plan_level(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
+                                            ts(a.now), unverified, info, a.latest_version)
+        print(json.dumps({"ok": ok, "kind": kind, "problems": probs, "other_sets": info}, indent=2))
         return 0 if ok else 1
     if a.cmd == "manifest-chain":
         latest, probs = verify_chain([J(p) for p in a.files])

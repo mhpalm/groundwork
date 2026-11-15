@@ -13,6 +13,7 @@ Usage:
   create_steps.py status RAW.json MANIFEST.json|- --overlay OVERLAY.yaml
   create_steps.py close CLOSES.json MANIFEST.json|- FOUND.json
   create_steps.py scope COUNT --overlay OVERLAY.yaml [--limit N]
+  create_steps.py recheck CONTEXT.json OPEN_ITEMS.json
 
 LOCK_COMMENTS: [{ref, author_account_id, created_at, body}] where body holds
   a gw-lock line: "gw-lock claim|renew|release run=<id> account=<id> expires=<ts>".
@@ -241,6 +242,17 @@ def close_steps(closes, manifest, found):
     return {"ok": not stops, "steps": steps, "skipped": skipped, "stops": stops}
 
 
+def plan_level_recheck(context, open_items):
+    """Plan-level create re-reads list_children and find_by_key and stops if an open
+    plan-owned item exists that the stored proposal context did not list (for example
+    one another set created after this proposal). open_items: [{key}] open now."""
+    known = {i["key"] for i in context["items"]}
+    new = sorted(i["key"] for i in open_items if i["key"] not in known)
+    if new:
+        return {"ok": False, "new_items": new, "then": "re-propose: the epic changed after this proposal was made"}
+    return {"ok": True, "new_items": []}
+
+
 def scope_limit(overlay, requested=None):
     """read_scope's limit: at most 200, lowered by the overlay or the runner, never raised."""
     limit = min(READ_SCOPE_MAX, overlay.get("skills", {}).get("tracker", {}).get("read_scope_limit", READ_SCOPE_MAX))
@@ -270,7 +282,7 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["lock", "preflight", "manifest", "status", "close", "scope"])
+    ap.add_argument("cmd", choices=["lock", "preflight", "manifest", "status", "close", "scope", "recheck"])
     ap.add_argument("--overlay")
     ap.add_argument("--limit", type=int)
     ap.add_argument("files", nargs="*")
@@ -294,6 +306,8 @@ def main(argv=None):
         out = {"items": [read_status(r, written.get(r["key"]), fm) for r in J(a.files[0])]}
     elif a.cmd == "close":
         out = close_steps(J(a.files[0]), J(a.files[1]), J(a.files[2]))
+    elif a.cmd == "recheck":
+        out = plan_level_recheck(J(a.files[0]), J(a.files[1]))
     elif a.cmd == "scope":
         import gw_yaml
         out = scope_decision(int(a.files[0]), gw_yaml.load(a.overlay), a.limit)

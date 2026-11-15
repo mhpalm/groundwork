@@ -1,0 +1,267 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Micah Palmquist, micah.palmquist@gmail.com
+"""Approval sets (planning model section 4): grouping, plan-level sets, scoped write lists, stored proposal inputs."""
+import copy
+import datetime as dt
+import json
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "harness"))
+from common import fresh  # noqa: E402
+import check_hashes  # noqa: E402
+import create_steps  # noqa: E402
+import validate_plan  # noqa: E402
+import render_proposal  # noqa: E402
+from gw_canon import sha256_hex  # noqa: E402
+from gw_hash import phase_hashes, plan_hash, review_hash, write_list_hash  # noqa: E402
+from gw_schema import load_schema, validate  # noqa: E402
+
+NOW = dt.datetime(2026, 11, 15, 12, 0, 0, tzinfo=dt.timezone.utc)
+CREATED = "2026-11-15T10:00:00Z"
+PD = "acct-program-director"
+
+
+def base():
+    plan, overlay, _e = fresh("G1")
+    overlay = copy.deepcopy(overlay)
+    overlay["hash"] = "f" * 64
+    anchor = {"overlay_id": overlay["id"], "version": overlay["version"], "hash": overlay["hash"],
+              "gates": {g["id"]: [a["account_id"] for a in g["approvers"]] for g in overlay["approval_gates"]},
+              "author_account_id": PD}
+    review = {"view_hash": "a" * 64, "findings": []}
+    return plan, overlay, anchor, review
+
+
+def comment(rec, who=PD, ref=None, created=CREATED, updated=None):
+    return {"ref": ref or f"c-{rec.get('id', 'x')}", "author_account_id": who, "created_at": created,
+            "updated_at": updated or created, "body": "Approved.\n```json\n" + json.dumps(rec) + "\n```"}
+
+
+def record(plan, proposal, wl, review, phases, kind="initial", scope=None, gate="phase-release", who=PD, rid="A-1"):
+    rec = {"schema_version": "1.0", "id": rid, "kind": kind, "plan_id": plan["id"], "plan_version": plan["version"],
+           "plan_hash": plan_hash(plan), "plan_store_ref": "proposal-context-1.json", "phases": phases,
+           "phase_hashes": {p: phase_hashes(plan)[p] for p in phases},
+           "write_list_hash": write_list_hash(wl), "proposal_hash": sha256_hex(proposal.encode("utf-8")),
+           "review_hash": review_hash(review), "view_hash": review["view_hash"], "accept_unverified_writer": False,
+           "gate": gate, "approver": {"account_id": who, "name": "Program Director"},
+           "minors_accepted": [], "exceptions_accepted": [], "artifact": None}
+    if scope:
+        rec["scope"] = scope
+    return rec
+
+
+def phase_case(plan, overlay, phases=("P1",)):
+    wl = render_proposal.write_list(plan, overlay, list(phases))
+    prop = render_proposal.proposal(plan, overlay, list(phases), wl)
+    return wl, prop
+
+
+def decline_case(plan, overlay, items=()):
+    wl = render_proposal.plan_write_list(plan, overlay, "decline", cr_entry={"id": "CR-1", "decision": "declined"})
+    ctx = render_proposal.proposal_context(plan, "decline", "Decline CR-1: it is outside the brief's scope.",
+                                           items=items)
+    return wl, ctx, render_proposal.plan_level_proposal(plan, overlay, wl, ctx)
+
+
+def phases_ok(plan, overlay, anchor, comments, prop, wl, review, phases=("P1",), latest=None, info=None):
+    return check_hashes.verify_approvals(plan, overlay, anchor, comments, prop, wl, review, list(phases), NOW, False,
+                                         info, latest)
+
+
+def plan_ok(plan, overlay, anchor, comments, prop, wl, review, latest=None, info=None):
+    return check_hashes.verify_plan_level(plan, overlay, anchor, comments, prop, wl, review, NOW, False, info, latest)
+
+
+class Grouping(unittest.TestCase):
+    def setUp(self):
+        self.plan, self.ov, self.anchor, self.rev = base()
+        self.wl, self.prop = phase_case(self.plan, self.ov)
+        self.dwl, self.ctx, self.dprop = decline_case(self.plan, self.ov)
+        self.phase_rec = comment(record(self.plan, self.prop, self.wl, self.rev, ["P1"]))
+        self.decline_rec = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level",
+                                          rid="A-2"))
+
+    def test_decline_and_pending_phase_set_at_one_version_both_pass(self):
+        comments = [self.phase_rec, self.decline_rec]
+        info = []
+        ok, probs, acc = phases_ok(self.plan, self.ov, self.anchor, comments, self.prop, self.wl, self.rev, info=info)
+        self.assertTrue(ok, probs)
+        self.assertEqual(acc, ["P1"])
+        self.assertTrue(any("another proposal" in i for i in info))
+        ok, probs, kind = plan_ok(self.plan, self.ov, self.anchor, comments, self.dprop, self.dwl, self.rev)
+        self.assertTrue(ok, probs)
+        self.assertEqual(kind, "decline")
+
+    def test_malformed_record_in_another_set_does_not_fail_this_set(self):
+        other = record(self.plan, "another proposal\n", self.wl, self.rev, ["P1"], rid="A-9")
+        other["approver"] = "not an object"  # fails the schema, but belongs to another proposal
+        edited = comment(record(self.plan, "yet another\n", self.wl, self.rev, ["P1"], rid="A-8"), updated="2026-11-15T11:00:00Z")
+        junk = {"ref": "c-junk", "author_account_id": PD, "created_at": CREATED, "updated_at": CREATED,
+                "body": "```json\n{not json\n```"}
+        info = []
+        ok, probs, _ = phases_ok(self.plan, self.ov, self.anchor, [self.phase_rec, comment(other), edited, junk],
+                                 self.prop, self.wl, self.rev, info=info)
+        self.assertTrue(ok, probs)
+        self.assertEqual(len(info), 3)
+
+    def test_malformed_record_in_this_set_is_a_problem(self):
+        bad = record(self.plan, self.prop, self.wl, self.rev, ["P1"], rid="A-3")
+        bad["approver"] = "not an object"
+        ok, probs, _ = phases_ok(self.plan, self.ov, self.anchor, [self.phase_rec, comment(bad)], self.prop, self.wl, self.rev)
+        self.assertFalse(ok)
+
+    def test_stale_record_with_matching_proposal_still_voids(self):
+        rec = record(self.plan, self.prop, self.wl, self.rev, ["P1"])
+        rec["write_list_hash"] = "0" * 64
+        ok, probs, _ = phases_ok(self.plan, self.ov, self.anchor, [comment(rec)], self.prop, self.wl, self.rev)
+        self.assertFalse(ok)
+        self.assertTrue(any("write_list_hash" in p for p in probs))
+
+    def test_records_cannot_cross_scopes(self):
+        cross = record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", rid="A-4")  # no plan_level scope
+        ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [comment(cross)], self.dprop, self.dwl, self.rev)
+        self.assertFalse(ok)
+        wrong = record(self.plan, self.prop, self.wl, self.rev, ["P1"], kind="retire", scope="plan_level", rid="A-5")
+        ok, probs, _ = phases_ok(self.plan, self.ov, self.anchor, [comment(wrong)], self.prop, self.wl, self.rev)
+        self.assertFalse(ok)
+
+
+class Versions(unittest.TestCase):
+    """Storing a new version voids every pending set at the older version (4.1a)."""
+
+    def setUp(self):
+        self.plan, self.ov, self.anchor, self.rev = base()
+
+    def test_decline_then_revision_stored_voids_the_decline(self):
+        dwl, _ctx, dprop = decline_case(self.plan, self.ov)
+        rec = comment(record(self.plan, dprop, dwl, self.rev, [], kind="decline", scope="plan_level"))
+        ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [rec], dprop, dwl, self.rev, latest=self.plan["version"] + 1)
+        self.assertFalse(ok)
+        self.assertIn("is void", probs[0])
+
+    def test_revision_stored_then_decline_coexist(self):
+        v2 = copy.deepcopy(self.plan)
+        v2["version"] += 1
+        v2["epic"]["summary"] += " Revised."
+        wl, prop = phase_case(v2, self.ov)
+        dwl, _ctx, dprop = decline_case(v2, self.ov)
+        recs = [comment(record(v2, prop, wl, self.rev, ["P1"])),
+                comment(record(v2, dprop, dwl, self.rev, [], kind="decline", scope="plan_level", rid="A-2"))]
+        self.assertTrue(phases_ok(v2, self.ov, self.anchor, recs, prop, wl, self.rev, latest=v2["version"])[0])
+        self.assertTrue(plan_ok(v2, self.ov, self.anchor, recs, dprop, dwl, self.rev, latest=v2["version"])[0])
+
+
+class PlanLevel(unittest.TestCase):
+    def setUp(self):
+        self.plan, self.ov, self.anchor, self.rev = base()
+        self.dwl, self.ctx, self.dprop = decline_case(self.plan, self.ov)
+
+    def test_zero_records_is_refused(self):
+        ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [], self.dprop, self.dwl, self.rev)
+        self.assertFalse(ok)
+        self.assertTrue(any("zero records" in p for p in probs))
+
+    def test_every_all_phases_gate_needs_quorum(self):
+        ov = copy.deepcopy(self.ov)
+        ov["approval_gates"].append({"id": "finance", "applies_to": "all_phases", "approvers": [{"account_id": "acct-fin", "name": "Finance"}],
+                                     "min_approvers": 1})
+        anchor = dict(self.anchor, gates=dict(self.anchor["gates"], finance=["acct-fin"]))
+        one = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level"))
+        ok, probs, _ = plan_ok(self.plan, ov, anchor, [one], self.dprop, self.dwl, self.rev)
+        self.assertFalse(ok)
+        self.assertTrue(any("finance" in p for p in probs))
+        two = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level", gate="finance",
+                             who="acct-fin", rid="A-2"), who="acct-fin")
+        self.assertTrue(plan_ok(self.plan, ov, anchor, [one, two], self.dprop, self.dwl, self.rev)[0])
+
+    def test_records_must_agree_on_kind_and_accept_no_exception(self):
+        a = record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level")
+        a["exceptions_accepted"] = ["X-1"]
+        ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [comment(a)], self.dprop, self.dwl, self.rev)
+        self.assertFalse(ok)
+
+    def test_records_that_disagree_on_the_kind_are_refused(self):
+        ov = copy.deepcopy(self.ov)
+        ov["approval_gates"][0]["approvers"].append({"account_id": "acct-2", "name": "Second"})
+        anchor = dict(self.anchor, gates={k: v + ["acct-2"] for k, v in self.anchor["gates"].items()})
+        a = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level"))
+        b = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="retire", scope="plan_level", who="acct-2",
+                           rid="A-2"), who="acct-2")
+        ok, probs, kind = plan_ok(self.plan, ov, anchor, [a, b], self.dprop, self.dwl, self.rev)
+        self.assertFalse(ok)
+        self.assertIsNone(kind)
+        self.assertTrue(any("disagree" in p for p in probs))
+
+    def test_plan_level_write_list_holds_only_plan_entries(self):
+        wl = copy.deepcopy(self.dwl)
+        wl["writes"].insert(1, {"no": 99, "kind": "create_item", "key": "k", "scope": "plan"})
+        self.assertTrue(check_hashes.write_list_scope_problems(wl, "plan_level", []))
+        self.assertEqual(check_hashes.write_list_scope_problems(self.dwl, "plan_level", []), [])
+
+    def test_phase_set_covers_only_its_phases(self):
+        wl = render_proposal.write_list(self.plan, self.ov, ["P1", "P2"])
+        self.assertTrue(check_hashes.write_list_scope_problems(wl, "phases", ["P1"]))
+        self.assertEqual(check_hashes.write_list_scope_problems(wl, "phases", ["P1", "P2"]), [])
+        unscoped = copy.deepcopy(wl)
+        del unscoped["writes"][0]["scope"]
+        self.assertTrue(check_hashes.write_list_scope_problems(unscoped, "phases", ["P1", "P2"]))
+
+    def test_every_write_in_a_phase_list_is_scoped(self):
+        wl = render_proposal.write_list(self.plan, self.ov, ["P1"], closes=[{"key": "k", "reason": "not_planned"}])
+        scopes = {w["kind"]: w["scope"] for w in wl["writes"]}
+        self.assertEqual(scopes["create_item"], "phase:P1")
+        self.assertEqual(scopes["link_dependency"], "phase:P1")
+        self.assertEqual(scopes["set_blocked"], "phase:P1")
+        self.assertEqual(scopes["close_item"], "plan")
+        self.assertEqual(scopes["lock_claim"], "plan")
+
+
+class IntegrityProfile(unittest.TestCase):
+    def test_reports_only_integrity_checks_and_offers_nothing(self):
+        plan, ov, ev = fresh("G5")  # G5 has a blocking open question, which a decline does not care about
+        full = validate_plan.check(plan, ov, ev)
+        self.assertTrue(full.blocking())
+        R = validate_plan.check(plan, ov, ev, profile="integrity")
+        self.assertEqual(R.blocking(), [])
+        plan["epic"]["summary"] += " Contact jane@realcorp.co."
+        R = validate_plan.check(plan, ov, ev, profile="integrity")
+        self.assertEqual([f["check"] for f in R.blocking()], ["GR-17"])
+
+
+class StoredInputs(unittest.TestCase):
+    def setUp(self):
+        self.plan, self.ov, _a, _r = base()
+
+    def test_context_is_valid_and_rerender_is_byte_identical(self):
+        items = [{"key": "gw:x:P1-T01", "status": "todo"}, {"key": "gw:x:P9", "status": "in_progress", "person_added": True}]
+        wl, ctx, text = decline_case(self.plan, self.ov, items)
+        self.assertEqual(validate(ctx, load_schema("proposal-context")), [])
+        stored = json.loads(json.dumps({"plan": self.plan, "wl": wl, "ctx": ctx}))  # what the plan store gives back
+        again = render_proposal.plan_level_proposal(stored["plan"], self.ov, stored["wl"], stored["ctx"])
+        self.assertEqual(again.encode("utf-8"), text.encode("utf-8"))
+        self.assertIn("added by a person", text)
+
+    def test_decline_leaves_a_pending_release_proposal_unchanged(self):
+        wl, before = phase_case(self.plan, self.ov, ["P2"])
+        decline_case(self.plan, self.ov, [{"key": "k", "status": "todo"}])
+        _wl, after = phase_case(self.plan, self.ov, ["P2"])
+        self.assertEqual(before, after)
+
+    def test_context_from_another_version_is_refused(self):
+        wl, ctx, _t = decline_case(self.plan, self.ov)
+        ctx = dict(ctx, plan_version=ctx["plan_version"] + 1)
+        with self.assertRaises(ValueError):
+            render_proposal.plan_level_proposal(self.plan, self.ov, wl, ctx)
+
+    def test_items_created_after_the_proposal_force_a_new_proposal(self):
+        _wl, ctx, _t = decline_case(self.plan, self.ov, [{"key": "a", "status": "todo"}])
+        self.assertTrue(create_steps.plan_level_recheck(ctx, [{"key": "a"}])["ok"])
+        r = create_steps.plan_level_recheck(ctx, [{"key": "a"}, {"key": "b"}])
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["new_items"], ["b"])
+
+
+if __name__ == "__main__":
+    unittest.main()

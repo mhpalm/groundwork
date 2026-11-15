@@ -197,7 +197,9 @@ approval = {
     "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/approval/1.0", "title": "Groundwork approval record",
     **obj({
         "schema_version": {"const": "1.0"}, "id": {"type": "string", "pattern": r"^A-\d+$"},
-        "kind": {"enum": ["initial", "release", "revision", "exception"]},
+        "kind": {"enum": ["initial", "release", "revision", "exception", "decline", "own_epic", "retire", "later"]},
+        # phases (default) or plan_level: a plan-level record has phases [] (planning model 4.3)
+        "scope": {"enum": ["phases", "plan_level"]},
         "plan_id": PLAN_ID, "plan_version": {"type": "integer", "minimum": 1}, "plan_hash": HEX,
         "plan_store_ref": STR, "phases": arr(PHASE_ID), "phase_hashes": {"type": "object", "patternProperties": {r"^P\d+$": HEX}, "additionalProperties": False},
         "write_list_hash": HEX, "proposal_hash": HEX, "review_hash": HEX, "view_hash": HEX,
@@ -205,6 +207,20 @@ approval = {
         "approver": obj({"account_id": STR, "name": STR}),
         "minors_accepted": arr(STR), "exceptions_accepted": arr(STR),
         "artifact": nullable(obj({"tracker_comment_ref": STR, "author_account_id": STR, "verified_at": TS})),
+    }),
+}
+approval["required"] = [k for k in approval["properties"] if k != "scope"]
+
+proposal_context = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/proposal-context/1.0",
+    "title": "Groundwork proposal context (stored at Proposal; create renders only from stored inputs)",
+    **obj({
+        "schema_version": {"const": "1.0"}, "plan_id": PLAN_ID, "plan_version": {"type": "integer", "minimum": 1},
+        "kind": {"enum": ["initial", "release", "revision", "decline", "own_epic", "retire", "later"]},
+        "summary": ANYSTR, "degraded": arr(STR),
+        "items": arr(obj({"key": STR, "status": {"enum": ["todo", "in_progress", "done", "closed_not_done"]},
+                          "person_added": {"type": "boolean"}})),
+        "voided_sets": arr(STR),
     }),
 }
 
@@ -339,7 +355,7 @@ import sys
 out = os.path.join(os.path.dirname(__file__), "..", "..", "skills", "groundwork-core", "schemas")
 check = "--check" in sys.argv
 stale = []
-for name, sch in [("plan", plan), ("evidence", evidence), ("approval", approval), ("manifest", manifest), ("journal", journal),
+for name, sch in [("plan", plan), ("evidence", evidence), ("approval", approval), ("proposal-context", proposal_context), ("manifest", manifest), ("journal", journal),
                   ("handshake", handshake), ("skill-manifest", skill_manifest), ("rules", rules), ("review", review), ("overlay", overlay)]:
     path = os.path.join(out, f"{name}.schema.json")
     text = json.dumps(sch, indent=2) + "\n"

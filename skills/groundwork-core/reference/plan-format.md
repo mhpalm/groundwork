@@ -164,7 +164,8 @@ Evidence holds structure, configuration and counts only. Counts are never groupe
 ```yaml
 - schema_version: "1.0"
   id: A-1
-  kind: initial | release | revision
+  kind: initial | release | revision | exception | decline | own_epic | retire | later
+  scope: phases | plan_level          # optional, default phases; a plan_level record has phases: []
   plan_id: gw-01JCX7Q3RZ9V4N2T8K5M6P0ABC
   plan_version: 3
   plan_hash: sha256 of canonical plan.json without approvals and history
@@ -182,6 +183,12 @@ Evidence holds structure, configuration and counts only. Counts are never groupe
   exceptions_accepted: [exception ids]
   artifact: {tracker_comment_ref, author_account_id, verified_at}
 ```
+
+**Approval sets.** The records for one proposal form a set: same `plan_id`, same `plan_version` (the current version, the latest plan of record stored) and same `proposal_hash`. Only a set's own records are checked against it; every other record is information. A phase set has `scope: phases` and kind `initial`, `release`, `revision` or `exception`. A plan-level set has `scope: plan_level`, `phases: []`, one kind for all its records, and kind `decline`, `own_epic` or `retire` (no new plan version) or `later` (a new version that only adds outline content and offers no phase). `plan_store_ref` names the stored proposal context the proposal was rendered from.
+
+## Proposal context
+
+`proposal-context-<n>.json` (`schemas/proposal-context.schema.json`) is written at Proposal and stored in the plan store. It holds every fact the proposal shows that depends on the session or on a tracker read: degraded-check lines, and for a plan-level proposal its summary, the epic's items at that time (keys and statuses only, marking person-added items) and the pending sets it replaces. Create renders the proposal again only from the plan of record, the write list and this file, and compares the bytes with `proposal_hash`.
 
 The approval is valid only as a comment on the epic authored by the approver's own tracker account, containing this record. Create verifies through the tracker's API, before writing anything, that the comment's author id is on the gate and that the comment was never edited (approval-create.md). Each approver posts their own record; quorum and exceptions are in approval-create.md.
 

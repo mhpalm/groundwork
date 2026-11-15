@@ -152,11 +152,30 @@ def find_cycle(deps):
     return None
 
 
+# A plan-level set that changes no version (decline, own epic, retire) is checked with these only
+# (planning model 4.3): the shape, the evidence's integrity, the org boundary, secrets and restricted values.
+INTEGRITY_CHECKS = ("SCHEMA", "EVIDENCE-HASH", "EVIDENCE-ID", "CR-12", "GR-17", "GR-25", "GR-34")
+
+
 def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", proposal_text=None,
           restricted=None, done_tasks=None, profile="plan"):
     """restricted: {brief id: plaintext} from the run folder's restricted.json, when this session has it.
     done_tasks: task ids the tracker reports done or closed_not_done (revise), exempt from GR-31's trace rule.
-    profile: "plan", or "assess" for a reconstruction with no phases (open questions may block nothing)."""
+    profile: "plan"; "assess" for a reconstruction with no phases (open questions may block nothing); or
+    "integrity" for a plan-level set with no version change, which offers no phase and reports only
+    INTEGRITY_CHECKS."""
+    if profile == "integrity":
+        R = _check(plan, overlay, evidence, [], now, stage, proposal_text, restricted, done_tasks, "plan")
+        R.items = [f for f in R.items if f["check"] in INTEGRITY_CHECKS]
+        R.offered = set()
+        for f in R.items:
+            f["_phase"] = None  # nothing is offered, so every integrity finding counts
+        return R
+    return _check(plan, overlay, evidence, offered_arg, now, stage, proposal_text, restricted, done_tasks, profile)
+
+
+def _check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", proposal_text=None,
+           restricted=None, done_tasks=None, profile="plan"):
     phases = {p["id"]: p for p in plan.get("phases", [])}
     drafted = [p["id"] for p in plan.get("phases", []) if p.get("state") != "outline"]
     # None means "not given": offer every drafted phase. An empty list means no phases.
@@ -727,7 +746,7 @@ def main(argv=None):
     ap.add_argument("--out")
     ap.add_argument("--restricted", help="restricted.json from the run folder: {brief id: value}")
     ap.add_argument("--done", help="task ids the tracker reports done or closed_not_done, comma separated (revise)")
-    ap.add_argument("--profile", default="plan", choices=["plan", "assess"])
+    ap.add_argument("--profile", default="plan", choices=["plan", "assess", "integrity"])
     a = ap.parse_args(argv)
     try:
         with open(a.plan, encoding="utf-8") as f:
