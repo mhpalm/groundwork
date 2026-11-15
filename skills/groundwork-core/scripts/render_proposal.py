@@ -18,6 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import gw_model  # noqa: E402
 import gw_yaml  # noqa: E402
 from gw_canon import canonicalize, sha256_hex, short  # noqa: E402
 from gw_hash import phase_hashes, plan_hash, write_list_hash  # noqa: E402
@@ -48,6 +49,8 @@ def stamps_footer(plan):
 
 def task_body(plan, overlay, t):
     """The plan-owned part of a tracker item, between markers. Steps render as a checklist."""
+    if gw_model.body_layout(plan) >= 2:
+        return task_body_2(plan, overlay, t)
     ins = t["instructions"]
     tasks = {x["id"]: x for x in plan["tasks"]}
     lines = [OWNED_START, f"**Purpose.** {ins['purpose']}", ""]
@@ -87,6 +90,64 @@ def task_body(plan, overlay, t):
         lines.append("")
         lines.append(f"**One-day exception {ex['id']}:** {ex['reason']} ({ex['days']} days)")
         lines.extend(f"- Day {c['day']}: {c['visible_result']}" for c in ex["checkpoints"])
+    lines.append(f"\n`{t['key']}`")
+    lines.append(OWNED_END)
+    return "\n".join(lines)
+
+
+def task_body_2(plan, overlay, t):
+    """Layout 2 (plan format 2.1): what a person needs to do the task, in order, without repeats.
+
+    Commands sit in code blocks under their step. Lines that repeat tracker fields, links and plan
+    bookkeeping are the last block before the key, so a tracker skill can keep them out of sight.
+    """
+    ins = t["instructions"]
+    tasks = {x["id"]: x for x in plan["tasks"]}
+    title = lambda i: f"{i} ({tasks[i]['title']})" if i in tasks else i
+    lines = [OWNED_START, f"**Purpose.** {ins['purpose']}", ""]
+    before = list(ins["prerequisites"])
+    before += [f"Waits on: {w['what']} ({w['kind']}, {role_name(overlay, w['owner_role_key'])})" for w in t["waits_on"]]
+    if before:
+        lines.append("**Before you start**")
+        lines.extend(f"- {p}" for p in before)
+        lines.append("")
+    lines.append("**Steps**")
+    for c in ins.get("cautions", []):
+        lines.extend([f"**Caution.** {c}", ""])
+    for i, st in enumerate(ins["steps"], 1):
+        lines.append(f"- [ ] {i}. {st['text']}")
+        if st.get("code"):
+            lines.append("  ```" + st.get("lang", ""))
+            lines.extend("  " + x for x in st["code"].split("\n"))
+            lines.append("  ```")
+    lines.append("")
+    lines.append("**Done when**")
+    lines.extend(f"- {a}" for a in ins["acceptance_criteria"] + ins["verify"])
+    lines.append("")
+    if t.get("changes_existing"):
+        ch = t["changes_existing"]
+        names = {r["id"]: r["name"] for r in plan["request"]["starting_point"]["resources"]}
+        lines.append("**Risk**")
+        lines.append("- Changes: " + ", ".join(f"{r} ({names.get(r, '?')})" for r in ch["resources"]))
+        lines.append(f"- Why: {ch['why_needed']}")
+        lines.append(f"- Could break: {'; '.join(ch['could_break'])}")
+        lines.append(f"- Checked by: {', '.join(title(x) for x in ch['regression_check'])}")
+        lines.append("")
+    if t["exception"]:
+        ex = t["exception"]
+        lines.append(f"**One-day exception {ex['id']}:** {ex['reason']} ({ex['days']} days)")
+        lines.extend(f"- Day {c['day']}: {c['visible_result']}" for c in ex["checkpoints"])
+        lines.append("")
+    lines.append(f"**Type:** {t['work_type'].capitalize()} · **Role:** {role_name(overlay, t['role_key'])} · **Estimate:** {t['estimate_hours']} h · **Points:** 1 · **Phase:** {t['phase']}")
+    if t["depends_on"]:
+        lines.append("**Depends on:** " + ", ".join(f"{title(d['task'])}, when {d['satisfied_by']}" for d in t["depends_on"]))
+    if t["access"]:
+        lines.append("**Access needed:** " + ", ".join(t["access"]))
+    lines.append(f"**Done today:** {ins['done_today']}")
+    lines.append(f"**Visible result:** {t['visible_result']['text']}")
+    copied = [str(i) for i, st in enumerate(ins["steps"], 1) if st["from_evidence"]]
+    if copied:
+        lines.append(f"**From the org's own files:** step{'s' if len(copied) > 1 else ''} {', '.join(copied)}")
     lines.append(f"\n`{t['key']}`")
     lines.append(OWNED_END)
     return "\n".join(lines)

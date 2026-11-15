@@ -43,6 +43,7 @@ Gap review is two layers run in order: a deterministic validator script that che
 | GR-32 | The approach is honest: the rejected options were real alternatives, the rejection reasons follow from the cited brief fields, reuse was preferred where it does the job, and each decision is the one the evidence supports | R |
 | GR-33 | Every pinned trait's standard-work kinds have tasks or a `not_applicable_reason`; trait roles are mapped in the overlay (as GR-14); every declared conflict between two pinned traits is settled by a decision whose `trait_conflict` names both; the reviewer judges that the pinned traits fit the request and none is missing | V + R |
 | GR-34 | No restricted brief value appears anywhere in the plan, proposal or review; when the restricted values are not available in the session, the value search is reported as not run, never as passed | V |
+| GR-35 | Step `code`, `lang` and instruction `cautions` appear only in a plan of format 2.1 or later; `lang` comes with `code`; code holds no code fence; step text and cautions are one line each, with any command in `code` | V |
 
 **Blocker** means the task or phase cannot be approved as written: the executor would be stuck, the plan would be wrong, or a rule would be broken. **Minor** means the plan works but could be better; the approver can accept it as is.
 

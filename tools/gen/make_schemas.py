@@ -52,7 +52,10 @@ stamps = obj({
 compat = obj({"skill": STR, "result": {"enum": ["accepted", "accepted_with_note", "refused"]},
               "verified": {"enum": ["verified", "unverified", "mismatch"]}, "notes": arr(ANYSTR)})
 
-step = obj({"text": STR, "refs": arr(STR), "from_evidence": nullable(EV_ID)})
+# code and lang (plan format 2.1): a command or exact text, shown as a code block under the step.
+step = obj({"text": STR, "refs": arr(STR), "from_evidence": nullable(EV_ID),
+            "code": STR, "lang": {"type": "string", "pattern": "^[a-z0-9+#-]+$"}},
+           required=["text", "refs", "from_evidence"])
 finding = obj({
     "id": STR, "check": STR, "severity": {"enum": ["blocker", "minor"]},
     "target": nullable(STR), "what": STR, "evidence_ids": arr(EV_ID), "suggested_fix": ANYSTR,
@@ -80,7 +83,8 @@ task = obj({
     "instructions": obj({
         "purpose": STR, "prerequisites": arr(STR), "steps": arr(step),
         "acceptance_criteria": arr(STR), "verify": arr(STR), "done_today": STR,
-    }),
+        "cautions": arr(STR),  # plan format 2.1
+    }, required=["purpose", "prerequisites", "steps", "acceptance_criteria", "verify", "done_today"]),
     "visible_result": obj({"type": {"enum": ["pr_opened", "merged_pr", "deployed_change", "record_created", "record_updated", "doc_submitted", "comment_posted",
                                              "document", "decision_record", "measurement"]}, "text": STR}),
     "production_change": {"type": "boolean"}, "data_change": {"type": "boolean"},

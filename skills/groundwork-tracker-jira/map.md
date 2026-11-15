@@ -27,6 +27,9 @@ People read these issues in Jira, so the owned description is written as Jira fo
 | `\| a \| b \|` lines with a `\| --- \|` row | Table with a header row |
 | `---` | Rule |
 | `**bold**`, `` `code` `` and bare web addresses | Strong, code and link marks |
+| A step's code block (layout 2: a fence indented under the `- [ ] ` line) | Code block right after that step; the task list is split after each step that has one |
+| A paragraph starting `**Caution.**` (layout 2) | Warning panel |
+| Layout 2: the last block before the key (type, dependencies, access, done today, visible result, steps from the org's files) | Not shown in the description: these lines open the details expand |
 | The **Type** and **Depends on** lines | Not shown in the description: type, role, estimate, points and phase are Jira fields and labels, and dependencies are Blocks links, so these lines move into the details expand |
 | The two owned markers, the key line and the lines after it | Not shown as text: the key, overlay and stamps lines go in a collapsed expand titled "Groundwork details", which ends the owned section |
 

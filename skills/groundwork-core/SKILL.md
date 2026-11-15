@@ -3,7 +3,7 @@ name: groundwork-core
 description: "Groundwork core: turns a request into one approved tracker epic of one-day tasks. Use only for Groundwork requests: create, plan, release, revise, change, assess, adopt, retire, set up."
 license: Apache-2.0
 metadata:
-  version: 1.0.0
+  version: 1.1.0
   contract: "1.0"
   author: "Micah Palmquist, micah.palmquist@gmail.com"
 ---

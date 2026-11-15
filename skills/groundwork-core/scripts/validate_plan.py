@@ -331,6 +331,20 @@ def _check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", p
             v = ins.get(part)
             if v in (None, "", []) and part != "prerequisites":
                 R.add("GR-05", "blocker", tid, f"instructions are missing '{part}'", "Write that part for the assumed executor", phase=ph)
+        # GR-35
+        if gw_model.body_layout(plan) < 2 and (ins.get("cautions") or any("code" in st or "lang" in st for st in ins["steps"])):
+            R.add("GR-35", "blocker", tid, "step code, lang and cautions need plan format 2.1",
+                  "Set stamps.plan_format to 2.1 (a revise for a written plan), or move the command into the step text", phase=ph)
+        for i, st in enumerate(ins["steps"], 1):
+            if "lang" in st and "code" not in st:
+                R.add("GR-35", "blocker", tid, f"step {i} has a lang but no code", "Add the code or drop lang", phase=ph)
+            if "```" in st.get("code", ""):
+                R.add("GR-35", "blocker", tid, f"step {i} code contains a code fence", "Remove the fence; the renderer adds it", phase=ph)
+            if "\n" in st["text"] or st["text"].startswith(("- ", "* ")):
+                R.add("GR-35", "blocker", tid, f"step {i} text is not a single sentence line", "Keep the step on one line; put commands in code", phase=ph)
+        for c in ins.get("cautions", []):
+            if "\n" in c:
+                R.add("GR-35", "blocker", tid, "a caution spans more than one line", "Keep each caution to one line", phase=ph)
         # GR-07
         produced = {p["name"] for a in anc[tid] if a in tasks for p in tasks[a]["produces"]}
         for i, st in enumerate(ins["steps"], 1):

@@ -25,6 +25,36 @@ class GoldenG1(unittest.TestCase):
         self.assertIn("CR-03", {f["check"] for f in R.blocking()})
 
 
+class PlanFormat21(unittest.TestCase):
+    """GR-35: step code and cautions belong to plan format 2.1, and commands stay out of step text."""
+
+    def check(self, mutate, fmt="2.1"):
+        plan, overlay, evidence = fresh("G1")
+        plan["stamps"]["plan_format"] = fmt
+        mutate(plan["tasks"][0]["instructions"])
+        return {f["check"] for f in validate_plan.check(plan, overlay, evidence, now=NOW).blocking()}
+
+    def code(self, ins):
+        ins["steps"][0]["code"] = "gh api repos/o/r"
+        ins["steps"][0]["lang"] = "bash"
+        ins["cautions"] = ["Stop on a 403."]
+
+    def test_code_and_cautions_pass_at_2_1(self):
+        self.assertNotIn("GR-35", self.check(self.code))
+
+    def test_code_needs_2_1(self):
+        self.assertIn("GR-35", self.check(self.code, fmt="2.0"))
+
+    def test_lang_needs_code(self):
+        self.assertIn("GR-35", self.check(lambda ins: ins["steps"][0].update(lang="bash")))
+
+    def test_code_has_no_fence(self):
+        self.assertIn("GR-35", self.check(lambda ins: ins["steps"][0].update(code="```\nx\n```")))
+
+    def test_step_text_is_one_line(self):
+        self.assertIn("GR-35", self.check(lambda ins: ins["steps"][0].update(text="Run this:\ngh api x")))
+
+
 class Mutations(unittest.TestCase):
     def test_each_seeded_defect_is_flagged(self):
         for expected, mutate in MUTATIONS:

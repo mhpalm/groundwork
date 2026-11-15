@@ -37,6 +37,12 @@ KEY_LINE = re.compile(r"^`gw:[^`]+`")
 # Lines that repeat what Jira already shows as fields (type, points, estimate, fix version, labels)
 # or as Blocks links. They move into the collapsed details so they are not shown twice.
 FIELD_LINE = re.compile(r"^\*\*(Type|Depends on):\*\* ")
+# Body layout 2 (plan format 2.1): the lines that repeat fields, links and plan bookkeeping form
+# the last block before the key, and every task body has a "Done when" heading.
+DETAIL_LINE = re.compile(r"^\*\*(Type|Depends on|Access needed|Done today|Visible result|From the org's own files):\*\* ")
+LAYOUT2 = "Done when"
+CAUTION = "**Caution.** "
+FENCE = "  ```"
 TASK = re.compile(r"^- \[[ xX]\] ")
 URL = re.compile(r"https?://[^\s<>()]+[^\s<>().,;:]")
 
@@ -119,7 +125,9 @@ def parse(md):
             cur.append(l)
     blocks.append(cur)
     hidden = []
-    if len(blocks) > 1 and blocks[1] and FIELD_LINE.match(blocks[1][0]):
+    if f"**{LAYOUT2}**" in main and len(blocks) > 1 and blocks[-1] and all(DETAIL_LINE.match(l) for l in blocks[-1]):
+        hidden = blocks.pop()
+    elif len(blocks) > 1 and blocks[1] and FIELD_LINE.match(blocks[1][0]):
         while blocks[1] and FIELD_LINE.match(blocks[1][0]):
             hidden.append(blocks[1].pop(0))
         if not blocks[1]:
@@ -138,11 +146,25 @@ def parse(md):
                 nodes.append({"t": "rule"})
                 i += 1
             elif TASK.match(l):
-                items = []
+                items, code = [], []
                 while i < len(b) and TASK.match(b[i]):
                     items.append(inline(b[i][6:]))
                     i += 1
-                nodes.append({"t": "tasks", "items": items})
+                    c = None
+                    if i < len(b) and b[i].startswith(FENCE):
+                        lang, body = b[i][len(FENCE):], []
+                        i += 1
+                        while i < len(b) and b[i] != FENCE:
+                            if not b[i].startswith("  "):
+                                return None
+                            body.append(b[i][2:])
+                            i += 1
+                        if i == len(b) or not body:
+                            return None
+                        i += 1
+                        c = (lang, "\n".join(body))
+                    code.append(c)
+                nodes.append({"t": "tasks", "items": items, "code": code})
             elif l.startswith("- "):
                 items = []
                 while i < len(b) and b[i].startswith("- ") and not TASK.match(b[i]):
@@ -180,7 +202,9 @@ def render_md(nodes):
         if hidden:
             nodes[-1] = dict(det, lines=det["lines"][k:])
             lead = [inline(l) for l in hidden]
-            if len(nodes) > 1 and nodes[1]["t"] == "para":
+            if any(n["t"] == "heading" and n["text"] == LAYOUT2 for n in nodes):
+                nodes.insert(len(nodes) - 1, {"t": "para", "lines": lead})
+            elif len(nodes) > 1 and nodes[1]["t"] == "para":
                 nodes[1] = dict(nodes[1], lines=lead + nodes[1]["lines"])
             else:
                 nodes.insert(1, {"t": "para", "lines": lead})
@@ -195,7 +219,12 @@ def render_md(nodes):
         elif t == "rule":
             out.append("---")
         elif t == "tasks":
-            out.extend("- [ ] " + inline_md(i) for i in n["items"])
+            for i, c in zip(n["items"], n.get("code") or [None] * len(n["items"])):
+                out.append("- [ ] " + inline_md(i))
+                if c:
+                    out.append(FENCE + c[0])
+                    out.extend("  " + x for x in c[1].split("\n"))
+                    out.append(FENCE)
         elif t == "bullets":
             out.extend("- " + inline_md(i) for i in n["items"])
         elif t == "table":
@@ -243,6 +272,19 @@ def adf_para_lines(lines):
     return {"type": "paragraph", "content": content}
 
 
+def code_runs(n):
+    """A step list with code: runs of steps, each run ending at a step whose code block follows it.
+    A task list holds no code block, so the list is split after each step that has one."""
+    run = []
+    for i, c in zip(n["items"], n["code"]):
+        run.append(i)
+        if c:
+            yield run, c
+            run = []
+    if run:
+        yield run, None
+
+
 def to_adf(md):
     nodes = parse(md) if exact(md) else None
     if nodes is None:
@@ -254,8 +296,17 @@ def to_adf(md):
             content.append({"type": "heading", "attrs": {"level": 4}, "content": [{"type": "text", "text": n["text"]}]})
         elif t == "rule":
             content.append({"type": "rule"})
+        elif t == "para" and len(n["lines"]) == 1 and inline_md(n["lines"][0]).startswith(CAUTION):
+            content.append({"type": "panel", "attrs": {"panelType": "warning"}, "content": [adf_para_lines(n["lines"])]})
         elif t == "para":
             content.append(adf_para_lines(n["lines"]))
+        elif t == "tasks" and any(n.get("code") or []):
+            for run, c in code_runs(n):
+                content.append({"type": "taskList", "attrs": {"localId": f"gw-{len(content)}"}, "content": [
+                    {"type": "taskItem", "attrs": {"localId": f"gw-{len(content)}-{k}", "state": "TODO"}, "content": adf_inline(i)}
+                    for k, i in enumerate(run)]})
+                if c:
+                    content.append({"type": "codeBlock", "attrs": {"language": c[0]} if c[0] else {}, "content": [{"type": "text", "text": c[1]}]})
         elif t == "bullets":
             content.append({"type": "bulletList", "content": [{"type": "listItem", "content": [adf_para_lines([i])]} for i in n["items"]]})
         elif t == "tasks":
@@ -292,8 +343,17 @@ def to_html(md):
             out.append(f"<h4>{_html.escape(n['text'], quote=False)}</h4>")
         elif t == "rule":
             out.append("<hr>")
+        elif t == "para" and len(n["lines"]) == 1 and inline_md(n["lines"][0]).startswith(CAUTION):
+            out.append('<div data-type="panel-warning"><p>' + h_inline(n["lines"][0]) + "</p></div>")
         elif t == "para":
             out.append("<p>" + "<br>".join(h_inline(l) for l in n["lines"]) + "</p>")
+        elif t == "tasks" and any(n.get("code") or []):
+            for run, c in code_runs(n):
+                out.append('<ul data-type="task-list">' + "".join(
+                    f'<li data-type="task-item"><input type="checkbox"> {h_inline(i)}</li>' for i in run) + "</ul>")
+                if c:
+                    cls = f' class="language-{_html.escape(c[0])}"' if c[0] else ""
+                    out.append(f"<pre><code{cls}>{_html.escape(c[1], quote=False)}</code></pre>")
         elif t == "bullets":
             out.append("<ul>" + "".join(f"<li>{h_inline(i)}</li>" for i in n["items"]) + "</ul>")
         elif t == "tasks":
@@ -379,6 +439,11 @@ def from_adf(doc):
         elif t == "table":
             rows = [[adf_text(cell.get("content")) for cell in r.get("content", [])] for r in c.get("content", [])]
             nodes.append(("table", rows))
+        elif t == "codeBlock":
+            nodes.append(("code", (c.get("attrs") or {}).get("language") or "", "".join(x.get("text", "") for x in c.get("content") or [])))
+        elif t == "panel" and (c.get("attrs") or {}).get("panelType") == "warning" and len(c.get("content") or []) == 1 \
+                and c["content"][0]["type"] == "paragraph" and adf_text(c["content"][0].get("content")).startswith(CAUTION):
+            nodes.append(("para", adf_text(c["content"][0].get("content"))))
         elif t == "expand":
             lines = ["---" if x["type"] == "rule" else adf_text(x.get("content")) for x in c.get("content", [])]
             nodes.append(("details", (c.get("attrs") or {}).get("title"), lines))
@@ -413,13 +478,26 @@ def assemble(nodes):
     pn = []
     for n in nodes[:d + 1]:
         k = n[0]
+        last = pn[-1] if pn else None
+        if k == "code":
+            if last and last["t"] == "tasks" and last["code"][-1] is None:
+                last["code"][-1] = (n[1], n[2])
+            else:
+                pn.append({"t": "para", "lines": [plain("\x00")]})  # code outside the steps: drift
+            continue
+        if k == "tasks" and last and last["t"] == "tasks" and last["code"][-1] is not None:
+            last["items"].extend(plain(x) for x in n[1])
+            last["code"].extend([None] * len(n[1]))
+            continue
         if k == "heading":
             pn.append({"t": "heading", "text": n[1]})
         elif k == "rule":
             pn.append({"t": "rule"})
         elif k == "para":
             pn.append({"t": "para", "lines": [plain(x) for x in n[1].split("\n")]})
-        elif k in ("bullets", "tasks"):
+        elif k == "tasks":
+            pn.append({"t": k, "items": [plain(x) for x in n[1]], "code": [None] * len(n[1])})
+        elif k == "bullets":
             pn.append({"t": k, "items": [plain(x) for x in n[1]]})
         elif k == "table":
             pn.append({"t": "table", "head": [plain(c) for c in n[1][0]], "rows": [[plain(c) for c in r] for r in n[1][1:]]})
@@ -440,6 +518,8 @@ class _H(HTMLParser):
         self.table = None
         self.details = None
         self.marks = []
+        self.pre = None
+        self.panel = None
 
     def _open(self):
         self.buf = ""
@@ -450,7 +530,15 @@ class _H(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
-        if tag == "details":
+        if self.pre is not None:
+            if tag == "code":
+                self.pre["lang"] = (a.get("class") or "").removeprefix("language-")
+            return
+        if tag == "pre":
+            self.pre = {"lang": "", "text": ""}
+        elif tag == "div" and a.get("data-type") == "panel-warning":
+            self.panel = True
+        elif tag == "details":
             self.details = {"title": None, "lines": []}
         elif tag == "summary":
             self._open()
@@ -477,6 +565,14 @@ class _H(HTMLParser):
             self.buf += "`"
 
     def handle_endtag(self, tag):
+        if self.pre is not None:
+            if tag == "pre":
+                self.nodes.append(("code", self.pre["lang"], self.pre["text"]))
+                self.pre = None
+            return
+        if tag == "div" and self.panel:
+            self.panel = None
+            return
         if tag in ("strong", "b") and self.buf is not None:
             self.buf += "**"
         elif tag == "code" and self.buf is not None:
@@ -508,6 +604,9 @@ class _H(HTMLParser):
             self.table = None
 
     def handle_data(self, d):
+        if self.pre is not None:
+            self.pre["text"] += d
+            return
         if self.buf is not None:
             self.buf += d
 
@@ -553,10 +652,33 @@ def from_connector_markdown(md):
 
 
 def _connector_new(md):
-    blocks = [b for b in re.split(r"\n\s*\n", md.strip("\n")) if b.strip()]
+    blocks, cur, fence = [], [], None
+    for l in md.strip("\n").split("\n"):
+        if fence is not None:
+            if l.rstrip() == "```":
+                blocks.append(fence)
+                fence = None
+            else:
+                fence[2].append(l)
+        elif l.startswith("```"):
+            if cur:
+                blocks.append(cur)
+                cur = []
+            fence = ("code", l[3:].strip(), [])
+        elif l.strip() == "":
+            if cur:
+                blocks.append(cur)
+                cur = []
+        else:
+            cur.append(l)
+    if cur:
+        blocks.append(cur)
     nodes = []
     for b in blocks:
-        rows = b.split("\n")
+        if isinstance(b, tuple):
+            nodes.append(("code", b[1], "\n".join(b[2])))
+            continue
+        rows = b
         if len(rows) == 1 and rows[0].startswith("#### "):
             nodes.append(("heading", _unesc(rows[0][5:].strip())))
         elif len(rows) == 1 and rows[0].strip() in ("---", "\\---", "***"):
@@ -573,7 +695,7 @@ def _connector_new(md):
     if k is None:
         return ""
     start = k
-    while start > 0 and nodes[start - 1][0] == "para" and FIELD_LINE.match(nodes[start - 1][1]):
+    while start > 0 and nodes[start - 1][0] == "para" and "\n" not in nodes[start - 1][1] and DETAIL_LINE.match(nodes[start - 1][1]):
         start -= 1
     end = k + 1
     while end < len(nodes) and (nodes[end][0] == "rule" or (nodes[end][0] == "para" and nodes[end][1].startswith("Groundwork "))):

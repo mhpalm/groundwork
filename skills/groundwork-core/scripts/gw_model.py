@@ -30,6 +30,20 @@ def plan_format(plan):
         return 1
 
 
+def plan_format_minor(plan):
+    """(major, minor) of stamps.plan_format; (1, 0) when it is missing or malformed."""
+    try:
+        a, b = str(plan.get("stamps", {}).get("plan_format", "1.0")).split(".")
+        return int(a), int(b)
+    except ValueError:
+        return 1, 0
+
+
+def body_layout(plan):
+    """Task body layout: 2 for plan format 2.1 and later, 1 before (kept byte for byte so stored hashes match)."""
+    return 2 if plan_format_minor(plan) >= (2, 1) else 1
+
+
 def is_model_plan(plan):
     return plan_format(plan) >= 2
 

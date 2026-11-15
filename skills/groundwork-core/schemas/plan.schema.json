@@ -376,6 +376,14 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "lang": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9+#-]+$"
                   }
                 },
                 "additionalProperties": false,
@@ -403,6 +411,13 @@
             "done_today": {
               "type": "string",
               "minLength": 1
+            },
+            "cautions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           },
           "additionalProperties": false,

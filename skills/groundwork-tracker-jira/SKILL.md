@@ -3,7 +3,7 @@ name: groundwork-tracker-jira
 description: "Groundwork tracker skill for Jira Cloud: maps approved plans to epics, tasks and Blocks links, with idempotent writes. Use only inside a Groundwork run."
 license: Apache-2.0
 metadata:
-  version: 1.0.1
+  version: 1.1.0
   contract: "1.0"
   author: "Micah Palmquist, micah.palmquist@gmail.com"
 ---
@@ -17,7 +17,7 @@ This skill implements Groundwork contract 1.0 for Jira Cloud (not Server or Data
 Do this first: append one line to the run's `handshakes.jsonl`:
 
 ```json
-{"schema_version": "1.0", "name": "groundwork-tracker-jira", "kind": "tracker", "version": "1.0.1", "release": "unreleased", "contract": "1.0", "platform": "jira"}
+{"schema_version": "1.0", "name": "groundwork-tracker-jira", "kind": "tracker", "version": "1.1.0", "release": "unreleased", "contract": "1.0", "platform": "jira"}
 ```
 
 ## Sections

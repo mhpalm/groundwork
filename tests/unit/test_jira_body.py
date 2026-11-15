@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Micah Palmquist, micah.palmquist@gmail.com
 """Jira tracker body format: the core's owned Markdown to real Jira formatting and back."""
+import copy
 import glob
 import json
 import os
@@ -16,13 +17,32 @@ import render_proposal as rp  # noqa: E402
 from check_hashes import owned_hash  # noqa: E402
 
 
-def golden_bodies():
+def layout2(plan):
+    """The same plan at format 2.1, with a caution and code under some steps, so layout 2 is exercised."""
+    plan = copy.deepcopy(plan)
+    plan["stamps"]["plan_format"] = "2.1"
+    for n, t in enumerate(plan["tasks"]):
+        ins = t["instructions"]
+        if n % 2 == 0:
+            ins["cautions"] = ["If a call answers 400, stop and copy the error into a comment."]
+        for k, st in enumerate(ins["steps"]):
+            if (n + k) % 3 == 0:
+                st["code"] = "tool POST /x \\\n  '{\"a\": [1], \"b\": \"<key>\"}'\n\nnext line"
+                st["lang"] = "bash"
+            elif (n + k) % 3 == 1 and k:
+                st["code"] = "Vnn | verdict | what you saw"
+    return plan
+
+
+def golden_bodies(layouts=(1, 2)):
     names = sorted(os.path.basename(os.path.dirname(os.path.dirname(p)))
                    for p in glob.glob(os.path.join(GOLDEN, "*", "expected", "plan.json")))
     for g in names:
         plan, overlay, _e = fresh(g)
-        for t in plan["tasks"]:
-            yield g, t["id"], rp.task_body(plan, overlay, t)
+        for layout in layouts:
+            pl = plan if layout == 1 else layout2(plan)
+            for t in pl["tasks"]:
+                yield f"{g}/L{layout}", t["id"], rp.task_body(pl, overlay, t)
         yield g, "epic", rp.epic_description(plan, overlay)
         yield g, "epic-frozen", rp.epic_description(plan, overlay, released=[p["id"] for p in plan["phases"]])
 
@@ -54,7 +74,13 @@ def connector_markdown(body):
         elif t == "bullets":
             blocks.append("\n".join("* " + md(i) for i in n["items"]))
         elif t == "tasks":
-            blocks.append("\n".join("- [ ] " + md(i) for i in n["items"]))
+            if not any(n.get("code") or []):
+                blocks.append("\n".join("- [ ] " + md(i) for i in n["items"]))
+                continue
+            for run, c in jb.code_runs(n):
+                blocks.append("\n".join("- [ ] " + md(i) for i in run))
+                if c:
+                    blocks.append(f"```{c[0]}\n{c[1]}\n```")
         elif t == "table":
             rows = [n["head"]] + n["rows"]
             lines = ["| " + " | ".join(md(c) for c in r) + " |" for r in rows]
@@ -142,6 +168,57 @@ class LooksLikeJira(unittest.TestCase):
         for label in ("Type:", "Depends on:"):
             self.assertNotIn(label, top)
             self.assertIn(label, details)
+
+
+class LayoutTwo(unittest.TestCase):
+    """Plan format 2.1: commands as code blocks under their step, cautions as a warning panel,
+    and the field, link and bookkeeping lines only inside the details."""
+
+    def setUp(self):
+        plan, overlay, _e = fresh("G1")
+        self.plan = layout2(plan)
+        self.t = self.plan["tasks"][0]
+        self.body = rp.task_body(self.plan, overlay, self.t)
+        self.doc = jb.to_adf(self.body)
+
+    def test_code_blocks_follow_their_steps(self):
+        k = kinds(self.doc)
+        self.assertIn("codeBlock", k)
+        self.assertEqual(k[k.index("codeBlock") - 1], "taskList")
+        top = json.dumps([c for c in self.doc["content"] if c["type"] != "codeBlock"])
+        self.assertNotIn("```", top)
+        self.assertNotIn("tool POST", top)
+
+    def test_caution_is_a_warning_panel(self):
+        panels = [c for c in self.doc["content"] if c["type"] == "panel"]
+        self.assertEqual([p["attrs"]["panelType"] for p in panels], ["warning"])
+
+    def test_bookkeeping_only_in_the_details(self):
+        top = json.dumps([c for c in self.doc["content"] if c["type"] != "expand"])
+        for label in ("Type:", "Done today:", "Visible result:", "Access needed:", "Depends on:"):
+            self.assertNotIn(label, top)
+        self.assertIn("Done today:", json.dumps(self.doc["content"][-1]))
+
+    def test_ticking_a_step_with_code_is_not_drift(self):
+        doc = json.loads(json.dumps(self.doc))
+        for c in doc["content"]:
+            if c["type"] == "taskList":
+                for ti in c["content"]:
+                    ti["attrs"]["state"] = "DONE"
+        self.assertEqual(jb.from_adf(doc), self.body)
+
+    def test_editing_a_command_is_drift(self):
+        doc = json.loads(json.dumps(self.doc))
+        cb = next(c for c in doc["content"] if c["type"] == "codeBlock")
+        cb["content"][0]["text"] += " --force"
+        self.assertNotEqual(jb.from_adf(doc), self.body)
+
+    def test_layout_one_bodies_are_unchanged(self):
+        # A 2.0 plan renders exactly as before, so stored owned hashes of written items still match.
+        plan, overlay, _e = fresh("G1")
+        body = rp.task_body(plan, overlay, plan["tasks"][0])
+        self.assertIn("**Acceptance criteria**", body)
+        self.assertNotIn("**Done when**", body)
 
 
 class Drift(unittest.TestCase):

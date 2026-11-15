@@ -2,7 +2,7 @@ schema_version: "1.0"
 kind: tracker
 name: groundwork-tracker-jira
 platform: jira
-version: 1.0.1
+version: 1.1.0
 release: unreleased
 contract: "1.0"
 surfaces:

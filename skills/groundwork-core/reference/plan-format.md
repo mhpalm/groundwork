@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Plan format (2.0)
 
-The plan is one JSON document, `plan.json`, validated against `groundwork-core/schemas/plan.schema.json`. Everything a person reads (the proposal, the snapshot, the tracker items) is rendered from it by a script, so wording can vary between runs but structure cannot. Every persisted file (plan, evidence item, approval, journal line, manifest) starts with `schema_version`, and all hashes are SHA-256 over RFC 8785 canonical JSON, computed by `scripts/`, never by the model. The schema is shown as YAML for readability. Plan format 2.0 (`stamps.plan_format: "2.0"`) adds the brief, traits and approach of the planning model; a format-1.0 plan omits them, keeps format 1.0 for life, and is validated without the GR-29 to GR-34 checks.
+The plan is one JSON document, `plan.json`, validated against `groundwork-core/schemas/plan.schema.json`. Everything a person reads (the proposal, the snapshot, the tracker items) is rendered from it by a script, so wording can vary between runs but structure cannot. Every persisted file (plan, evidence item, approval, journal line, manifest) starts with `schema_version`, and all hashes are SHA-256 over RFC 8785 canonical JSON, computed by `scripts/`, never by the model. The schema is shown as YAML for readability. Plan format 2.0 (`stamps.plan_format: "2.0"`) adds the brief, traits and approach of the planning model; a format-1.0 plan omits them, keeps format 1.0 for life, and is validated without the GR-29 to GR-34 checks. Plan format 2.1 adds optional step `code` and `lang` and instruction `cautions`, and renders task bodies in layout 2: a step's command goes in a code block under it instead of inside its sentence, and the lines that repeat tracker fields, links and bookkeeping (type, estimate, points, phase, dependencies, access ids, done today, visible result, which steps came from the org's files) are kept together at the end, where a tracker skill can tuck them away. The visible sections are Purpose, Before you start (prerequisites and waits), Steps, Done when (acceptance criteria then verify) and Risk (changes to existing resources). Layout 1 stays exactly as it was for format 1.0 and 2.0 plans, so their stored owned hashes still match; a plan moves to 2.1 only through a revise, whose write list updates every written item (GR-35).
 
 ## Schema
 
@@ -62,7 +62,9 @@ plan:
       instructions:
         purpose: string
         prerequisites: [string]
-        steps: [{text, refs: [evidence ids or produces names], from_evidence: evidence id | null}]
+        steps: [{text, refs: [evidence ids or produces names], from_evidence: evidence id | null,
+                 code?: string, lang?: string}]   # 2.1: a command or exact text shown as a code block under the step
+        cautions?: [string]           # 2.1: one-line warnings shown at the top of the steps
         acceptance_criteria: [string]
         verify: [string]
         done_today: string
@@ -216,7 +218,7 @@ stamps:
   core: groundwork-core@1.0.0
   contract: "1.0"
   plan_format: "1.0"
-  skills: [{name: groundwork-system-github, version: 1.2.0, verified: verified}, {name: groundwork-tracker-jira, version: 1.0.1, verified: unverified}]
+  skills: [{name: groundwork-system-github, version: 1.2.0, verified: verified}, {name: groundwork-tracker-jira, version: 1.1.0, verified: unverified}]
   overlay: {id: example-org, version: 4, hash: sha256, format: "1.0"}
   validator: 1.0.0
   surface: claude-code-local
