@@ -126,6 +126,33 @@ class RecheckOnAResumeWarns(unittest.TestCase):
                 self.assertEqual(len(warn), 1)
 
 
+class OpenAgainAfterTheIntent(unittest.TestCase):
+    """Twelfth review, M1: an item finished at the proposal that is open again after the status intent
+    (reopened, or a missing item found again) is left open with a warning, and the resume finishes."""
+
+    def test_a_reopened_finished_item_does_not_block_the_resume(self):
+        tr, plan, ov = created()
+        k = key(plan, "P0-T01")
+        tid = next(i["tracker_id"] for i in tr.items.values() if i["key"] == k)
+        tr.close(tid, "Done")
+        items = retire_items(tr, plan, ov, "VOL-1")
+        m = latest_manifest(tr, plan["id"])
+        rp = retire.plan_retire(items, {}, m)
+        wl = retire.write_list(plan, ov, rp)
+        seen = {i["key"]: i["status"] for i in items}
+        self.assertEqual(run_retire(tr, plan, ov, rp, "a" * 64, crash_after="intent").get("crashed"), "intent")
+        tr.reopen(tid)
+        now = retire_items(tr, plan, ov, "VOL-1")
+        self.assertTrue(retire.recheck(wl, now, seen, m))  # before the intent: propose again
+        warn = []
+        self.assertEqual(retire.recheck(wl, now, seen, latest_manifest(tr, plan["id"]), warn), [])
+        self.assertEqual(len(warn), 1)
+        sf = latest_manifest(tr, plan["id"])["status_file"]
+        r = run_retire(tr, plan, ov, rp, "a" * 64, resuming=(sf["set_by"]["plan_version"], sf["set_by"]["proposal_hash"]))
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(tr.items[tid]["state"], "open")
+
+
 class ReviseResumeAcceptsItsLandedWrites(Base):
     """M3: relinks and clears the approved set already recorded are accepted on resume; a clear of a block
     Groundwork never recorded as cleared by this version is not."""

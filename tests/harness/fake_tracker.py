@@ -428,7 +428,8 @@ def run_retire(tr, plan, overlay, approved, proposal_hash, run="run-r", account=
     if not g["ok"]:
         return g
     wl = retire.write_list(plan, overlay, approved)
-    probs = retire.recheck(wl, retire_items(tr, plan, overlay, epic), {i["key"]: i["status"] for i in approved["seen"]})
+    probs = retire.recheck(wl, retire_items(tr, plan, overlay, epic), {i["key"]: i["status"] for i in approved["seen"]},
+                           manifest)
     if probs:
         return {"ok": False, "problems": probs}
     decision = create_steps.lock_decision(tr.comments, run, account, tr.clock)

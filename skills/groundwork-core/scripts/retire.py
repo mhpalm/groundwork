@@ -137,7 +137,10 @@ def recheck(wl, items, seen, manifest=None, warnings=None):
         if k in left or k in set(wl.get("reopened", [])):
             continue
         if k not in closes:
-            probs.append(f"{k} is open but the approved retire neither closes it nor leaves it open: propose again")
+            if resuming:  # reopened or found again since the proposal; proposing again is impossible (twelfth review, M1)
+                warnings.append(f"{k} is open again since the proposal and the approved retire doesn't close it; it is left open")
+            else:
+                probs.append(f"{k} is open but the approved retire neither closes it nor leaves it open: propose again")
         elif st == "in_progress" and seen.get(k) != "in_progress":
             if resuming:
                 warnings.append(f"{k} was started after the retire was approved; it is closed as approved, so tell its assignee")

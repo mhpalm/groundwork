@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed (twelfth review): after a retire's status intent, an item finished at the proposal that is open again (reopened, or a missing item found again) is left open with a warning, so the resume can finish instead of asking to propose again, which the gate refuses.
+
 - Fixed (eleventh review): a retire resume is verified against the last manifest before its status intent (`check_hashes.retire_basis_of`), so its own closes and missing records no longer make the approved set unrebuildable. After the status intent, `retire.py recheck` reports a new person child or a newly started item as a warning instead of asking to propose again, which the gate would refuse. A revise resume accepts the relinks and clears its own write list already landed. A found-again item closed with Groundwork's label is recorded `closed`, not `finished`. An item a person reopened after Groundwork closed it is left open and named in the retire proposal, never listed as a close that won't happen.
 
 - Fixed (tenth review): retire keeps a close reason the manifest already records, so a retire never stops after its status intent on a reason mismatch. A found-again item gets a close intent before its transition, so a crash after the transition still reads as Groundwork's close.
