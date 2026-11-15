@@ -47,7 +47,7 @@ def task_body(plan, overlay, t):
     ins = t["instructions"]
     tasks = {x["id"]: x for x in plan["tasks"]}
     lines = [OWNED_START, f"**Purpose.** {ins['purpose']}", ""]
-    lines.append(f"**Role:** {role_name(overlay, t['role_key'])} · **Estimate:** {t['estimate_hours']} h · **Points:** 1 · **Phase:** {t['phase']}")
+    lines.append(f"**Type:** {t['work_type'].capitalize()} · **Role:** {role_name(overlay, t['role_key'])} · **Estimate:** {t['estimate_hours']} h · **Points:** 1 · **Phase:** {t['phase']}")
     if t["depends_on"]:
         lines.append("**Depends on:** " + ", ".join(f"{d['task']} ({tasks[d['task']]['title'] if d['task'] in tasks else '?'}, when {d['satisfied_by']})" for d in t["depends_on"]))
     if t["waits_on"]:
@@ -82,15 +82,26 @@ def task_body(plan, overlay, t):
     return "\n".join(lines)
 
 
+def release_name(plan, phase):
+    """The tracker release container for a phase (a Jira fix version, a GitHub milestone). Stable for the phase."""
+    return f"{plan['epic']['title']} {phase['id']} {phase['name']}"[:255]
+
+
 def write_list(plan, overlay, offer):
     """The numbered write list for the offered phases. Hashing it binds approval to exactly these writes."""
     tr = overlay["skills"]["tracker"]
     target = f"{tr['skill'].replace('groundwork-tracker-', '')}:{tr['instance']['id']}:{tr['instance']['project']}"
     writes = [{"kind": "lock_claim", "on": "epic"}]
-    for pid in [p["id"] for p in sorted(plan["phases"], key=lambda p: p["order"]) if p["id"] in offer]:
+    for phase in [p for p in sorted(plan["phases"], key=lambda p: p["order"]) if p["id"] in offer]:
+        pid = phase["id"]
+        release = release_name(plan, phase)
+        writes.append({"kind": "ensure_release", "phase": pid, "name": release,
+                       "how": tr.get("field_map", {}).get("phase_release", "label")})
         tids = [t["id"] for t in sorted(plan["tasks"], key=lambda t: t["order"]) if t["phase"] == pid]
         for tid in tids:
-            writes.append({"kind": "create_item", "key": f"gw:{plan['id']}:{tid}", "phase": pid, "not_ready": True})
+            t = next(x for x in plan["tasks"] if x["id"] == tid)
+            writes.append({"kind": "create_item", "key": f"gw:{plan['id']}:{tid}", "phase": pid, "not_ready": True,
+                           "work_type": t["work_type"], "release": release})
         for tid in tids:
             t = next(x for x in plan["tasks"] if x["id"] == tid)
             writes.append({"kind": "link_parent", "key": t["key"], "to": plan["epic"]["key"],

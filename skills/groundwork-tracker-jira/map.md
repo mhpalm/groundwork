@@ -4,7 +4,8 @@
 | --- | --- |
 | title | `summary` |
 | key | Key label (or the mapped key field) and the full key at the end of the owned description |
-| phase | Label `gw-phase-<phase id>` |
+| work_type | Issue type `field_map.work_types.story` or `.task` (default Story and Task) |
+| phase | Label `gw-phase-<phase id>`, and the fix version named by the write list's `ensure_release` when `field_map.phase_release` is `version` |
 | role | Label `gw-role-<role key>` |
 | kind | Label `gw-kind-<kind>` |
 | points | `field_map.points` field, always 1 |

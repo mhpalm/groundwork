@@ -3,7 +3,7 @@ schema_version: "1.0"
 overlay_format: "1.0"
 id: example-org
 version: 1
-hash: "7a950008121621b1c1dc858e1a1d8882be04deb36734a5023da58ef6f87c83da"
+hash: c28ad7e4e0fa8ab7b2ec5c536f2cb409e8b6b961e7315a8b0af01c0c2fac6736
 org_name: Example Org
 admins:
   - account_id: acct-program-director
@@ -46,6 +46,10 @@ skills:
       depends_on: Blocks
       not_ready: label
       role: label
+      work_types:
+        story: Story
+        task: Task
+      phase_release: version
 working_day_hours: 6
 assumed_executor: junior_no_context
 roles:

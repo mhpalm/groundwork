@@ -18,7 +18,8 @@ The epic and its children as plan-shaped data, every summary, description and co
 
 | Write | Call |
 | --- | --- |
-| create item | `POST /rest/api/3/issue` with `summary`, ADF `description`, `labels` (key, phase, role, kind, not-ready), points field, `timetracking`, and `parent` when `task_to_epic` is parent: key and not-ready in the same call |
+| ensure release | `GET /rest/api/3/project/{project}/versions`; if no version has exactly the write's `name`, `POST /rest/api/3/version` with `name` and `projectId` (verify). Never rename, release or delete a version: releasing it is the team's act |
+| create item | `POST /rest/api/3/issue` with `issuetype` from `work_type`, `fixVersions` set to the write's `release` when `phase_release` is `version` (verify), `summary`, ADF `description`, `labels` (key, phase, role, kind, not-ready), points field, `timetracking`, and `parent` when `task_to_epic` is parent: key and not-ready in the same call |
 | update owned fields | Replace only the owned section of the description, keeping all other content |
 | link dependency | `POST /rest/api/3/issueLink` with type Blocks, `inwardIssue` the task, `outwardIssue` the dependency |
 | comment | `POST /rest/api/3/issue/{key}/comment` |

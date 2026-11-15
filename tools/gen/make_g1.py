@@ -8,6 +8,7 @@ scripts, exactly as a real run would.
 """
 import json
 import os
+import shutil
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -41,7 +42,8 @@ overlay = {
             "skill": "groundwork-tracker-jira", "version": ">=1.0.0 <2.0.0",
             "instance": {"id": "main", "url": "https://example-org.atlassian.net", "project": "VOL"},
             "field_map": {"key": {"slot": "label"}, "points": "Story Points", "hours": "Original Estimate",
-                          "phase": "label", "blocked": "Flagged", "depends_on": "Blocks", "not_ready": "label", "role": "label"},
+                          "phase": "label", "blocked": "Flagged", "depends_on": "Blocks", "not_ready": "label", "role": "label",
+                          "work_types": {"story": "Story", "task": "Task"}, "phase_release": "version"},
         },
     },
     "working_day_hours": 6, "assumed_executor": "junior_no_context",
@@ -125,7 +127,7 @@ ev("gh-0013", "file", f"{R}:src/db/signups.ts@main", "read src/db/signups.ts",
    {"function": "getSignups(eventId)", "returns": "Signup", "fields": ["firstName", "lastName", "email", "shiftName", "createdAt"]})
 ev("gh-0014", "seed", f"{R}:seed", "read seed script structure (counts only)", {"events": [{"id": 1, "signups": 3}, {"id": 2, "signups": 0}]}, sensitivity="count")
 ev("jira-0001", "project", "VOL", "read Jira project configuration",
-   {"issue_types": ["Epic", "Task"], "labels": True, "story_points_on": ["Task"], "link_types": ["Blocks"], "flagged_field": True},
+   {"issue_types": ["Epic", "Story", "Task"], "labels": True, "story_points_on": ["Task"], "link_types": ["Blocks"], "flagged_field": True},
    sensitivity="config", system="jira", inst="main", skill=JSKILL)
 E = {k: v["id"] for k, v in EV.items()}
 
@@ -137,7 +139,8 @@ def step(text, refs=(), from_ev=None):
 def task(tid, order, title, kind, role, hours, steps, ac, verify, done, vr_type, vr_text, purpose, prereq=(),
          depends=(), waits=(), access=(), evrefs=(), produces=(), group=None, prod=False, data=False, tests=(), rollback=None, pattern=None):
     return {
-        "id": tid, "order": order, "key": f"gw:{PLAN_ID}:{tid}", "phase": tid.split("-")[0], "title": title, "kind": kind,
+        "id": tid, "order": order, "key": f"gw:{PLAN_ID}:{tid}", "phase": tid.split("-")[0], "title": title,
+        "work_type": "story" if kind == "build" else "task", "kind": kind,
         "role_key": role, "points": 1, "estimate_hours": hours, "parallel_group": group,
         "depends_on": [{"task": t, "satisfied_by": s} for t, s in depends],
         "waits_on": [{"what": w, "kind": k, "owner_role_key": o} for w, k, o in waits],
@@ -452,6 +455,8 @@ def make_g7(ov):
         with open(os.path.join(out, "evidence", f"{label}.json"), "w") as f:
             json.dump(item, f, indent=2)
             f.write("\n")
+    os.makedirs(os.path.join(out, "expected"), exist_ok=True)
+    shutil.copy(os.path.join(OUT, "expected", "plan.json"), os.path.join(out, "expected", "plan.json"))
     with open(os.path.join(out, "request.md"), "w") as f:
         f.write("Create project: let coordinators download an event's sign-ups as a CSV.\n")
     a = open(os.path.join(OUT, "assertions.yaml")).read()

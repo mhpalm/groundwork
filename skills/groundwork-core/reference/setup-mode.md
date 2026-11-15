@@ -14,7 +14,7 @@ A skill cannot run at install time on any surface, so "first use" means the firs
 | 3 | **Inspect.** Tracker `discover_config`; each system's structural inventory (repos, environments, objects; never records) | Runner | None |
 | 4 | **Field readiness pass.** Compare each skill's `readiness` against what was found. For each gap, a card with three choices: map to an existing field (candidates listed), use the skill's declared fallback, or create it | Runner proposes, admin decides | None yet |
 | 5 | **Propose expectations.** Each system skill's `expectations` (for example, "default branch is protected", "CI check required"), with what inspection found for each | Runner proposes, admin decides | None yet |
-| 6 | **Propose the rest.** Day length, executor, roles, hierarchy (from the tracker's item types), gates and approver account ids, naming (patterns from existing titles, which are untrusted and shown only as suggestions) | Runner proposes, admin decides | None yet |
+| 6 | **Propose the rest.** Day length, executor, roles, hierarchy (from the tracker's item types, including which item type a story and a task become, and how phases are released: a version, a milestone or a label), gates and approver account ids, naming (patterns from existing titles, which are untrusted and shown only as suggestions) | Runner proposes, admin decides | None yet |
 | 7 | **Write.** Show the numbered write list: overlay files and where they go, plus any field or label to create through the tracker's `configure`. Hold it for the admin. On approval, write, run `validate_overlay.py`, record an overlay approval record, and package a ZIP | Admin approves; created fields use the admin's access | Held writes only |
 | 8 | **Show where things live.** A table of each overlay piece, its file and key, and who changes it | Runner | None |
 
@@ -56,6 +56,8 @@ skills:
       blocked: "Flagged"
       depends_on: "Blocks"
       not_ready: label
+      work_types: {story: Story, task: Task}   # tracker item type per work_type
+      phase_release: version         # version (Jira fix version) | milestone (GitHub) | label
 working_day_hours: 6                 # default 6; allowed 1 to 8
 assumed_executor: junior_no_context   # enum, see below
 roles:                               # generic key -> org name

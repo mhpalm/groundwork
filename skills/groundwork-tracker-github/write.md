@@ -18,7 +18,8 @@ The epic issue and its children as plan-shaped data. Every title, body, comment 
 
 | Write | Call |
 | --- | --- |
-| create item | `gh issue create --repo {owner}/{repo} --title ... --body-file <rendered body> --label "<key label>,gw-phase:..,gw-role:..,gw-kind:..,<not_ready label>"`: key and not-ready in the same call |
+| ensure release | `GET repos/{owner}/{repo}/milestones?state=all`; if no milestone has exactly the write's `name` as its title, `POST repos/{owner}/{repo}/milestones` with `title`. Never rename, close or delete a milestone |
+| create item | `gh issue create --repo {owner}/{repo} --title ... --body-file <rendered body> --label "<key label>,gw-phase:..,gw-role:..,gw-kind:..,<not_ready label>"`, plus `--milestone "<release>"` when `phase_release` is `milestone` and the issue type (or a `gw-type:` label) from `work_type`: key and not-ready in the same call |
 | update owned fields | Replace only the owned section of the body, keeping everything outside the markers |
 | link parent | `POST repos/{owner}/{repo}/issues/{epic}/sub_issues` with the child's issue id |
 | link dependency | `POST repos/{owner}/{repo}/issues/{n}/dependencies/blocked_by` with the blocking issue id |

@@ -126,6 +126,12 @@
           "type": "string",
           "minLength": 1
         },
+        "work_type": {
+          "enum": [
+            "story",
+            "task"
+          ]
+        },
         "kind": {
           "enum": [
             "setup",
@@ -491,6 +497,7 @@
         "key",
         "phase",
         "title",
+        "work_type",
         "kind",
         "role_key",
         "points",

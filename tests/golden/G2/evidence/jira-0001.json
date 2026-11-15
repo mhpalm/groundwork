@@ -17,6 +17,7 @@
   "facts": {
     "issue_types": [
       "Epic",
+      "Story",
       "Task"
     ],
     "labels": true,
@@ -30,5 +31,5 @@
   },
   "untrusted_text": [],
   "sensitivity": "config",
-  "hash": "134e111685b0d1c16d913e88f57696d3b9eb609bc853758682ec699bc2aa2f28"
+  "hash": "20e041e3a630e274053c80e203df0c3cc1892417fde28e6b5ed37ebffadd1799"
 }

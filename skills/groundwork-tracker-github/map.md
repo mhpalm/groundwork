@@ -4,7 +4,8 @@
 | --- | --- |
 | title | Issue title |
 | key | Key label `gw:<last 10 of plan id>:<task id>` (and the full key at the end of the owned body) |
-| phase | Label `gw-phase:<phase id>` |
+| work_type | The org's issue type named in `field_map.work_types` when the org has issue types, else label `gw-type:<work_type>` |
+| phase | Label `gw-phase:<phase id>`, and the milestone named by the write list's `ensure_release` when `field_map.phase_release` is `milestone` |
 | role | Label `gw-role:<role key>` |
 | kind | Label `gw-kind:<kind>` |
 | points | `field_map.points` Projects field, else label `points:1` |

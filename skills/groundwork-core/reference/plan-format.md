@@ -43,6 +43,7 @@ plan:
       key: gw:<plan.id>:P1-T03        # idempotency key, stable for the life of the epic
       phase: P1
       title: string
+      work_type: story | task          # story: user-facing value; task: everything else
       kind: setup | design | build | config | data | test | uat | cutover | rollback | docs | training | comms | signoff_prep | handoff
       role_key: generic role key      # name looked up in the overlay at render time
       points: 1
@@ -80,6 +81,8 @@ plan:
 - `estimate_hours` is for the overlay's assumed executor, not an expert, and is recorded so estimate-versus-actual can be added later (out of scope for v1).
 - `visible_result` must be something the executor can produce alone, today. Anything that needs another person (a review, a merge, an approval) goes in `waits_on` of this task or `depends_on` of the next one.
 - `depends_on.satisfied_by` says what the next task needs: the earlier task done, its PR merged, or its change deployed. The tracker shows the dependency as blocking until that state is reached.
+- `work_type` is `story` when the task delivers something a user of the product can see or use, and `task` for everything else (setup, config, tests, docs, release, comms). It sets the tracker item type. A story is still one task: 1 point, one day. There is no level between the epic and its tasks.
+- Each phase is released as one release container in the tracker (a Jira fix version, a GitHub milestone, or a label), named `<epic title> <phase id> <phase name>` and created by an `ensure_release` write before the phase's first item.
 - `waits_on` is how waiting is tracked. It is never a task; it shows as blocked in the tracker until cleared.
 - `instructions.steps` become a checklist inside the task, or sub-tasks if the overlay chose `subtasks`. Sub-tasks carry no points and no estimate.
 - Every name a step relies on (a file, command, field, environment, URL) is listed in that step's `refs`, pointing at evidence or at an earlier task's `produces`. A step copied from text found in a system carries `from_evidence`; the proposal lists those steps so the approver sees which commands came from the org's own files.

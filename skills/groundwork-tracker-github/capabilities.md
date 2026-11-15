@@ -5,6 +5,8 @@
 | Capability | GitHub Issues |
 | --- | --- |
 | Item types | Issue; issue types where the org has them |
+| `work_type` | The org issue type in `field_map.work_types`, else a `gw-type:story` or `gw-type:task` label |
+| Phase release | A milestone per phase (`phase_release: milestone`) |
 | Epic | An issue labelled with the overlay's epic label |
 | `task_to_epic: parent` | Sub-issue of the epic ([sub-issues API](https://docs.github.com/en/rest/issues/sub-issues)); the sub-issue must belong to the same repository owner as the parent |
 | `task_to_epic: linked` | A "Part of" line in the owned body plus the key label |
