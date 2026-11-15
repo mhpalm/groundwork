@@ -209,6 +209,22 @@ class ClosedNotDone(unittest.TestCase):
         self.assertEqual(len(d["close_items"]), len(d["close"]))
         self.assertTrue(all(c["reason"] == "not_planned" for c in d["close_items"]))
 
+    def test_removing_an_unwritten_task_drops_it_and_closes_nothing(self):
+        """Review finding 2: a close entry for an item that was never written would stop create halfway."""
+        base, new, tracker, ov = self.revise()
+        written = {i["key"] for i in tracker}
+        unwritten = next(t for t in base["tasks"] if t["key"] not in written)
+        n2 = copy.deepcopy(new)
+        n2["tasks"] = [t for t in n2["tasks"] if t["id"] != unwritten["id"]]
+        for t in n2["tasks"]:
+            t["depends_on"] = [x for x in t["depends_on"] if x["task"] != unwritten["id"]]
+        for ph in n2["phases"]:
+            ph["task_ids"] = [x for x in ph["task_ids"] if x != unwritten["id"]]
+        d = revise_diff.diff(base, n2, tracker, ov)
+        self.assertIn(unwritten["id"], d["dropped"])
+        self.assertNotIn(unwritten["key"], [c["key"] for c in d["close_items"]])
+        self.assertTrue(all(c["key"] in written for c in d["close_items"]))
+
 
 class ReadScope(unittest.TestCase):
     def test_limit_is_200_and_can_only_be_lowered(self):
@@ -220,6 +236,81 @@ class ReadScope(unittest.TestCase):
         ov["skills"]["tracker"]["read_scope_limit"] = 50
         self.assertFalse(create_steps.scope_decision(51, ov)["ok"])
         self.assertEqual(create_steps.scope_decision(5, ov, requested=20)["limit"], 20)
+
+
+
+class ApprovedEdits(unittest.TestCase):
+    """Review finding 3: an approved edit to a written task is written; an unapproved difference stops."""
+
+    def edited(self):
+        tr, plan, ov = created()
+        new = copy.deepcopy(plan)
+        new["version"] += 1
+        t = next(x for x in new["tasks"] if x["id"] == "P1-T02")
+        t["title"] = t["title"] + " (with an empty-file check)"
+        return tr, new, ov, t
+
+    def changed_keys(self, tr, new, ov):
+        """Every key whose rendered text moved (a dependent's body names its dependency's title)."""
+        m = {i["key"]: i["owned_hash"] for i in latest_manifest(tr, new["id"])["items"]}
+        return [p["key"] for p in fake_planned(new, ov) if p["key"] in m and m[p["key"]] != p["owned_hash"]]
+
+    def test_write_list_binds_the_update_in_its_phase(self):
+        _tr, new, ov, t = self.edited()
+        wl = render_proposal.write_list(new, ov, ["P1"], edits=["P1-T02"])
+        ups = [w for w in wl["writes"] if w["kind"] == "update_item"]
+        self.assertEqual([(w["key"], w["scope"]) for w in ups], [(t["key"], "phase:P1")])
+        self.assertEqual(len(ups[0]["owned_hash"]), 64)
+        with self.assertRaises(ValueError):
+            render_proposal.write_list(new, ov, ["P0"], edits=["P1-T02"])
+
+    def test_approved_edit_reaches_the_tracker_and_the_manifest(self):
+        tr, new, ov, t = self.edited()
+        ups = self.changed_keys(tr, new, ov)
+        self.assertGreater(len(ups), 1)  # the edit moved a dependent's body too
+        pf = run_create(tr, new, ov, PH, run="run-2", updates=ups)
+        self.assertTrue(pf["ok"], pf)
+        self.assertIn("update", [a["action"] for a in pf["actions"] if a["key"] == t["key"]])
+        self.assertEqual(by_task(tr, "P1-T02")["title"], t["title"])
+        planned = next(p for p in fake_planned(new, ov) if p["key"] == t["key"])
+        w = next(i for i in latest_manifest(tr, new["id"])["items"] if i["key"] == t["key"])
+        self.assertEqual(w["owned_hash"], planned["owned_hash"])
+        again = run_create(tr, new, ov, PH, run="run-3", updates=ups)
+        self.assertEqual([a["action"] for a in again["actions"] if a["key"] == t["key"]], ["skip"])
+
+    def test_a_difference_the_write_list_does_not_name_stops(self):
+        tr, new, ov, t = self.edited()
+        before = by_task(tr, "P1-T02")["title"]
+        pf = run_create(tr, new, ov, PH, run="run-2")
+        self.assertFalse(pf["ok"])
+        self.assertIn("no update for it", pf["stops"][0]["why"])
+        self.assertEqual(by_task(tr, "P1-T02")["title"], before)
+
+    def test_crash_between_update_and_manifest_is_adopted_on_resume(self):
+        tr, new, ov, t = self.edited()
+        ups = self.changed_keys(tr, new, ov)
+        self.assertEqual(run_create(tr, new, ov, PH, run="run-2", updates=ups, crash_after_update=True)["crashed"],
+                         "update")
+        pf = run_create(tr, new, ov, PH, run="run-2", updates=ups)
+        self.assertTrue(pf["ok"], pf)
+        self.assertIn("adopt_update", [a["action"] for a in pf["actions"] if a["key"] == t["key"]])
+        # without the approval, the same tracker text is drift
+        pf2 = run_create(tr, new, ov, PH, run="run-4")
+        self.assertTrue(pf2["ok"], pf2)  # the manifest now records the new text, so nothing differs
+
+    def test_an_approved_update_never_overwrites_a_persons_edit(self):
+        tr, new, ov, t = self.edited()
+        ups = self.changed_keys(tr, new, ov)
+        by_task(tr, "P1-T02")["title"] = "A person's own wording"
+        pf = run_create(tr, new, ov, PH, run="run-2", updates=ups)
+        self.assertFalse(pf["ok"])
+        self.assertTrue(any(s["key"] == t["key"] and "drift" in s["why"] for s in pf["stops"]), pf["stops"])
+        self.assertEqual(by_task(tr, "P1-T02")["title"], "A person's own wording")
+
+
+def fake_planned(plan, ov):
+    from fake_tracker import planned_items
+    return planned_items(plan, ov, PH)
 
 
 if __name__ == "__main__":

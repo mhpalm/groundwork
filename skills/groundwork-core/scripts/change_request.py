@@ -239,15 +239,44 @@ def render(a):
     return "\n".join(out)
 
 
+KIND_OUTCOME = {"revision": "added", "later": "later", "own_epic": "own_epic", "decline": "declined"}
+
+
 def decide(latest, cr_id, outcome, reason, plan_version, proposal_hash):
-    """The log entry create writes once the proposal is verified; decided_by names the proposal."""
+    """The log entry create writes once the proposal is verified; decided_by names the proposal.
+    Deciding again with the same outcome, reason and decided_by is the resume of that same set:
+    it returns the log unchanged with already=True. Any other second decision is refused."""
     if outcome not in OUTCOMES:
         raise ValueError(f"outcome is one of {', '.join(OUTCOMES)}")
     e = copy.deepcopy(entry_of(latest, cr_id))
+    by = {"plan_version": plan_version, "proposal_hash": proposal_hash}
     if e["outcome"] != "pending":
+        if (e["outcome"], e["reason"], e["decided_by"]) == (outcome, reason, by):
+            return latest, dict(e, already=True)
         raise ValueError(f"{cr_id} was already decided ({e['outcome']})")
-    e.update(outcome=outcome, reason=reason, decided_by={"plan_version": plan_version, "proposal_hash": proposal_hash})
+    e.update(outcome=outcome, reason=reason, decided_by=by)
     return next_log(latest, e), e
+
+
+def bound_entry(wl):
+    """The change-request entry a verified write list binds. Create decides from this, never from
+    values typed at create time, so the log says exactly what the approvers approved."""
+    puts = [w for w in wl.get("writes", []) if w["kind"] == "cr_log_put"]
+    if len(puts) != 1:
+        raise ValueError("the write list binds no change-request entry" if not puts else "the write list binds more than one entry")
+    e = puts[0]["entry"]
+    missing = [k for k in ("id", "outcome", "reason") if not e.get(k)]
+    if missing:
+        raise ValueError(f"the bound entry lacks {', '.join(missing)}")
+    kind = wl.get("kind") or ("revision" if wl.get("phases") else None)
+    if KIND_OUTCOME.get(kind) != e["outcome"]:
+        raise ValueError(f"a {kind} write list cannot bind outcome {e['outcome']}")
+    return e
+
+
+def decide_bound(latest, wl, proposal_hash):
+    e = bound_entry(wl)
+    return decide(latest, e["id"], e["outcome"], e["reason"], wl["plan_version"], proposal_hash)
 
 
 def log_problems(log, restricted=None):
@@ -270,22 +299,45 @@ def basis_changes(released, current, phase_id):
     return sorted(k for k in a if a[k] != b[k])
 
 
+def release_basis_problems(current, released, phase_id):
+    """Release stops when an earlier released phase's basis changed since its release (planning model 1.8).
+    released: {phase_id: the plan of record that phase was released at}."""
+    order = {p["id"]: p["order"] for p in current["phases"]}
+    if phase_id not in order:
+        raise KeyError(f"no phase {phase_id}")
+    probs = []
+    for pid, plan_then in sorted(released.items()):
+        if order.get(pid, 0) >= order[phase_id]:
+            continue
+        changed = basis_changes(plan_then, current, pid)
+        if changed:
+            probs.append(f"the basis of released phase {pid} changed since its release ({', '.join(changed)}); "
+                         "release stops: run a revise first")
+    missing = [p["id"] for p in current["phases"] if p["state"] == "released" and p["order"] < order[phase_id]
+               and p["id"] not in released]
+    probs += [f"no plan of record given for released phase {pid}; the basis check can't run" for pid in missing]
+    return probs
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["allocate", "base", "assess", "decide", "basis"])
+    ap.add_argument("cmd", choices=["allocate", "base", "assess", "decide", "basis", "release-check"])
+    ap.add_argument("--released", nargs="*", default=[], help="release-check: PHASE=PLAN_AT_RELEASE.json for each released phase")
     ap.add_argument("files", nargs="*")
     for a in ("--plan-id", "--restatement", "--source", "--origin", "--derived-from", "--cost", "--approved-unwritten",
-              "--outcome", "--reason", "--proposal-hash", "--phase"):
+              "--proposal-hash", "--phase", "--write-list", "--restricted"):
         ap.add_argument(a)
     ap.add_argument("--plan-version", type=int)
     ap.add_argument("--manifest-seq", type=int)
     a = ap.parse_args(argv)
     J = lambda p: json.load(open(p, encoding="utf-8"))
+    restricted = lambda a: J(a.restricted) if a.restricted else None
     split = lambda s: [x.strip() for x in (s or "").split(",") if x.strip()]
     if a.cmd == "allocate":
         latest = J(a.files[0]) if a.files[0] != "-" else empty_log(a.plan_id)
         log, entry = allocate(latest, a.restatement, a.source, a.origin, a.plan_version, a.manifest_seq, split(a.derived_from))
-        out = {"log": log, "entry": entry, "similar_declined": similar_declined(latest, entry["restatement"])}
+        out = {"log": log, "entry": entry, "similar_declined": similar_declined(latest, entry["restatement"]),
+               "problems": log_problems(log, restricted(a))}
     elif a.cmd == "base":
         probs = base_problems(entry_of(J(a.files[0]), a.files[1]), a.plan_version, a.manifest_seq)
         out = {"ok": not probs, "problems": probs}
@@ -293,8 +345,15 @@ def main(argv=None):
         res = assess(J(a.files[0]), J(a.files[1]), J(a.files[2]), a.files[3], a.cost, split(a.approved_unwritten))
         out = {"assessment": res, "markdown": render(res)}
     elif a.cmd == "decide":
-        log, entry = decide(J(a.files[0]), a.files[1], a.outcome, a.reason, a.plan_version, a.proposal_hash)
-        out = {"log": log, "entry": entry, "problems": log_problems(log)}
+        if not a.write_list:
+            print(json.dumps({"ok": False, "problems": ["--write-list required: the outcome comes from the verified write list"]}))
+            return 1
+        log, entry = decide_bound(J(a.files[0]), J(a.write_list), a.proposal_hash)
+        out = {"log": log, "entry": entry, "problems": log_problems(log, restricted(a))}
+    elif a.cmd == "release-check":
+        rel = {x.split("=", 1)[0]: J(x.split("=", 1)[1]) for x in a.released}
+        probs = release_basis_problems(J(a.files[0]), rel, a.phase)
+        out = {"ok": not probs, "problems": probs}
     else:
         out = {"phase": a.phase, "changed": basis_changes(J(a.files[0]), J(a.files[1]), a.phase)}
     print(json.dumps(out, indent=2, ensure_ascii=False))

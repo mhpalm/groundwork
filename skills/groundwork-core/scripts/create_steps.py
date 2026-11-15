@@ -101,8 +101,14 @@ def lock_decision(comments, run, account, now):
             "post": lock_line("release", run, account, now), "then": "post the release if you posted a claim, then stop"}
 
 
-def preflight(planned, found, manifest, phases):
-    """Decide create | skip | adopt | link_parent | stop per planned item (spec section 8 table)."""
+def preflight(planned, found, manifest, phases, approved_updates=()):
+    """Decide create | skip | adopt | update | adopt_update | link_parent | stop per planned item (spec section 8 table).
+
+    approved_updates: the keys the verified write list updates (its update_item writes). A written
+    item whose planned text differs from what the manifest recorded is updated only when the write
+    list names it; otherwise create stops, so an approved edit is never skipped silently and an
+    unapproved one is never written."""
+    approved_updates = set(approved_updates)
     written = {i["key"]: i for i in (manifest or {}).get("items", [])}
     found_by_key = {}
     dupes = set()
@@ -154,8 +160,18 @@ def preflight(planned, found, manifest, phases):
                 report("stop", "an item with this key exists that Groundwork never recorded and it differs from the plan: drift")
                 continue
         elif f["owned_hash"] != w["owned_hash"]:
-            report("stop", "a person changed a plan-owned field since it was written: drift")
-            continue
+            if in_scope and key in approved_updates and f["owned_hash"] == p["owned_hash"]:
+                # the approved update reached the tracker, but the session ended before the manifest
+                actions.append({"key": key, "action": "adopt_update", "tracker_id": f["tracker_id"]})
+            else:
+                report("stop", "a person changed a plan-owned field since it was written: drift")
+                continue
+        elif in_scope and p["owned_hash"] != w["owned_hash"]:
+            if key not in approved_updates:
+                report("stop", "the plan's text for this task differs from what was written, and the approved write "
+                               "list has no update for it; revise and approve the change")
+                continue
+            actions.append({"key": key, "action": "update", "tracker_id": f["tracker_id"]})
         elif in_scope:
             actions.append({"key": key, "action": "skip", "tracker_id": f["tracker_id"]})
         if in_scope and p.get("waits") and not (w or {}).get("blocked_set"):
@@ -277,7 +293,15 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_K
     manifest can never drop a recorded or intended status file."""
     m = {"schema_version": "1.0", "plan_id": plan_id, "seq": seq, "prev_hash": prev["hash"] if prev else None,
          "written_at": fmt(now), "run_id": run, "relies_on": relies_on, "items": items}
-    sf = (prev or {}).get("status_file") if status_file is _KEEP else status_file
+    prior = (prev or {}).get("status_file")
+    sf = prior if status_file is _KEEP else status_file
+    if prior is not None and status_file is not _KEEP:
+        same = lambda x: {k: v for k, v in (x or {}).items() if k != "state"}
+        if sf is None or same(prior) != same(sf):
+            raise ValueError("the status_file differs from the one the previous manifest names; "
+                             "only its state may move from intent to recorded")
+        if prior["state"] == "recorded" and sf["state"] != "recorded":
+            raise ValueError("a recorded status file never goes back to intent")
     if sf is not None:
         m["status_file"] = sf
     if prev and seq != prev["seq"] + 1:
@@ -301,12 +325,19 @@ def main(argv=None):
     ap.add_argument("--plan-id")
     ap.add_argument("--seq", type=int)
     ap.add_argument("--relies-on")
+    ap.add_argument("--write-list", help="preflight: the verified write list (its update_item writes)")
+    ap.add_argument("--status-file", help="manifest: the retire status_file entry to set (JSON, from retire.py status "
+                                         "or with state recorded); omitted, it is carried forward from the previous manifest")
     a = ap.parse_args(argv)
     J = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
     if a.cmd == "lock":
         out = lock_decision(J(a.files[0]), a.run, a.account, ts(a.now))
     elif a.cmd == "preflight":
-        out = preflight(J(a.files[0]), J(a.files[1]), J(a.files[2]), [x.strip() for x in a.phases.split(",")])
+        if not a.write_list:
+            print(json.dumps({"ok": False, "problems": ["--write-list required: preflight updates only what it approves"]}))
+            return 1
+        ups = [w["key"] for w in J(a.write_list)["writes"] if w["kind"] == "update_item"]
+        out = preflight(J(a.files[0]), J(a.files[1]), J(a.files[2]), [x.strip() for x in a.phases.split(",")], ups)
     elif a.cmd == "status":
         import gw_yaml
         fm = gw_yaml.load(a.overlay)["skills"]["tracker"]["field_map"]
@@ -320,7 +351,13 @@ def main(argv=None):
         import gw_yaml
         out = scope_decision(int(a.files[0]), gw_yaml.load(a.overlay), a.limit)
     else:
-        out = make_manifest(J(a.files[0]), J(a.files[1]), a.plan_id, a.run, a.seq, ts(a.now), J(a.relies_on) if a.relies_on else [])
+        try:
+            out = make_manifest(J(a.files[0]), J(a.files[1]), a.plan_id, a.run, a.seq, ts(a.now),
+                                J(a.relies_on) if a.relies_on else [],
+                                status_file=J(a.status_file) if a.status_file else _KEEP)
+        except ValueError as e:
+            print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
+            return 1
     print(json.dumps(out, indent=2))
     return 0 if out.get("ok", True) and out.get("decision") not in ("lost",) else 1
 

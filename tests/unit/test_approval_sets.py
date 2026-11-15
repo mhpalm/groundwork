@@ -59,9 +59,9 @@ def phase_case(plan, overlay, phases=("P1",)):
 
 
 def decline_case(plan, overlay, items=()):
-    wl = render_proposal.plan_write_list(plan, overlay, "decline", cr_entry={"id": "CR-1", "decision": "declined"})
-    ctx = render_proposal.proposal_context(plan, "decline", "Decline CR-1: it is outside the brief's scope.",
-                                           items=items)
+    wl = render_proposal.plan_write_list(plan, overlay, "decline", cr_entry={"id": "CR-1", "outcome": "declined",
+                                                                                "reason": "Outside the brief's scope"})
+    ctx = render_proposal.proposal_context(plan, "decline", DECLINE_SUMMARY, items=items)
     return wl, ctx, render_proposal.plan_level_proposal(plan, overlay, wl, ctx)
 
 
@@ -70,8 +70,24 @@ def phases_ok(plan, overlay, anchor, comments, prop, wl, review, phases=("P1",),
                                          info, latest)
 
 
-def plan_ok(plan, overlay, anchor, comments, prop, wl, review, latest=None, info=None):
-    return check_hashes.verify_plan_level(plan, overlay, anchor, comments, prop, wl, review, NOW, False, info, latest)
+DECLINE_SUMMARY = "Decline CR-1: it is outside the brief's scope."
+
+
+def dbundle(plan, wl, items=()):
+    """The closes-and-decisions bundle a decline's review is made from."""
+    ctx = render_proposal.proposal_context(plan, wl["kind"], DECLINE_SUMMARY, items=items)
+    from gw_hash import plan_level_bundle
+    return plan_level_bundle(plan, wl, ctx, check_hashes.CHECKLIST_VERSION, [])
+
+
+def drev(plan, wl):
+    from gw_hash import view_hash
+    return {"view_hash": view_hash(dbundle(plan, wl)), "findings": []}
+
+
+def plan_ok(plan, overlay, anchor, comments, prop, wl, review, latest=None, info=None, state=None):
+    return check_hashes.verify_plan_level(plan, overlay, anchor, comments, prop, wl, review, NOW, False, info, latest,
+                                          state, dbundle(plan, wl))
 
 
 class Grouping(unittest.TestCase):
@@ -80,7 +96,7 @@ class Grouping(unittest.TestCase):
         self.wl, self.prop = phase_case(self.plan, self.ov)
         self.dwl, self.ctx, self.dprop = decline_case(self.plan, self.ov)
         self.phase_rec = comment(record(self.plan, self.prop, self.wl, self.rev, ["P1"]))
-        self.decline_rec = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level",
+        self.decline_rec = comment(record(self.plan, self.dprop, self.dwl, drev(self.plan, self.dwl), [], kind="decline", scope="plan_level",
                                           rid="A-2"))
 
     def test_decline_and_pending_phase_set_at_one_version_both_pass(self):
@@ -90,7 +106,7 @@ class Grouping(unittest.TestCase):
         self.assertTrue(ok, probs)
         self.assertEqual(acc, ["P1"])
         self.assertTrue(any("another proposal" in i for i in info))
-        ok, probs, kind = plan_ok(self.plan, self.ov, self.anchor, comments, self.dprop, self.dwl, self.rev)
+        ok, probs, kind = plan_ok(self.plan, self.ov, self.anchor, comments, self.dprop, self.dwl, drev(self.plan, self.dwl))
         self.assertTrue(ok, probs)
         self.assertEqual(kind, "decline")
 
@@ -120,7 +136,7 @@ class Grouping(unittest.TestCase):
         self.assertTrue(any("write_list_hash" in p for p in probs))
 
     def test_records_cannot_cross_scopes(self):
-        cross = record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", rid="A-4")  # no plan_level scope
+        cross = record(self.plan, self.dprop, self.dwl, drev(self.plan, self.dwl), [], kind="decline", rid="A-4")  # no plan_level scope
         ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [comment(cross)], self.dprop, self.dwl, self.rev)
         self.assertFalse(ok)
         wrong = record(self.plan, self.prop, self.wl, self.rev, ["P1"], kind="retire", scope="plan_level", rid="A-5")
@@ -136,8 +152,8 @@ class Versions(unittest.TestCase):
 
     def test_decline_then_revision_stored_voids_the_decline(self):
         dwl, _ctx, dprop = decline_case(self.plan, self.ov)
-        rec = comment(record(self.plan, dprop, dwl, self.rev, [], kind="decline", scope="plan_level"))
-        ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [rec], dprop, dwl, self.rev, latest=self.plan["version"] + 1)
+        rec = comment(record(self.plan, dprop, dwl, drev(self.plan, dwl), [], kind="decline", scope="plan_level"))
+        ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [rec], dprop, dwl, drev(self.plan, dwl), latest=self.plan["version"] + 1)
         self.assertFalse(ok)
         self.assertIn("is void", probs[0])
 
@@ -148,9 +164,9 @@ class Versions(unittest.TestCase):
         wl, prop = phase_case(v2, self.ov)
         dwl, _ctx, dprop = decline_case(v2, self.ov)
         recs = [comment(record(v2, prop, wl, self.rev, ["P1"])),
-                comment(record(v2, dprop, dwl, self.rev, [], kind="decline", scope="plan_level", rid="A-2"))]
+                comment(record(v2, dprop, dwl, drev(v2, dwl), [], kind="decline", scope="plan_level", rid="A-2"))]
         self.assertTrue(phases_ok(v2, self.ov, self.anchor, recs, prop, wl, self.rev, latest=v2["version"])[0])
-        self.assertTrue(plan_ok(v2, self.ov, self.anchor, recs, dprop, dwl, self.rev, latest=v2["version"])[0])
+        self.assertTrue(plan_ok(v2, self.ov, self.anchor, recs, dprop, dwl, drev(v2, dwl), latest=v2["version"])[0])
 
 
 class PlanLevel(unittest.TestCase):
@@ -159,7 +175,7 @@ class PlanLevel(unittest.TestCase):
         self.dwl, self.ctx, self.dprop = decline_case(self.plan, self.ov)
 
     def test_zero_records_is_refused(self):
-        ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [], self.dprop, self.dwl, self.rev)
+        ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [], self.dprop, self.dwl, drev(self.plan, self.dwl))
         self.assertFalse(ok)
         self.assertTrue(any("zero records" in p for p in probs))
 
@@ -168,16 +184,16 @@ class PlanLevel(unittest.TestCase):
         ov["approval_gates"].append({"id": "finance", "applies_to": "all_phases", "approvers": [{"account_id": "acct-fin", "name": "Finance"}],
                                      "min_approvers": 1})
         anchor = dict(self.anchor, gates=dict(self.anchor["gates"], finance=["acct-fin"]))
-        one = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level"))
-        ok, probs, _ = plan_ok(self.plan, ov, anchor, [one], self.dprop, self.dwl, self.rev)
+        one = comment(record(self.plan, self.dprop, self.dwl, drev(self.plan, self.dwl), [], kind="decline", scope="plan_level"))
+        ok, probs, _ = plan_ok(self.plan, ov, anchor, [one], self.dprop, self.dwl, drev(self.plan, self.dwl))
         self.assertFalse(ok)
         self.assertTrue(any("finance" in p for p in probs))
-        two = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level", gate="finance",
+        two = comment(record(self.plan, self.dprop, self.dwl, drev(self.plan, self.dwl), [], kind="decline", scope="plan_level", gate="finance",
                              who="acct-fin", rid="A-2"), who="acct-fin")
-        self.assertTrue(plan_ok(self.plan, ov, anchor, [one, two], self.dprop, self.dwl, self.rev)[0])
+        self.assertTrue(plan_ok(self.plan, ov, anchor, [one, two], self.dprop, self.dwl, drev(self.plan, self.dwl))[0])
 
     def test_records_must_agree_on_kind_and_accept_no_exception(self):
-        a = record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level")
+        a = record(self.plan, self.dprop, self.dwl, drev(self.plan, self.dwl), [], kind="decline", scope="plan_level")
         a["exceptions_accepted"] = ["X-1"]
         ok, probs, _ = plan_ok(self.plan, self.ov, self.anchor, [comment(a)], self.dprop, self.dwl, self.rev)
         self.assertFalse(ok)
@@ -186,10 +202,10 @@ class PlanLevel(unittest.TestCase):
         ov = copy.deepcopy(self.ov)
         ov["approval_gates"][0]["approvers"].append({"account_id": "acct-2", "name": "Second"})
         anchor = dict(self.anchor, gates={k: v + ["acct-2"] for k, v in self.anchor["gates"].items()})
-        a = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="decline", scope="plan_level"))
-        b = comment(record(self.plan, self.dprop, self.dwl, self.rev, [], kind="retire", scope="plan_level", who="acct-2",
+        a = comment(record(self.plan, self.dprop, self.dwl, drev(self.plan, self.dwl), [], kind="decline", scope="plan_level"))
+        b = comment(record(self.plan, self.dprop, self.dwl, drev(self.plan, self.dwl), [], kind="retire", scope="plan_level", who="acct-2",
                            rid="A-2"), who="acct-2")
-        ok, probs, kind = plan_ok(self.plan, ov, anchor, [a, b], self.dprop, self.dwl, self.rev)
+        ok, probs, kind = plan_ok(self.plan, ov, anchor, [a, b], self.dprop, self.dwl, drev(self.plan, self.dwl))
         self.assertFalse(ok)
         self.assertIsNone(kind)
         self.assertTrue(any("disagree" in p for p in probs))
@@ -261,6 +277,111 @@ class StoredInputs(unittest.TestCase):
         r = create_steps.plan_level_recheck(ctx, [{"key": "a"}, {"key": "b"}])
         self.assertFalse(r["ok"])
         self.assertEqual(r["new_items"], ["b"])
+
+
+
+class RetireGateInApprovals(unittest.TestCase):
+    """Review finding 1: approvals themselves run the retire gate, so no set writes on a retired plan."""
+
+    def setUp(self):
+        import retire
+        self.retire = retire
+        self.plan, self.ov, self.anchor, self.rev = base()
+        self.wl, self.prop = phase_case(self.plan, self.ov)
+        self.recs = [comment(record(self.plan, self.prop, self.wl, self.rev, ["P1"]))]
+        st = retire.status_record(self.plan, 1, "c" * 64, CREATED)
+        self.retired = {"manifest": {"status_file": dict(retire.status_intent(st), state="recorded")}, "status": st,
+                        "epic": "closed"}
+
+    def run_phase(self, state):
+        return check_hashes.verify_approvals(self.plan, self.ov, self.anchor, self.recs, self.prop, self.wl, self.rev,
+                                             ["P1"], NOW, False, None, self.plan["version"], state)
+
+    def test_a_pending_phase_set_is_refused_once_the_plan_is_retired(self):
+        self.assertTrue(self.run_phase({"manifest": None, "status": None, "epic": "open"})[0])
+        ok, probs, _ = self.run_phase(self.retired)
+        self.assertFalse(ok)
+        self.assertIn("retired plan", probs[0])
+
+    def test_a_closed_epic_refuses_a_phase_set(self):
+        ok, probs, _ = self.run_phase({"manifest": None, "status": None, "epic": "closed"})
+        self.assertEqual((ok, probs[0]), (False, "the epic is closed; start a new plan"))
+
+    def test_only_the_retire_set_itself_passes_a_retired_plan(self):
+        wl, ctx, prop = decline_case(self.plan, self.ov)
+        recs = [comment(record(self.plan, prop, wl, drev(self.plan, wl), [], kind="decline", scope="plan_level"))]
+        ok, probs, _ = check_hashes.verify_plan_level(self.plan, self.ov, self.anchor, recs, prop, wl, drev(self.plan, wl), NOW,
+                                                      False, None, self.plan["version"], self.retired, dbundle(self.plan, wl))
+        self.assertFalse(ok)
+        own = sha256_hex(prop.encode("utf-8"))
+        st = self.retire.status_record(self.plan, 1, own, CREATED)
+        mine = {"manifest": {"status_file": dict(self.retire.status_intent(st), state="recorded")}, "status": st,
+                "epic": "closed"}
+        ok, probs, _ = check_hashes.verify_plan_level(self.plan, self.ov, self.anchor, recs, prop, wl, drev(self.plan, wl), NOW,
+                                                      False, None, self.plan["version"], mine, dbundle(self.plan, wl))
+        self.assertTrue(ok, probs)
+
+    def test_cli_refuses_without_latest_version_and_retire_gate_inputs(self):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = check_hashes.main(["approvals", "plan.json", "--phases", "P1"])
+        self.assertEqual(rc, 1)
+        self.assertIn("--latest-version, --manifest, --status, --epic required", buf.getvalue())
+
+
+class KindBinding(unittest.TestCase):
+    """Review finding 9: the record's kind must be the write list's kind, and each kind allows only its writes."""
+
+    def test_decline_records_cannot_approve_a_retire_write_list(self):
+        plan, ov, anchor, rev = base()
+        wl, ctx, prop = decline_case(plan, ov)
+        wl = dict(wl, kind="retire")
+        recs = [comment(record(plan, prop, wl, drev(plan, wl), [], kind="decline", scope="plan_level"))]
+        ok, probs, _ = plan_ok(plan, ov, anchor, recs, prop, wl, drev(plan, wl))
+        self.assertFalse(ok)
+        self.assertTrue(any("write list is a retire" in p for p in probs), probs)
+
+    def test_a_decline_cannot_close_items_or_the_epic(self):
+        plan, ov, _a, _r = base()
+        wl, _c, _p = decline_case(plan, ov)
+        bad = copy.deepcopy(wl)
+        bad["writes"].insert(1, {"no": 99, "kind": "close_epic", "on": "epic", "scope": "plan", "target": "x"})
+        self.assertTrue(any("cannot authorize a close_epic" in p
+                            for p in check_hashes.write_list_scope_problems(bad, "plan_level", [])))
+        self.assertTrue(check_hashes.write_list_scope_problems(dict(wl, kind=None), "plan_level", []))
+
+
+class ClosesAndDecisionsReview(unittest.TestCase):
+    """Review finding 5: a set that stores no plan version binds a review of its own bundle."""
+
+    def setUp(self):
+        self.plan, self.ov, self.anchor, self.rev = base()
+        self.wl, self.ctx, self.prop = decline_case(self.plan, self.ov)
+
+    def verify(self, review, bundle):
+        recs = [comment(record(self.plan, self.prop, self.wl, review, [], kind="decline", scope="plan_level"))]
+        return check_hashes.verify_plan_level(self.plan, self.ov, self.anchor, recs, self.prop, self.wl, review, NOW, False,
+                                              None, self.plan["version"], None, bundle)
+
+    def test_the_plans_own_gap_review_does_not_cover_a_decline(self):
+        ok, probs, _ = self.verify(self.rev, dbundle(self.plan, self.wl))
+        self.assertFalse(ok)
+        self.assertIn("closes-and-decisions bundle", probs[0])
+
+    def test_a_bundle_for_other_writes_or_no_bundle_is_refused(self):
+        b = dbundle(self.plan, self.wl)
+        forged = copy.deepcopy(b)
+        forged["cr_entry"]["outcome"] = "added"
+        from gw_hash import view_hash
+        ok, probs, _ = self.verify({"view_hash": view_hash(forged), "findings": []}, forged)
+        self.assertFalse(ok)
+        self.assertTrue(any("does not match this plan and write list" in p for p in probs), probs)
+        ok, probs, _ = self.verify(drev(self.plan, self.wl), None)
+        self.assertFalse(ok)
+        self.assertTrue(any("needs its closes-and-decisions bundle" in p for p in probs))
+        self.assertTrue(self.verify(drev(self.plan, self.wl), b)[0])
 
 
 if __name__ == "__main__":

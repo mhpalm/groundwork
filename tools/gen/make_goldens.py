@@ -512,7 +512,8 @@ def g6(plan, overlay, ev):
     for s in new["standard_work"]:
         if s["kind"] == "test":
             s["tasks"].append("P1-T06")
-    # 3. The production confirmation is dropped: closed, never deleted.
+    # 3. The production confirmation is dropped. P3 was never written, so it is dropped from the
+    #    plan with nothing to close (a written task would be closed, never deleted).
     new["tasks"] = [t for t in new["tasks"] if t["id"] != "P3-T03"]
     next(p for p in new["phases"] if p["id"] == "P3")["task_ids"].remove("P3-T03")
     task_by(new, "P3-T04")["depends_on"] = [{"task": "P3-T02", "satisfied_by": "done"}]
@@ -532,7 +533,7 @@ def g6(plan, overlay, ev):
         tracker.append({"key": t["key"], "tracker_id": f"VOL-{200 + i}", "owned_hash": h,
                         "status": "done" if t["id"] in ("P0-T01", "P0-T02", "P1-T01") else "todo",
                         "updated_at": f"2026-11-1{8 if t['id'] == 'P1-T04' else 6}T10:00:00Z", "points": 1})
-    expected = {"added": ["P1-T06"], "close": ["P3-T03"], "drift": ["P1-T04"],
+    expected = {"added": ["P1-T06"], "close": [], "dropped": ["P3-T03"], "drift": ["P1-T04"],
                 "deps_changed": {"P1-T02": {"added": ["P1-T06"], "removed": []},
                                  "P3-T04": {"added": ["P3-T02"], "removed": ["P3-T03"]}},
                 "changed_include": ["P1-T05"], "changed_exclude": ["P0-T01", "P0-T02", "P1-T01", "P1-T04"], "refused": []}

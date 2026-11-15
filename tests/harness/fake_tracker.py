@@ -88,6 +88,12 @@ class FakeTracker:
         self.items[tid]["state"] = "open"
         self.items[tid]["closed_as"] = []
 
+    def update_owned(self, tid, title, body):
+        """Replace the plan-owned fields; text outside the owned markers is kept by the real trackers."""
+        self._write()
+        self.items[tid]["title"] = title
+        self.items[tid]["body"] = body
+
     def remove_epic_label(self, epic, label):
         self._write()
         self.epic_labels.setdefault(epic, set()).discard(label)
@@ -156,7 +162,8 @@ def latest_manifest(tr, plan_id):
     return copy.deepcopy(latest)
 
 
-def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic="VOL-1", hard_crash=False):
+def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic="VOL-1", hard_crash=False, updates=(),
+               crash_after_update=False):
     fm = overlay["skills"]["tracker"]["field_map"]
     """Follow the core's create procedure. Returns the preflight result."""
     decision = create_steps.lock_decision(tr.comments, run, account, tr.clock)
@@ -178,7 +185,7 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
     for f in found:
         f["status"] = create_steps.read_status(tr.raw(f["tracker_id"]), written.get(f["key"]), fm)["status"]
     pf = create_steps.preflight([{k: p[k] for k in ("key", "phase", "owned_hash", "points", "depends_on", "waits")}
-                                 for p in planned], found, manifest, phases)
+                                 for p in planned], found, manifest, phases, updates)
     if not pf["ok"]:
         tr.comment(account, create_steps.lock_line("release", run, account, tr.clock))
         return pf
@@ -209,6 +216,15 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
                                 "The points are kept; consider splitting it into one-day tasks in a revise run.")
                 items[a["key"]]["split_comment"] = True
                 pending += 1
+            elif a["action"] == "update":
+                t = p["task"]
+                tr.update_owned(a["tracker_id"], t["title"], p["body"])
+                if crash_after_update:
+                    return {"ok": False, "crashed": "update"}
+                items[a["key"]]["owned_hash"] = p["owned_hash"]
+                pending += 1
+            elif a["action"] == "adopt_update":
+                items[a["key"]]["owned_hash"] = p["owned_hash"]
             elif a["action"] == "adopt":
                 items[a["key"]] = {"key": a["key"], "tracker_id": a["tracker_id"], "owned_hash": p["owned_hash"], "links": [], "not_ready": True}
             if pending >= create_steps.BATCH:

@@ -276,5 +276,90 @@ class Gate(unittest.TestCase):
             retire.gate("create", plan, None, None, "archived")
 
 
+
+class Bundle(unittest.TestCase):
+
+    def test_the_review_bundle_carries_the_closes_and_left_open_items(self):
+        import gw_hash
+        tr, plan, ov = created()
+        rp = approve(tr, plan, ov)
+        wl = retire.write_list(plan, ov, rp)
+        ctx = {"items": [], "summary": "Retire."}
+        b = gw_hash.plan_level_bundle(plan, wl, ctx, "1.0", [])
+        self.assertEqual(b["closes"], rp["closes"])
+        self.assertEqual(b["status"]["status"], "retired")
+        fewer = copy.deepcopy(wl)
+        fewer["writes"] = [w for w in fewer["writes"] if w["kind"] != "close_item" or w["key"] != rp["closes"][0]["key"]]
+        self.assertNotEqual(gw_hash.view_hash(gw_hash.plan_level_bundle(plan, fewer, ctx, "1.0", [])), gw_hash.view_hash(b))
+
+
+class Scripts(unittest.TestCase):
+    """Review findings 4 and 6: every retire step has a script, and the proposal shows what approvers bind."""
+
+    def test_manifest_moves_intent_to_recorded_and_refuses_any_other_change(self):
+        tr, plan, ov = created()
+        m = latest_manifest(tr, plan["id"])
+        intent = retire.status_intent(retire.status_record(plan, 1, PH_HASH, AT))
+        m2 = create_steps.make_manifest(m, m["items"], plan["id"], "run-r", m["seq"] + 1, tr.clock, [], status_file=intent)
+        m3 = create_steps.make_manifest(m2, m["items"], plan["id"], "run-r", m2["seq"] + 1, tr.clock, [],
+                                        status_file=dict(intent, state="recorded"))
+        self.assertEqual(m3["status_file"]["state"], "recorded")
+        for bad in (None, dict(intent, n=2), dict(intent, hash="0" * 64), dict(intent, state="intent")):
+            with self.assertRaises(ValueError, msg=bad):
+                create_steps.make_manifest(m3, m["items"], plan["id"], "run-r", m3["seq"] + 1, tr.clock, [], status_file=bad)
+
+    def test_cli_status_manifest_rebuild_and_recheck(self):
+        import io
+        import json
+        import tempfile
+        from contextlib import redirect_stdout
+        tr, plan, ov = created()
+        d = tempfile.mkdtemp()
+        P = lambda n: os.path.join(d, n)
+
+        def run(mod, argv):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = mod.main(argv)
+            return rc, json.loads(buf.getvalue())
+
+        json.dump(plan, open(P("plan.json"), "w"))
+        rc, st = run(retire, ["status", P("plan.json"), "--n", "1", "--proposal-hash", PH_HASH, "--at", AT])
+        self.assertEqual(rc, 0)
+        json.dump(st["intent"], open(P("sf.json"), "w"))
+        m = latest_manifest(tr, plan["id"])
+        json.dump(m, open(P("m.json"), "w"))
+        json.dump(m["items"], open(P("items.json"), "w"))
+        rc, m2 = run(create_steps, ["manifest", P("m.json"), P("items.json"), "--plan-id", plan["id"], "--run", "run-r",
+                                    "--seq", str(m["seq"] + 1), "--now", AT, "--status-file", P("sf.json")])
+        self.assertEqual((rc, m2["status_file"]), (0, st["intent"]))
+        json.dump(m2, open(P("m2.json"), "w"))
+        rc, rb = run(retire, ["rebuild", plan["id"], P("m2.json")])
+        self.assertEqual((rc, rb["status_record"]), (0, st["status_record"]))
+        rp = approve(tr, plan, ov)
+        json.dump(rp, open(P("rp.json"), "w"))
+        json.dump(retire_items(tr, plan, ov, "VOL-1"), open(P("now.json"), "w"))
+        json.dump({}, open(P("ch.json"), "w"))
+        self.assertEqual(run(retire, ["recheck", P("rp.json"), P("now.json"), P("ch.json")])[0], 0)
+
+    def test_retire_proposal_lists_left_open_person_added_and_voided_sets(self):
+        import render_proposal
+        tr, plan, ov = created()
+        k = item(tr, "P1-T02")["key"]
+        item(tr, "P1-T02")["category"] = "in_progress"
+        tid = tr.create_item("person:1", "A person's own task", "", "developer", "P1")
+        tr.link_parent(tid, "VOL-1")
+        rp = approve(tr, plan, ov, {k: {"leave": "developer"}})
+        wl = retire.write_list(plan, ov, rp, pending_sets=["P2"])
+        ctx = render_proposal.proposal_context(plan, "retire", "Retire the plan: the event series was cancelled.",
+                                               items=retire_items(tr, plan, ov, "VOL-1"))
+        md = render_proposal.plan_level_proposal(plan, ov, wl, ctx)
+        self.assertIn(f"`{k}`, owned by", md)
+        self.assertIn("- `person:1`", md.split("## Children a person added")[1])
+        self.assertIn("- P2", md.split("## Pending phase approvals this retire voids")[1])
+        self.assertIn("## Plan status", md)
+        self.assertIn('status `{"plan_id"', md)  # dict-valued writes are rendered, never dropped
+
+
 if __name__ == "__main__":
     unittest.main()

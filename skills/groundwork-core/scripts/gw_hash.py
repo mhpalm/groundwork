@@ -97,6 +97,27 @@ def view_bundle(plan, evidence, checklist_version, rules):
     }
 
 
+def plan_bundle_kinds():
+    return ("decline", "own_epic", "retire")
+
+
+def plan_level_bundle(plan, wl, context, checklist_version, rules, assessment=None):
+    """The "closes and decisions" bundle an independent reviewer checks for a plan-level set that
+    stores no plan version (decline, own_epic, retire; planning model 4.3): the items to close with
+    their reasons, what is left open, the change-request entry and its assessment, and any status change."""
+    closes = [{"key": w["key"], "reason": w["reason"]} for w in wl["writes"] if w["kind"] == "close_item"]
+    entry = next((w["entry"] for w in wl["writes"] if w["kind"] == "cr_log_put"), None)
+    status = next((w["status"] for w in wl["writes"] if w["kind"] == "status_put"), None)
+    return {
+        "schema_version": "1.0", "bundle": "closes_and_decisions", "plan_id": plan["id"], "plan_version": plan["version"],
+        "plan_hash": plan_hash(plan), "set_kind": wl.get("kind"), "closes": closes,
+        "left_open": wl.get("left_open", []), "person_added": wl.get("person_added", []),
+        "voids_pending": wl.get("voids_pending", []), "cr_entry": entry, "assessment": assessment, "status": status,
+        "epic_items": context["items"], "summary": context["summary"],
+        "checklist_version": checklist_version, "rules": sorted(rules, key=lambda r: r["id"]),
+    }
+
+
 def view_hash(bundle):
     return hash_value(bundle)
 

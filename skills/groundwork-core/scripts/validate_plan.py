@@ -393,6 +393,9 @@ def _check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", p
         for w in t["waits_on"]:
             if role_keys and w["owner_role_key"] not in role_keys:
                 R.add("GR-16", "blocker", tid, f"wait '{w['what']}' is owned by unmapped role {w['owner_role_key']}", "Map the role", phase=ph)
+            if w.get("kind") == "elapsed" and not (w.get("condition") or "").strip():
+                R.add("GR-16", "blocker", tid, f"elapsed wait '{w['what']}' states no condition",
+                      "State what must be true when the wait ends, as a condition, never a date", phase=ph)
         # GR-21 (minor)
         title = t["title"].strip()
         if len(title.split()) < 2 or not title[0].isupper() or title.endswith("."):

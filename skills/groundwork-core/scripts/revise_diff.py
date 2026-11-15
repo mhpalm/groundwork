@@ -44,8 +44,26 @@ def rendered_hash(plan, overlay, t):
                        "phase": t["phase"], "key": t["key"]})
 
 
+def _by_id_changes(a, b):
+    a, b = {x["id"]: x for x in a}, {x["id"]: x for x in b}
+    return {"added": sorted(set(b) - set(a)), "removed": sorted(set(a) - set(b)),
+            "changed": sorted(k for k in set(a) & set(b) if a[k] != b[k])}
+
+
+def model_changes(base, new):
+    """The brief, options and decisions that changed (planning model 1.8). A format-1 side has none."""
+    out = {}
+    for name, get in (("brief", lambda p: p.get("brief")), ("options", lambda p: (p.get("approach") or {}).get("options")),
+                      ("decisions", lambda p: (p.get("approach") or {}).get("decisions"))):
+        a, b = get(base), get(new)
+        if a is None and b is None:
+            continue
+        out[name] = _by_id_changes(a or [], b or [])
+    return out
+
+
 def diff(base, new, tracker, overlay):
-    out = {"added": [], "changed": [], "close": [], "close_items": [], "deps_changed": [], "phases_offered": [],
+    out = {"added": [], "changed": [], "close": [], "close_items": [], "dropped": [], "deps_changed": [], "phases_offered": [],
            "drift": [], "refused": [], "relies_on": []}
     if new["id"] != base["id"]:
         out["refused"].append({"task": None, "why": "the revised plan has a different plan id; revise keeps the epic's plan id"})
@@ -115,6 +133,9 @@ def diff(base, new, tracker, overlay):
         if finished(item):
             out["refused"].append({"task": tid, "why": f"a {item['status'].replace('_', ' ')} task cannot be removed from the plan"})
             continue
+        if item is None:  # never written: removing it from the plan is enough, there is nothing to close
+            out["dropped"].append(tid)
+            continue
         out["close"].append(tid)
         out["close_items"].append({"key": b["key"], "reason": "not_planned"})
         touched.add(b["key"])
@@ -128,6 +149,7 @@ def diff(base, new, tracker, overlay):
     for k in sorted(touched):
         if k in tr:
             out["relies_on"].append({"key": k, "tracker_id": tr[k]["tracker_id"], "updated_at": tr[k]["updated_at"]})
+    out["model"] = model_changes(base, new)
     out["ok"] = not out["refused"]
     return out
 

@@ -1,6 +1,6 @@
 ---
 name: groundwork-core
-description: "Groundwork core: turns a project request into one reviewed, approved tracker epic of one-day tasks. Use only for Groundwork requests: create, plan, release or revise a project, or set up Groundwork."
+description: "Groundwork core: turns a request into one approved tracker epic of one-day tasks. Use only for Groundwork requests: create, plan, release, revise, change, assess, adopt, retire, set up."
 license: Apache-2.0
 metadata:
   version: 1.0.0
@@ -50,10 +50,11 @@ Never compute a hash, validate a plan or write proposal text by hand. Run the sc
 | `create_steps.py lock|preflight|manifest ...` | Decide the lock holder, the preflight action per item, and write manifests |
 | `create_steps.py status|close|scope|recheck ...` | Read item state (done, closed not done, close pending, drift), order a close, check the read_scope limit, recheck a plan-level proposal's items |
 | `check_hashes.py plan-level ...` | Verify a plan-level approval set (decline, own epic, retire, later) |
-| `render_proposal.py plan-level PLAN.json --write-list ... --context ...` | Render a plan-level proposal from stored inputs |
+| `render_proposal.py plan-write-list|context|plan-level PLAN.json ...` | Build a decline, own epic or later write list, the stored proposal context, and the plan-level proposal rendered from stored inputs |
+| `check_hashes.py view PLAN.json --plan-level --write-list ... --context ...` | Build the closes-and-decisions bundle a plan-level set's reviewer works from |
 | `assess.py split|recommend|report|leaks|seed ...` | Assess: keep structure and working text apart, recommend, write the runner's report, check for copied working text, apply the runner's decisions |
-| `change_request.py allocate|base|assess|decide|basis ...` | Change requests: allocate the id under the lock, check the base, assess the impact, record the outcome, list basis changes after release |
-| `retire.py plan|write-list|status|gate ...` | Retire: what happens to each item, the plan-level write list, the status record at write time, and the gate every later operation passes |
+| `change_request.py allocate|base|assess|decide|basis|release-check ...` | Change requests: allocate the id under the lock, check the base, assess the impact, record the outcome from the verified write list, list basis changes after release; release stops when an earlier phase's basis changed |
+| `retire.py plan|write-list|status|rebuild|recheck|gate ...` | Retire: what happens to each item, the plan-level write list, the status record at write time, the rebuild on resume, the write-time recheck, and the gate every writing operation passes first |
 | `check_hashes.py owned FIELDS.json` / `manifest-chain ...` | Plan-owned hash of an item read back; verify the manifest chain |
 | `check_identity.py --overlay ... --connect CONNECT.json` | At Intake, before any discovery call: does each sign-in reach the org the overlay names |
 | `run_bundle.py export|import ...` | Pack a run folder for another session; import refuses another overlay's bundle or a changed one |

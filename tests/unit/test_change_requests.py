@@ -182,6 +182,65 @@ class Outcomes(unittest.TestCase):
             cr.decide(self.log, "CR-1", "maybe", "x", 1, "e" * 64)
 
 
+class BoundDecision(unittest.TestCase):
+    """Review findings 4 and 10: create decides from the bound entry, the proposal shows it, a resume is a no-op."""
+
+    def setUp(self):
+        self.plan, self.ov = g1()
+        self.log, _ = logged(self.plan)
+        self.entry = {"id": "CR-1", "outcome": "declined", "reason": "Outside the brief's scope"}
+        self.wl = render_proposal.plan_write_list(self.plan, self.ov, "decline", cr_entry=self.entry)
+
+    def test_decide_takes_outcome_and_reason_from_the_write_list(self):
+        log, e = cr.decide_bound(self.log, self.wl, "d" * 64)
+        self.assertEqual((e["outcome"], e["reason"]), ("declined", "Outside the brief's scope"))
+        self.assertEqual(e["decided_by"], {"plan_version": self.plan["version"], "proposal_hash": "d" * 64})
+
+    def test_a_write_list_cannot_bind_an_outcome_its_kind_does_not_allow(self):
+        with self.assertRaises(ValueError):
+            render_proposal.plan_write_list(self.plan, self.ov, "decline", cr_entry=dict(self.entry, outcome="added"))
+        forged = copy.deepcopy(self.wl)
+        next(w for w in forged["writes"] if w["kind"] == "cr_log_put")["entry"]["outcome"] = "added"
+        with self.assertRaises(ValueError):
+            cr.decide_bound(self.log, forged, "d" * 64)
+        with self.assertRaises(ValueError):
+            render_proposal.plan_write_list(self.plan, self.ov, "retire")
+
+    def test_the_proposal_shows_the_bound_outcome_and_reason(self):
+        ctx = render_proposal.proposal_context(self.plan, "decline", "Decline CR-1.")
+        md = render_proposal.plan_level_proposal(self.plan, self.ov, self.wl, ctx)
+        self.assertIn("## Change request decision", md)
+        self.assertIn("`CR-1`: declined. Reason: Outside the brief's scope", md)
+        other = render_proposal.plan_write_list(self.plan, self.ov, "decline", cr_entry=dict(self.entry, reason="Too costly"))
+        self.assertNotEqual(render_proposal.plan_level_proposal(self.plan, self.ov, other, ctx), md)
+
+    def test_resuming_the_same_decision_changes_nothing(self):
+        log, _ = cr.decide_bound(self.log, self.wl, "d" * 64)
+        again, e = cr.decide_bound(log, self.wl, "d" * 64)
+        self.assertIs(again, log)
+        self.assertTrue(e["already"])
+        with self.assertRaises(ValueError):
+            cr.decide_bound(log, self.wl, "e" * 64)  # another set cannot re-decide it
+
+    def test_cli_decide_needs_the_write_list_and_checks_restricted_values(self):
+        import io
+        import json
+        import tempfile
+        from contextlib import redirect_stdout
+        d = tempfile.mkdtemp()
+        lp, wp, rp = (os.path.join(d, n) for n in ("log.json", "wl.json", "r.json"))
+        json.dump(self.log, open(lp, "w"))
+        json.dump(self.wl, open(wp, "w"))
+        json.dump({"B-12": "sign-up list"}, open(rp, "w"))
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(cr.main(["decide", lp, "CR-1", "--proposal-hash", "d" * 64]), 1)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cr.main(["decide", lp, "CR-1", "--write-list", wp, "--proposal-hash", "d" * 64, "--restricted", rp])
+        self.assertEqual(rc, 1)
+        self.assertIn("restricted value of B-12", buf.getvalue())
+
+
 class BasisAfterRelease(unittest.TestCase):
     def test_a_changed_cited_brief_field_is_listed(self):
         released, _ov = g1()
@@ -200,6 +259,35 @@ class BasisAfterRelease(unittest.TestCase):
                  and f["sensitivity"] != "restricted")
         f["value"] += " Changed."
         self.assertEqual(cr.basis_changes(released, current, "P1"), [])
+
+
+class ReleaseStopsOnBasisChange(unittest.TestCase):
+    """Review finding 14: release stops when an earlier released phase's basis changed (design 1.8)."""
+
+    def test_release_of_a_later_phase_stops_until_revise(self):
+        released, _ov = g1()
+        current = copy.deepcopy(released)
+        current["version"] += 1
+        for p in current["phases"]:
+            if p["id"] in ("P0", "P1"):
+                p["state"] = "released"
+        self.assertEqual(cr.release_basis_problems(current, {"P0": released, "P1": released}, "P2"), [])
+        next(f for f in current["brief"] if f["id"] == "B-3")["value"] += " Plus a spreadsheet."
+        probs = cr.release_basis_problems(current, {"P0": released, "P1": released}, "P2")
+        self.assertTrue(any("released phase P1 changed" in p for p in probs), probs)
+        self.assertTrue(any("no plan of record given for released phase P1" in p
+                            for p in cr.release_basis_problems(current, {"P0": released}, "P2")))
+
+    def test_revise_diff_lists_brief_and_approach_changes(self):
+        import revise_diff
+        base, _ov = g1()
+        new = copy.deepcopy(base)
+        next(f for f in new["brief"] if f["id"] == "B-3")["value"] += " Plus a spreadsheet."
+        new["approach"]["decisions"][0]["decision"] += " Revised."
+        m = revise_diff.model_changes(base, new)
+        self.assertEqual(m["brief"]["changed"], ["B-3"])
+        self.assertEqual(m["decisions"]["changed"], [new["approach"]["decisions"][0]["id"]])
+        self.assertEqual(revise_diff.model_changes(to_format1(base), to_format1(new)), {})
 
 
 if __name__ == "__main__":

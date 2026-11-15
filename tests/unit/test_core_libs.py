@@ -107,9 +107,6 @@ class HashScope(unittest.TestCase):
         self.assertTrue(all(set(c) == {"id", "question", "answer"} for c in v["request"]["clarifications"]))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class PlanWithoutConnection(unittest.TestCase):
     """D-54: a run can plan through Proposal with no tracker connection."""
@@ -180,3 +177,7 @@ class PlanWithoutConnection(unittest.TestCase):
         self.assertFalse(out["ok"])
         shutil.rmtree(src)
         shutil.rmtree(runs)
+
+
+if __name__ == "__main__":
+    unittest.main()

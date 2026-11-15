@@ -8,6 +8,8 @@ Usage:
   retire.py write-list PLAN.json --overlay OVERLAY.yaml --plan-out RETIRE_PLAN.json [--draft-label]
             [--pending PHASE_ID ...]
   retire.py status PLAN.json --n N --proposal-hash HEX --at TS   (at write time, under the lock)
+  retire.py rebuild PLAN_ID MANIFEST.json      (resume: the status file from the manifest's intent)
+  retire.py recheck RETIRE_PLAN.json ITEMS.json CHOICES.json   (at write time, before any write)
   retire.py gate OP --plan PLAN.json --manifest MANIFEST.json|- --status STATUS.json|- --epic open|closed
             [--resuming PLAN_VERSION:PROPOSAL_HASH]
 
@@ -183,7 +185,7 @@ def gate(op, plan, manifest, status, epic_state, resuming=None):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["plan", "write-list", "status", "gate"])
+    ap.add_argument("cmd", choices=["plan", "write-list", "status", "rebuild", "recheck", "gate"])
     ap.add_argument("files", nargs="*")
     for x in ("--overlay", "--plan-out", "--proposal-hash", "--at", "--plan", "--manifest", "--status", "--epic", "--resuming"):
         ap.add_argument(x)
@@ -196,6 +198,14 @@ def main(argv=None):
         out = plan_retire(J(a.files[0]), J(a.files[1]))
     elif a.cmd == "write-list":
         out = write_list(J(a.files[0]), gw_yaml.load(a.overlay), J(a.plan_out), a.draft_label, a.pending)
+    elif a.cmd == "rebuild":
+        try:
+            out = {"ok": True, "status_record": rebuild_status(a.files[0], J(a.files[1])["status_file"])}
+        except (ValueError, KeyError, TypeError) as e:
+            out = {"ok": False, "problems": [f"cannot rebuild the status file: {e}"]}
+    elif a.cmd == "recheck":
+        probs = recheck(J(a.files[0]), J(a.files[1]), J(a.files[2]))
+        out = {"ok": not probs, "problems": probs}
     elif a.cmd == "status":
         st = status_record(J(a.files[0]), a.n, a.proposal_hash, a.at)
         out = {"status_record": st, "intent": status_intent(st)}

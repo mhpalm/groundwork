@@ -31,7 +31,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import gw_yaml  # noqa: E402
 from gw_canon import hash_value, sha256_hex  # noqa: E402
-from gw_hash import item_hash, phase_hashes, plan_hash, review_hash, view_bundle, view_hash, write_list_hash  # noqa: E402
+from gw_hash import (item_hash, phase_hashes, plan_bundle_kinds, plan_hash, plan_level_bundle, review_hash,  # noqa: E402
+                     view_bundle, view_hash, write_list_hash)
 from gw_schema import load_schema, validate  # noqa: E402
 
 CHECKLIST_VERSION = "1.0"
@@ -74,7 +75,7 @@ PLAN_LEVEL_KINDS = ("decline", "own_epic", "retire", "later")
 
 
 def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info,
-                  latest_stored_version, scope):
+                  latest_stored_version, scope, plan_state=None):
     """The records of one approval set, after every per-record check. Returns (records, problems).
 
     The grouping filter runs first: a record counts toward this set only when its
@@ -86,6 +87,19 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
     probs = []
     if overlay.get("provisional"):
         return [], ["a provisional overlay names no approvers; set up Groundwork for the tracker first (D-54)"]
+    if plan_state is not None:
+        # the retire gate (planning model 7): a retired plan, a retire in progress or a closed epic
+        # refuses every set except the resume of the retire's own set
+        import retire
+        sf = (plan_state.get("manifest") or {}).get("status_file")
+        own = (plan["version"], sha256_hex(proposal_text.encode("utf-8")))
+        if scope == "plan_level" and sf:
+            g = retire.gate("resume", plan, plan_state.get("manifest"), plan_state.get("status"), plan_state["epic"], own)
+        else:
+            g = retire.gate("create" if scope == "phases" else "retire", plan, plan_state.get("manifest"),
+                            plan_state.get("status"), plan_state["epic"])
+        if not g["ok"]:
+            return [], g["problems"]
     if latest_stored_version is not None and latest_stored_version > plan["version"]:
         return [], [f"plan version {latest_stored_version} is stored, so every pending set at version {plan['version']} "
                     "is void; re-propose against the current version"]
@@ -169,7 +183,7 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
 
 
 def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review, phases, now, unverified_writer, info=None,
-                     latest_stored_version=None):
+                     latest_stored_version=None, plan_state=None):
     """Return (ok, problems, accepted_phases) for a phase set (initial, release, revision).
 
     Only records for the plan's current version and this proposal count (the
@@ -181,7 +195,7 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
     if not phases:
         return False, ["no phases were named for create; name the approved phases to write"], []
     records, probs = _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info,
-                                   latest_stored_version, "phases")
+                                   latest_stored_version, "phases", plan_state)
     gates = {g["id"]: g for g in overlay["approval_gates"]}
     accepted = set()
     phase_gates = [g for g in gates.values() if g["applies_to"] == "all_phases"]
@@ -209,7 +223,7 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
 
 
 def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info=None,
-                      latest_stored_version=None):
+                      latest_stored_version=None, plan_state=None, bundle=None):
     """Return (ok, problems, kind) for a plan-level set (decline, own_epic, retire, later).
 
     The same grouping filter and per-record checks as a phase set. Every all_phases
@@ -219,12 +233,14 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
     """
     info = info if info is not None else []
     records, probs = _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info,
-                                   latest_stored_version, "plan_level")
+                                   latest_stored_version, "plan_level", plan_state)
     if not records:
         probs.append("no valid plan-level approval records for this proposal; zero records is never a pass")
     kinds = sorted({rec["kind"] for _c, rec, _g in records})
     if len(kinds) > 1:
         probs.append(f"the records disagree on the kind of plan-level change ({', '.join(kinds)})")
+    if kinds and kinds != [wl.get("kind")]:
+        probs.append(f"the records approve a {', '.join(kinds)} but the write list is a {wl.get('kind')}")
     for c, rec, _g in records:
         if rec["exceptions_accepted"]:
             probs.append(f"comment {c['ref']}: a plan-level record cannot accept an exception")
@@ -232,28 +248,51 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
         who = {c["author_account_id"] for c, rec, g in records if g["id"] == gate["id"]}
         if len(who) < gate.get("min_approvers", 1):
             probs.append(f"gate {gate['id']} has no plan-level quorum ({len(who)} of {gate.get('min_approvers', 1)})")
+    if wl.get("kind") in plan_bundle_kinds():
+        # the set stores no plan version, so the review it binds must be of its own closes-and-decisions
+        # bundle, never the plan's ordinary Gap review (planning model 4.3)
+        if bundle is None:
+            probs.append("a decline, own epic or retire set needs its closes-and-decisions bundle to verify the review")
+        else:
+            want = plan_level_bundle(plan, wl, {"items": bundle["epic_items"], "summary": bundle["summary"]},
+                                     bundle["checklist_version"], bundle["rules"], bundle["assessment"])
+            if view_hash(bundle) != view_hash(want):
+                probs.append("the closes-and-decisions bundle does not match this plan and write list")
+            elif review["view_hash"] != view_hash(bundle):
+                probs.append("the review was not made from this set's closes-and-decisions bundle")
     probs += write_list_scope_problems(wl, "plan_level", [])
     return (not probs), probs, (kinds[0] if len(kinds) == 1 else None)
 
 
-# Writes a plan-level set may authorize (planning model 4.3): closes, the change-request log,
-# the plan status file and the snapshot, plus the lock and manifest bookkeeping around them.
-PLAN_LEVEL_WRITES = ("lock_claim", "lock_release", "manifest_put", "add_label", "close_item", "cr_log_put", "status_put",
-                     "snapshot_put", "remove_label", "close_epic")
+# Writes a plan-level set may authorize (planning model 4.3), by kind. Bookkeeping (lock, manifest,
+# snapshot) goes with every kind; only retire closes items, writes the status file or touches the epic.
+_PLAN_BOOKKEEPING = ("lock_claim", "lock_release", "manifest_put", "snapshot_put")
+PLAN_LEVEL_WRITES_BY_KIND = {
+    "decline": _PLAN_BOOKKEEPING + ("cr_log_put",),
+    "own_epic": _PLAN_BOOKKEEPING + ("cr_log_put",),
+    "later": _PLAN_BOOKKEEPING + ("cr_log_put",),
+    "retire": _PLAN_BOOKKEEPING + ("add_label", "close_item", "status_put", "remove_label", "close_epic"),
+}
+PLAN_LEVEL_WRITES = tuple(sorted({k for v in PLAN_LEVEL_WRITES_BY_KIND.values() for k in v}))
 
 
 def write_list_scope_problems(wl, scope, phases):
-    """Every write carries scope phase:<id> or plan; a set authorizes only its own scopes."""
+    """Every write carries scope phase:<id> or plan; a set authorizes only its own scopes, and a
+    plan-level write list only the writes its kind allows."""
     probs = []
     allowed = {f"phase:{p}" for p in phases} | {"plan"}
+    kind_writes = PLAN_LEVEL_WRITES_BY_KIND.get(wl.get("kind"))
+    if scope == "plan_level" and kind_writes is None:
+        probs.append(f"a plan-level write list needs a kind, one of {', '.join(PLAN_LEVEL_WRITES_BY_KIND)}")
+        kind_writes = ()
     for w in wl.get("writes", []):
         sc = w.get("scope")
         if sc is None:
             probs.append(f"write {w.get('no')}: has no scope")
         elif sc not in allowed:
             probs.append(f"write {w.get('no')}: scope {sc} is not covered by this set")
-        elif scope == "plan_level" and w["kind"] not in PLAN_LEVEL_WRITES:
-            probs.append(f"write {w.get('no')}: a plan-level set cannot authorize a {w['kind']} write")
+        elif scope == "plan_level" and w["kind"] not in kind_writes:
+            probs.append(f"write {w.get('no')}: a plan-level {wl.get('kind')} set cannot authorize a {w['kind']} write")
     if scope == "plan_level" and wl.get("phases"):
         probs.append("a plan-level write list offers no phases")
     return probs
@@ -287,6 +326,11 @@ def verify_chain(manifests):
     return latest, probs
 
 
+def cli_plan_state(a):
+    load = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
+    return {"manifest": load(a.manifest), "status": load(a.status), "epic": a.epic}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["summary", "view", "review", "approvals", "plan-level", "manifest-chain", "owned"])
@@ -304,6 +348,12 @@ def main(argv=None):
     ap.add_argument("--phases")
     ap.add_argument("--now")
     ap.add_argument("--out")
+    ap.add_argument("--plan-level", action="store_true", help="view: the closes-and-decisions bundle of a plan-level set")
+    ap.add_argument("--context", help="view --plan-level: the stored proposal context")
+    ap.add_argument("--assessment", help="view --plan-level: the change request's stored assessment, if any")
+    ap.add_argument("--manifest", help="the latest manifest (JSON), or - when none is written yet")
+    ap.add_argument("--status", help="the latest status file (JSON), or - when the plan store has none")
+    ap.add_argument("--epic", choices=["open", "closed"], help="the epic's tracker state")
     a = ap.parse_args(argv)
     J = lambda p: json.load(open(p, encoding="utf-8"))
     if a.cmd == "summary":
@@ -313,7 +363,11 @@ def main(argv=None):
     if a.cmd == "view":
         plan = J(a.files[0])
         rules = [r for p in a.rules for r in J(p).get("rules", [])]
-        bundle = view_bundle(plan, load_evidence(a.evidence), CHECKLIST_VERSION, rules)
+        if a.plan_level:
+            bundle = plan_level_bundle(plan, J(a.write_list), J(a.context), CHECKLIST_VERSION, rules,
+                                       J(a.assessment) if a.assessment else None)
+        else:
+            bundle = view_bundle(plan, load_evidence(a.evidence), CHECKLIST_VERSION, rules)
         with open(a.out, "w", encoding="utf-8") as f:
             json.dump(bundle, f, indent=2, ensure_ascii=False)
         print(view_hash(bundle))
@@ -330,6 +384,13 @@ def main(argv=None):
             return 1
         print(review_hash(rev))
         return 0
+    if a.cmd in ("approvals", "plan-level"):
+        missing = [f for f, v in (("--latest-version", a.latest_version), ("--manifest", a.manifest), ("--status", a.status),
+                                  ("--epic", a.epic)) if v is None]
+        if missing:
+            print(json.dumps({"ok": False, "problems": [f"{', '.join(missing)} required: approvals are never verified "
+                                                         "without the latest stored version and the retire gate"]}, indent=2))
+            return 1
     if a.cmd == "approvals":
         plan = J(a.files[0])
         overlay = gw_yaml.load(a.overlay)
@@ -338,7 +399,7 @@ def main(argv=None):
         info = []
         phases = [x.strip() for x in (a.phases or "").split(",") if x.strip()]
         ok, probs, accepted = verify_approvals(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
-                                               phases, ts(a.now), unverified, info, a.latest_version)
+                                               phases, ts(a.now), unverified, info, a.latest_version, cli_plan_state(a))
         print(json.dumps({"ok": ok, "accepted_phases": accepted, "problems": probs, "superseded": info}, indent=2))
         return 0 if ok else 1
     if a.cmd == "plan-level":
@@ -348,7 +409,8 @@ def main(argv=None):
         unverified = any(s["verified"] != "verified" and s["name"] == overlay["skills"]["tracker"]["skill"] for s in plan["stamps"]["skills"])
         info = []
         ok, probs, kind = verify_plan_level(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
-                                            ts(a.now), unverified, info, a.latest_version)
+                                            ts(a.now), unverified, info, a.latest_version, cli_plan_state(a),
+                                            J(a.bundle) if a.bundle else None)
         print(json.dumps({"ok": ok, "kind": kind, "problems": probs, "other_sets": info}, indent=2))
         return 0 if ok else 1
     if a.cmd == "manifest-chain":

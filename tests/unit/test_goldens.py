@@ -93,6 +93,7 @@ class G6Revise(unittest.TestCase):
         self.assertTrue(d["ok"], d["refused"])
         self.assertEqual(d["added"], self.want["added"])
         self.assertEqual(d["close"], self.want["close"])
+        self.assertEqual(d["dropped"], self.want["dropped"])
         self.assertEqual([x["task"] for x in d["drift"]], self.want["drift"])
         self.assertEqual({x["task"]: {"added": x["added"], "removed": x["removed"]} for x in d["deps_changed"]},
                          self.want["deps_changed"])

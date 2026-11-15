@@ -63,9 +63,6 @@ class GoldenAssertions(unittest.TestCase):
         self.assertTrue(assert_plan("G7", plan))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class ExistingResources(unittest.TestCase):
     """D-55: GR-27 catches an unjustified change to something that already exists."""
@@ -106,3 +103,7 @@ class ExistingResources(unittest.TestCase):
         self.assertTrue(self.gr27(p))
         p["request"]["starting_point"]["resources"][0]["not_inspected_reason"] = "No skill for this system"
         self.assertEqual(self.gr27(p), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

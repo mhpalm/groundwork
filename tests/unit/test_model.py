@@ -292,5 +292,20 @@ class OverlayModel(unittest.TestCase):
         self.assertTrue(any("not mapped" in p for p in validate_overlay.problems(ov)))
 
 
+
+class ElapsedWait(unittest.TestCase):
+    """Review finding 13: an elapsed wait states its condition (design 1.4)."""
+
+    def test_elapsed_wait_without_condition_is_a_blocker(self):
+        plan, ov, ev = fresh("G1")
+        t = next(x for x in plan["tasks"] if x["phase"] == "P1" and not x["waits_on"])
+        wait = {"what": "Two weeks of sign-ups accumulate", "kind": "elapsed", "owner_role_key": t["role_key"],
+                "condition": "  ", "legacy_ref": None}
+        t["waits_on"] = [wait]
+        self.assertIn(("GR-16", t["id"]), checks(run(plan, ov, ev), "GR-16"))
+        wait["condition"] = "At least 50 sign-ups exist across two events"
+        self.assertNotIn(("GR-16", t["id"]), checks(run(plan, ov, ev), "GR-16"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import gw_yaml  # noqa: E402
-from gw_canon import sha256_hex, short  # noqa: E402
+from gw_canon import canonicalize, sha256_hex, short  # noqa: E402
 from gw_hash import phase_hashes, plan_hash, write_list_hash  # noqa: E402
 
 OWNED_START = "<!-- groundwork:owned:start -->"
@@ -97,18 +97,27 @@ def release_name(plan, phase):
     return f"{plan['epic']['title']} {phase['id']} {phase['name']}"[:255]
 
 
-def write_list(plan, overlay, offer, closes=None, cr_entry=None):
+def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None):
     """The numbered write list for the offered phases. Hashing it binds approval to exactly these writes.
 
     closes: [{key, reason}] for items to close (revise); rendered as the close procedure:
     a close-intent manifest first, then each item's gw-closed label and transition, then a manifest.
     cr_entry: {id, outcome, reason} for the change request this revision decides; create fills in
     decided_by from the verified proposal, so the write list never names its own proposal hash.
+    edits: task ids whose plan-owned text changed (revise_diff `changed`); each gets an update_item
+    write binding the new plan-owned hash, in its phase's scope, so its phase must be offered.
     """
     if overlay.get("provisional"):
         raise ValueError("a provisional overlay has no tracker, so there is no write list (D-54)")
     tr = overlay["skills"]["tracker"]
     target = f"{tr['skill'].replace('groundwork-tracker-', '')}:{tr['instance']['id']}:{tr['instance']['project']}"
+    edits = set(edits or ())
+    tasks_by_id = {t["id"]: t for t in plan["tasks"]}
+    for tid in sorted(edits):
+        if tid not in tasks_by_id:
+            raise ValueError(f"edit {tid} is not a task in this plan")
+        if tasks_by_id[tid]["phase"] not in offer:
+            raise ValueError(f"the edit to {tid} needs phase {tasks_by_id[tid]['phase']} in the offer")
     writes = [{"kind": "lock_claim", "on": "epic"}]
     for phase in [p for p in sorted(plan["phases"], key=lambda p: p["order"]) if p["id"] in offer]:
         pid = phase["id"]
@@ -121,6 +130,12 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None):
             t = next(x for x in plan["tasks"] if x["id"] == tid)
             writes.append({"kind": "create_item", "key": f"gw:{plan['id']}:{tid}", "phase": pid, "not_ready": True,
                            "work_type": t["work_type"], "release": release})
+            if tid in edits:
+                from check_hashes import owned_hash
+                fields = {"title": t["title"], "body_owned": task_body(plan, overlay, t), "role_key": t["role_key"],
+                          "phase": t["phase"], "key": t["key"]}
+                writes.append({"kind": "update_item", "key": t["key"], "phase": pid, "fields": "plan_owned",
+                               "owned_hash": owned_hash(fields)})
         for tid in tids:
             t = next(x for x in plan["tasks"] if x["id"] == tid)
             writes.append({"kind": "link_parent", "key": t["key"], "to": plan["epic"]["key"],
@@ -160,29 +175,29 @@ PLAN_LEVEL_TITLES = {"decline": "Decline a change request", "own_epic": "Move a 
                      "retire": "Retire this plan", "later": "Record later work as an outline phase"}
 
 
-def plan_write_list(plan, overlay, kind, closes=(), cr_entry=None, status=None):
-    """The write list for a plan-level set (planning model 4.3): only plan entries.
+def plan_write_list(plan, overlay, kind, cr_entry=None):
+    """The write list for a decline, own_epic or later set (planning model 4.3): only plan entries.
 
-    closes: [{key, reason}]; cr_entry: the change-request log entry this set adds (the
-    entry is bound, not the file number, which is allocated under the lock);
-    status: the plan status record retire writes.
+    cr_entry: the change-request log entry this set adds (the entry is bound, not the file
+    number, which is allocated under the lock). Retire has its own fixed write order and
+    uses `retire.py write-list`; no other kind closes items or writes a status file.
     """
+    if kind == "retire":
+        raise ValueError("a retire write list comes from retire.py write-list")
+    if kind not in ("decline", "own_epic", "later"):
+        raise ValueError("kind is decline, own_epic or later")
     if overlay.get("provisional"):
         raise ValueError("a provisional overlay has no tracker, so there is no write list (D-54)")
+    want = {"decline": "declined", "own_epic": "own_epic", "later": "later"}[kind]
+    if kind != "later" and cr_entry is None:
+        raise ValueError(f"a {kind} write list binds the change-request entry it decides")
+    if cr_entry is not None and cr_entry.get("outcome") != want:
+        raise ValueError(f"a {kind} write list binds outcome {want}, not {cr_entry.get('outcome')}")
     tr = overlay["skills"]["tracker"]
     target = f"{tr['skill'].replace('groundwork-tracker-', '')}:{tr['instance']['id']}:{tr['instance']['project']}"
     writes = [{"kind": "lock_claim", "on": "epic"}]
-    if closes:
-        prefix = tr["field_map"].get("close_label_prefix", "gw-closed:")
-        writes.append({"kind": "manifest_put", "note": "close intent for " + ", ".join(c["key"] for c in closes)})
-        for c in closes:
-            writes.append({"kind": "add_label", "key": c["key"], "label": prefix + c["reason"]})
-            writes.append({"kind": "close_item", "key": c["key"], "reason": c["reason"]})
-        writes.append({"kind": "manifest_put", "note": "closes done"})
     if cr_entry is not None:
         writes.append({"kind": "cr_log_put", "entry": cr_entry, "note": "latest log file plus this entry; number allocated under the lock"})
-    if status is not None:
-        writes.append({"kind": "status_put", "status": status, "note": "after a status intent in the manifest"})
     writes.append({"kind": "snapshot_put"})
     writes.append({"kind": "lock_release", "on": "epic"})
     for i, w in enumerate(writes, 1):
@@ -213,10 +228,32 @@ def plan_level_proposal(plan, overlay, wl, context):
     out = [f"# Proposal: {PLAN_LEVEL_TITLES[context['kind']]}", "",
            f"Plan {plan['id']} version {plan['version']}, plan hash {short(plan_hash(plan))}. "
            "This is a plan-level change: it offers no phase.", "", "## What and why", context["summary"], ""]
+    for w in wl["writes"]:
+        if w["kind"] == "cr_log_put":
+            e = w["entry"]
+            out.append("## Change request decision")
+            out.append(f"- `{e.get('id')}`: {str(e.get('outcome', e.get('decision', ''))).replace('_', ' ')}"
+                       + (f". Reason: {e['reason']}" if e.get("reason") else ""))
+            out.append("")
+        elif w["kind"] == "status_put":
+            out.append("## Plan status")
+            out.append(f"- The plan becomes {w['status']['status']}. The status file's number, set_by and time are "
+                       "filled in at write time from the verified set.")
+            out.append("")
     closes = [w for w in wl["writes"] if w["kind"] == "close_item"]
     out.append("## Items this closes")
     out += [f"- `{w['key']}`, as {w['reason'].replace('_', ' ')}" for w in closes] or ["None."]
     out.append("")
+    if wl.get("kind") == "retire":
+        out.append("## Items left open")
+        out += [f"- `{x['key']}`, owned by {role_name(overlay, x['owner_role_key'])}" for x in wl.get("left_open", [])] or ["None."]
+        out.append("")
+        out.append("## Children a person added (left open)")
+        out += [f"- `{k}`" for k in wl.get("person_added", [])] or ["None."]
+        out.append("")
+        out.append("## Pending phase approvals this retire voids")
+        out += [f"- {p}" for p in wl.get("voids_pending", [])] or ["None."]
+        out.append("")
     out.append("## Items on the epic when this was proposed")
     if context["items"]:
         for i in context["items"]:
@@ -236,7 +273,8 @@ def plan_level_proposal(plan, overlay, wl, context):
         out.append("")
     out.append("## Write list")
     for w in wl["writes"]:
-        detail = ", ".join(f"{k} {v}" for k, v in w.items() if k not in ("no", "kind", "target", "scope", "note") and not isinstance(v, (dict, list)))
+        detail = ", ".join(f"{k} {v}" if not isinstance(v, (dict, list)) else f"{k} `{canonicalize(v).decode()}`"
+                           for k, v in w.items() if k not in ("no", "kind", "target", "scope", "note"))
         out.append(f"{w['no']}. {w['kind']}" + (f" ({detail})" if detail else ""))
     out.append("")
     out.append(f"Write list hash {short(write_list_hash(wl))}.")
@@ -444,7 +482,13 @@ def proposal_hash(text):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("what", choices=["proposal", "task", "epic", "write-list", "plan-level"])
+    ap.add_argument("what", choices=["proposal", "task", "epic", "write-list", "plan-level", "plan-write-list", "context"])
+    ap.add_argument("--kind", help="plan-write-list and context: decline, own_epic, later (context also retire)")
+    ap.add_argument("--entry", help="plan-write-list: the change-request log entry JSON this set binds")
+    ap.add_argument("--summary", help="context: the proposal's what-and-why, in Groundwork's words")
+    ap.add_argument("--items", help="context: JSON [{key, status, person_added}] read from the tracker at Proposal")
+    ap.add_argument("--voided", nargs="*", default=[], help="context: pending sets this replaces")
+    ap.add_argument("--degraded", nargs="*", default=[], help="context: checks not fully run")
     ap.add_argument("--context", help="proposal-context JSON (plan-level proposals)")
     ap.add_argument("plan")
     ap.add_argument("--overlay", required=True)
@@ -452,6 +496,7 @@ def main(argv=None):
     ap.add_argument("--task")
     ap.add_argument("--write-list")
     ap.add_argument("--closes", help="JSON file of [{key, reason}] to close (revise)")
+    ap.add_argument("--edits", help="comma-separated task ids whose plan-owned text changed (revise_diff changed)")
     ap.add_argument("--out")
     a = ap.parse_args(argv)
     plan = json.load(open(a.plan, encoding="utf-8"))
@@ -468,11 +513,18 @@ def main(argv=None):
     elif a.what == "plan-level":
         text = plan_level_proposal(plan, overlay, json.load(open(a.write_list, encoding="utf-8")),
                                    json.load(open(a.context, encoding="utf-8")))
+    elif a.what == "plan-write-list":
+        entry = json.load(open(a.entry, encoding="utf-8")) if a.entry else None
+        text = json.dumps(plan_write_list(plan, overlay, a.kind, entry), indent=2)
+    elif a.what == "context":
+        items = json.load(open(a.items, encoding="utf-8")) if a.items else []
+        text = json.dumps(proposal_context(plan, a.kind, a.summary, a.degraded, items, a.voided), indent=2)
     elif a.what == "epic":
         text = epic_description(plan, overlay)
     else:
         closes = json.load(open(a.closes, encoding="utf-8")) if a.closes else None
-        text = json.dumps(write_list(plan, overlay, offer, closes), indent=2)
+        edits = [x.strip() for x in (a.edits or "").split(",") if x.strip()]
+        text = json.dumps(write_list(plan, overlay, offer, closes, edits=edits), indent=2)
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(text)
