@@ -23,6 +23,7 @@ Read `reference/rules.md` before anything else in a run. Those rules (CR-01 to C
 | "Plan phase P3" on an existing epic | Stages 2 to 7 for that outline phase | `reference/pipeline.md` |
 | "Release phase P2" | Validate again, re-check evidence, stages 8 to 10 | `reference/revise-mode.md` |
 | "Revise project X" with the epic's key or link | Diff against the tracker, gap review, approval | `reference/revise-mode.md` |
+| "Add this request to project X" (a change request, in the runner's own words) | Impact assessment in one-day tasks, then revise or a plan-level decision | `reference/revise-mode.md` |
 | "Review this bundle" in a fresh conversation | Independent reviewer only | `reference/gap-review.md` |
 | "Migrate the overlay" | Overlay migration | `reference/setup-mode.md` |
 | "Export run bundle" / "import run bundle" | Move run state between sessions | `reference/pipeline.md` |
@@ -44,6 +45,10 @@ Never compute a hash, validate a plan or write proposal text by hand. Run the sc
 | `check_hashes.py summary PLAN.json` | Print `plan_hash` and `phase_hashes` |
 | `check_hashes.py approvals ...` | Verify approval comments before any task write |
 | `create_steps.py lock|preflight|manifest ...` | Decide the lock holder, the preflight action per item, and write manifests |
+| `create_steps.py status|close|scope|recheck ...` | Read item state (done, closed not done, close pending, drift), order a close, check the read_scope limit, recheck a plan-level proposal's items |
+| `check_hashes.py plan-level ...` | Verify a plan-level approval set (decline, own epic, retire, later) |
+| `render_proposal.py plan-level PLAN.json --write-list ... --context ...` | Render a plan-level proposal from stored inputs |
+| `change_request.py allocate|base|assess|decide|basis ...` | Change requests: allocate the id under the lock, check the base, assess the impact, record the outcome, list basis changes after release |
 | `check_hashes.py owned FIELDS.json` / `manifest-chain ...` | Plan-owned hash of an item read back; verify the manifest chain |
 | `check_identity.py --overlay ... --connect CONNECT.json` | At Intake, before any discovery call: does each sign-in reach the org the overlay names |
 | `run_bundle.py export|import ...` | Pack a run folder for another session; import refuses another overlay's bundle or a changed one |

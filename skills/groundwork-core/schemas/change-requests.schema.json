@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "groundwork/change-requests/1.0",
+  "title": "Groundwork change-request log (change-requests-<n>.json; outside plan_hash)",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "plan_id": {
+      "type": "string",
+      "pattern": "^gw-[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "n": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^CR-\\d+$"
+          },
+          "restatement": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "enum": [
+              "runner",
+              "pasted"
+            ]
+          },
+          "derived_from": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "origin_role_key": {
+            "anyOf": [
+              {
+                "enum": [
+                  "developer",
+                  "admin",
+                  "analyst",
+                  "qa",
+                  "business_user",
+                  "trainer",
+                  "comms",
+                  "maintainer",
+                  "approver",
+                  "legal",
+                  "finance",
+                  "procurement",
+                  "security",
+                  "vendor_contact",
+                  "facilitator"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^x-[a-z0-9_]+$"
+              }
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "pending",
+              "added",
+              "later",
+              "own_epic",
+              "declined"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base": {
+            "type": "object",
+            "properties": {
+              "plan_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "manifest_seq": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "plan_version",
+              "manifest_seq"
+            ]
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "plan_version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "proposal_hash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "plan_version",
+                  "proposal_hash"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "restatement",
+          "source",
+          "derived_from",
+          "origin_role_key",
+          "outcome",
+          "reason",
+          "base",
+          "decided_by"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "n",
+    "entries"
+  ]
+}

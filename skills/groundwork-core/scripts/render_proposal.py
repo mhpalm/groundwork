@@ -97,11 +97,13 @@ def release_name(plan, phase):
     return f"{plan['epic']['title']} {phase['id']} {phase['name']}"[:255]
 
 
-def write_list(plan, overlay, offer, closes=None):
+def write_list(plan, overlay, offer, closes=None, cr_entry=None):
     """The numbered write list for the offered phases. Hashing it binds approval to exactly these writes.
 
     closes: [{key, reason}] for items to close (revise); rendered as the close procedure:
     a close-intent manifest first, then each item's gw-closed label and transition, then a manifest.
+    cr_entry: {id, outcome, reason} for the change request this revision decides; create fills in
+    decided_by from the verified proposal, so the write list never names its own proposal hash.
     """
     if overlay.get("provisional"):
         raise ValueError("a provisional overlay has no tracker, so there is no write list (D-54)")
@@ -142,6 +144,8 @@ def write_list(plan, overlay, offer, closes=None):
             writes.append({"kind": "add_label", "key": c["key"], "label": prefix + c["reason"]})
             writes.append({"kind": "close_item", "key": c["key"], "reason": c["reason"]})
         writes.append({"kind": "manifest_put", "note": "closes done"})
+    if cr_entry is not None:
+        writes.append({"kind": "cr_log_put", "entry": cr_entry, "note": "latest log file plus this entry; number allocated under the lock"})
     if not any(p["state"] in ("writing", "released") for p in plan["phases"]):
         writes.append({"kind": "remove_label", "on": "epic", "label": overlay.get("labels", {}).get("draft", "gw-draft")})
     writes.append({"kind": "lock_release", "on": "epic"})

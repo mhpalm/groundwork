@@ -211,6 +211,25 @@ approval = {
 }
 approval["required"] = [k for k in approval["properties"] if k != "scope"]
 
+change_requests = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/change-requests/1.0",
+    "title": "Groundwork change-request log (change-requests-<n>.json; outside plan_hash)",
+    **obj({
+        "schema_version": {"const": "1.0"}, "plan_id": PLAN_ID, "n": {"type": "integer", "minimum": 1},
+        "entries": arr(obj({
+            "id": {"type": "string", "pattern": r"^CR-\d+$"},
+            "restatement": STR,                      # the runner-confirmed restatement; never restricted
+            "source": {"enum": ["runner", "pasted"]},
+            "derived_from": arr(STR),                # evidence ids of pasted text (system: runner)
+            "origin_role_key": ROLE,                 # who asked, as a role, never a name
+            "outcome": {"enum": ["pending", "added", "later", "own_epic", "declined"]},
+            "reason": nullable(STR),
+            "base": obj({"plan_version": {"type": "integer", "minimum": 1}, "manifest_seq": {"type": "integer", "minimum": 0}}),
+            "decided_by": nullable(obj({"plan_version": {"type": "integer", "minimum": 1}, "proposal_hash": HEX})),
+        })),
+    }),
+}
+
 proposal_context = {
     "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/proposal-context/1.0",
     "title": "Groundwork proposal context (stored at Proposal; create renders only from stored inputs)",
@@ -355,7 +374,7 @@ import sys
 out = os.path.join(os.path.dirname(__file__), "..", "..", "skills", "groundwork-core", "schemas")
 check = "--check" in sys.argv
 stale = []
-for name, sch in [("plan", plan), ("evidence", evidence), ("approval", approval), ("proposal-context", proposal_context), ("manifest", manifest), ("journal", journal),
+for name, sch in [("plan", plan), ("evidence", evidence), ("approval", approval), ("proposal-context", proposal_context), ("change-requests", change_requests), ("manifest", manifest), ("journal", journal),
                   ("handshake", handshake), ("skill-manifest", skill_manifest), ("rules", rules), ("review", review), ("overlay", overlay)]:
     path = os.path.join(out, f"{name}.schema.json")
     text = json.dumps(sch, indent=2) + "\n"

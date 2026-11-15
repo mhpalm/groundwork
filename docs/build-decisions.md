@@ -52,3 +52,10 @@ These were settled while building v1 against spec draft 0.3. Each is a candidate
 33. The integrity profile is the full validator with its findings filtered to schema, evidence integrity, CR-12, GR-17, GR-25 and GR-34, offering no phase. Running the same code and filtering keeps one implementation of each check.
 34. Plan-level records must all name the same kind. Mixed kinds for one proposal mean approvers disagree about what they approve, so the set fails.
 
+## Planning model build 4, 2026-11-15
+
+35. Similar declined requests are found by word overlap of the restatements (Jaccard at least 0.5 over words longer than two letters) and only shown to the runner, never used to decide. The design rules out a text hash.
+36. The write list binds a change-request entry as `{id, outcome, reason}`; create adds `decided_by` from the verified proposal. Binding `decided_by` would put the proposal's own hash inside the write list the proposal shows.
+37. An outline cost with no new outline phase still counts one phase. A later outcome always adds at least one.
+38. GR-17 now lives in one function, `validate_plan.gr17_scan`, used for the plan, evidence and the change-request log, so the patterns can't drift apart.
+

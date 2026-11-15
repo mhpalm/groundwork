@@ -98,6 +98,24 @@ def strings(obj, path="$"):
             yield from strings(v, f"{path}[{i}]")
 
 
+def gr17_scan(src, blob):
+    """GR-17 over any JSON value: [(what, fix)] for secrets, personal email addresses and card numbers."""
+    out = []
+    for path, s in strings(blob):
+        for label, pat in SECRET_PATTERNS:
+            if pat.search(s):
+                out.append((f"{src} {path} looks like it contains a {label}", "Remove it; record structure only"))
+        for m in EMAIL.finditer(s):
+            dom = m.group(0).split("@", 1)[1].lower()
+            if not dom.endswith(RESERVED_DOMAINS):
+                out.append((f"{src} {path} contains an email address", "Name the role, not the person's address"))
+        for m in CARD.finditer(s):
+            digits = re.sub(r"\D", "", m.group(0))
+            if 13 <= len(digits) <= 19 and luhn(digits):
+                out.append((f"{src} {path} contains what looks like a card number", "Remove it"))
+    return out
+
+
 def parse_ts(s):
     return dt.datetime.strptime(s.split(".")[0].rstrip("Z"), "%Y-%m-%dT%H:%M:%S").replace(tzinfo=dt.timezone.utc)
 
@@ -475,18 +493,8 @@ def _check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", p
 
     # GR-17: no secrets, personal or financial data
     for src, blob in (("plan", plan), ("evidence", evidence)):
-        for path, s in strings(blob):
-            for label, pat in SECRET_PATTERNS:
-                if pat.search(s):
-                    R.add("GR-17", "blocker", None, f"{src} {path} looks like it contains a {label}", "Remove it; record structure only")
-            for m in EMAIL.finditer(s):
-                dom = m.group(0).split("@", 1)[1].lower()
-                if not dom.endswith(RESERVED_DOMAINS):
-                    R.add("GR-17", "blocker", None, f"{src} {path} contains an email address", "Name the role, not the person's address")
-            for m in CARD.finditer(s):
-                digits = re.sub(r"\D", "", m.group(0))
-                if 13 <= len(digits) <= 19 and luhn(digits):
-                    R.add("GR-17", "blocker", None, f"{src} {path} contains what looks like a card number", "Remove it")
+        for what, fix in gr17_scan(src, blob):
+            R.add("GR-17", "blocker", None, what, fix)
 
     # GR-18: coverage lists every overlay instance, with read-only status
     cov = {(c["system"], c["instance"]) for c in plan["coverage"]}
