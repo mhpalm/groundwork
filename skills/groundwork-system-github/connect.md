@@ -6,7 +6,7 @@ Per CR-08 and CR-12. Use the runner's own GitHub access on every surface. Prefer
 
 | Surface | Method | How to check identity and instance |
 | --- | --- | --- |
-| claude-code-local | GitHub CLI (`gh`), signed in by the runner with `gh auth login` | `gh auth status` for the account; `gh api user --jq .login`; `gh api orgs/<org> --jq .login` for each overlay instance |
+| claude-code-local | GitHub CLI (`gh`), signed in by the runner with `gh auth login` | `gh auth status` for the account; `gh api user --jq .login`; `gh api orgs/<org> --jq .login` for each overlay instance (`gh api users/<login> --jq .login` when the instance is a user account, not an org) |
 | claude-code-local | A GitHub MCP server the runner configured | The server's "get me" tool, then read the org |
 | claude-code-cloud | The session's GitHub connection (MCP tools or `gh` provided by the environment) | Same as above; the session may only reach repositories attached to it |
 | claude-app | A GitHub connector the runner connected | The connector's identity tool, if it has one; otherwise coverage is `partial` with the reason |

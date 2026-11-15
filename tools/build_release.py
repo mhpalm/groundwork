@@ -20,6 +20,7 @@ import zipfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "skills", "groundwork-core", "scripts"))
+import check_compat  # noqa: E402
 import gw_yaml  # noqa: E402
 
 SKIP = ("__pycache__", ".pyc")
@@ -58,7 +59,7 @@ def main(argv):
             for f in sorted(files):
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, stage).replace(os.sep, "/")
-                sums.append(f"{hashlib.sha256(open(full, 'rb').read()).hexdigest()}  {rel}")
+                sums.append(f"{check_compat.file_digest(rel, open(full, 'rb').read())}  {rel}")
     sums.sort(key=lambda l: l.split("  ", 1)[1])
     open(os.path.join(out, "SHA256SUMS"), "w").write("\n".join(sums) + "\n")
     for name in sorted(os.listdir(stage)):

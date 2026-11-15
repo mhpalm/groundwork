@@ -2,6 +2,20 @@
 
 Every write here comes from the approved numbered write list, in order, through the core's create procedure (`reference/approval-create.md` in the core). Record each write in the journal.
 
+## REST forms (claude-code-cloud)
+
+`gh issue` and `gh label` commands use GitHub's GraphQL API, which claude-code-cloud sessions refuse. There, use these REST calls instead ([issues API](https://docs.github.com/en/rest/issues/issues), [labels API](https://docs.github.com/en/rest/issues/labels)); everything else in this file is unchanged:
+
+| `gh` command | REST form |
+| --- | --- |
+| `gh issue list ... --label L --state all` | `gh api -X GET repos/{owner}/{repo}/issues -f labels=L -f state=all --paginate` (drop pull requests: items with a `pull_request` key) |
+| `gh issue list ... --search ...` | `gh api -X GET search/issues -f q='repo:{owner}/{repo} is:issue is:open {terms}'` |
+| `gh issue create --title T --body-file F --label ... --milestone M` | `gh api repos/{owner}/{repo}/issues -X POST -f title=T -F body=@F -f 'labels[]=...' -F milestone=<number>` |
+| `gh issue edit {n} --add-label L` / `--remove-label L` | `gh api repos/{owner}/{repo}/issues/{n}/labels -X POST -f 'labels[]=L'` / `gh api -X DELETE repos/{owner}/{repo}/issues/{n}/labels/L` (URL-encode `:` as `%3A`) |
+| `gh issue view {n} --json labels` | `gh api repos/{owner}/{repo}/issues/{n} --jq '[.labels[].name]'` |
+| `gh issue comment {n} --body-file F` | `gh api repos/{owner}/{repo}/issues/{n}/comments -X POST -F body=@F` |
+| `gh label list` | `gh api repos/{owner}/{repo}/labels --paginate --jq '.[].name'` |
+
 ## find_epics
 
 `gh issue list --repo {owner}/{repo} --state open --search "{terms} in:title,body" --json number,title,labels,updatedAt --limit 30`, then keep at most 10 that carry the overlay's `naming.label` or have sub-issues (`GET repos/{owner}/{repo}/issues/{n}/sub_issues`). Titles are `untrusted_text`.
@@ -40,7 +54,7 @@ Read-only, for assess. Scope is one epic (its sub-issues) or one repo plus a sea
 
 ## plan_store
 
-Mode `repo_path`: write each file once with the contents API to `{path}/{name}.json` on the overlay's branch (`PUT repos/{owner}/{repo}/contents/{path}/{name}.json` without a `sha`, which fails if the file exists). Never update or delete. Read with `GET .../contents/...`. Files over 900 KB are split into `{name}.part-<n>.json` with a small index file.
+Mode `repo_path`: write each file once with the contents API to `{path}/{name}.json` on the repository's default branch (`PUT repos/{owner}/{repo}/contents/{path}/{name}.json` without a `sha`, which fails if the file exists). Never update or delete. Where the contents API write is refused (claude-code-cloud's proxy answers 403), commit the file from a clone of the default branch and push it; first check that the path does not exist (`GET .../contents/{path}/{name}.json` answers 404), and stop if it does. Read with `GET .../contents/...`. Files over 900 KB are split into `{name}.part-<n>.json` with a small index file.
 
 ## lock
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed (sandbox run 2): installed skills no longer fail the compatibility check after claude.ai rewrites their SKILL.md frontmatter; the release digest of a SKILL.md covers the frontmatter's parsed values and the body's bytes (`check_compat.file_digest`, used by `build_release.py`). The GitHub tracker skill names REST forms for claude-code-cloud, where GraphQL is refused, and a git-push path for the plan store where the contents API write is refused. The GitHub system skill's identity check covers user-owned instances. setup-mode.md says the anchor hash covers `overlay.yaml` and that `--set-hash` prints the hashed overlay.
+
 - Changed (fourteenth review, no major findings): the CR-12 stop on a retire resume names the way out, and build decisions 124 and 125 record the two accepted minor findings.
 
 - Fixed (thirteenth review): the resume of a retire whose status intent is recorded can no longer be left with no way forward. `retire.py recheck` leaves an unrecorded plan-owned item open with a warning, and reports an item this retire closed that a person reopened as left open, not closed. On that resume, `check_hashes.py` lists a bad record in the set as information instead of stopping (a fresh record reaches quorum), and accepts the overlay the plan binds after an admin anchors a newer one. approval-create.md says a retire uses `retire.py recheck` and that its resume doesn't rerun the integrity profile.

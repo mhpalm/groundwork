@@ -76,6 +76,21 @@ def skill_files(skill_dir):
                 yield os.path.relpath(full, os.path.dirname(skill_dir)).replace(os.sep, "/"), full
 
 
+def file_digest(rel, data):
+    """The digest SHA256SUMS records for an instruction file. A SKILL.md's frontmatter is hashed by its
+    parsed values, not its bytes: claude.ai rewrites the frontmatter of an uploaded skill (it quotes
+    `version: 1.0.0` as `version: '1.0.0'`), which changes nothing it says (sandbox run finding 15). The
+    body is hashed byte for byte."""
+    if rel.rsplit("/", 1)[-1] == "SKILL.md" and data.startswith(b"---\n"):
+        end = data.find(b"\n---\n", 4)
+        if end != -1:
+            import gw_yaml
+            from gw_canon import canonicalize
+            fm = gw_yaml.loads(data[4:end + 1].decode("utf-8"))
+            data = b"frontmatter:" + canonicalize(fm) + b"\nbody:" + data[end + 5:]
+    return hashlib.sha256(data).hexdigest()
+
+
 def verify_files(name, skills_root, sums):
     """verified | unverified | mismatch, plus notes."""
     if not sums:
@@ -91,7 +106,7 @@ def verify_files(name, skills_root, sums):
     seen = {}
     for rel, full in skill_files(d):
         with open(full, "rb") as f:
-            seen[rel] = hashlib.sha256(f.read()).hexdigest()
+            seen[rel] = file_digest(rel, f.read())
     notes = []
     for rel, digest in expected.items():
         if rel.endswith("groundwork.yaml"):
