@@ -24,3 +24,4 @@ These were settled while building v1 against spec draft 0.3. Each is a candidate
 ## Found in the first sandbox run, 2026-11-15
 
 16. A skill folder holds exactly one `SKILL.md`, at its root. The Claude app's skill upload rejects a ZIP with more than one ("Zip must contain exactly one SKILL.md file"), so templates that become skills are named `SKILL.template.md` and setup mode renames the copy. Enforced by `build_release.py`, `lint_boundaries.py` and `test_release.py`.
+17. Planning needs no connection (D-54). `validate_overlay.py` accepts a provisional overlay (id `provisional`, no admins, approvers, instances or anchor) and reserves that id. `check_identity.py` treats a tracker reported `not_connected` as deferred (`run: plan_only`) but still stops on a connected tracker that reaches the wrong org or project, and on a missing report. Approvals and the write list refuse a provisional overlay.

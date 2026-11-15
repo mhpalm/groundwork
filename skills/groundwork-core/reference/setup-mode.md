@@ -5,7 +5,7 @@ Setup mode builds an org's overlay on first use: it asks which systems the user 
 
 ## When it runs and who does what
 
-A skill cannot run at install time on any surface, so "first use" means the first Groundwork request in a session where no overlay loads. The core then offers setup mode before anything else. The same pass reruns when an overlay update adds a system or tracker. Any user may run setup; what they produce is an overlay draft. Only an admin listed in the draft (or, for a brand-new overlay, the person the runner names as admin, confirmed by them in their own session) approves its writes.
+A skill cannot run at install time on any surface, so "first use" means the first Groundwork request in a session where no overlay loads. The core then offers setup mode, or planning now with the provisional overlay and setting up later (D-54, pipeline.md). Setup is needed before anything is approved or written, not before planning. The same pass reruns when an overlay update adds a system or tracker. Any user may run setup; what they produce is an overlay draft. Only an admin listed in the draft (or, for a brand-new overlay, the person the runner names as admin, confirmed by them in their own session) approves its writes.
 
 | # | Step | Who | Writes |
 | --- | --- | --- | --- |

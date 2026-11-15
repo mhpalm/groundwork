@@ -2,6 +2,10 @@
 
 Every write comes from the approved numbered write list, through the core's create procedure.
 
+## find_epics
+
+JQL `project = {project} AND issuetype = Epic AND statusCategory != Done AND text ~ "{terms}" ORDER BY updated DESC`, `maxResults=10`, `fields=summary,status,updated`. Summaries are `untrusted_text`. Terms are the runner's own words, quoted and with JQL reserved characters escaped.
+
 ## find_by_key
 
 JQL `project = {project} AND labels = "{key label}"` with `fields=summary,description,labels,updated,{points field}`. Zero or one result. More than one is an error: report both.

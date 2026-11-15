@@ -17,9 +17,14 @@ CONNECT.json is a list of what each skill's connect step reported:
   - account:  the signed-in account (a login or account id, never a credential)
   - identity: platform facts the skill read back, e.g. {"org": "example-org"} or {"project": "VOL"}
 
-Prints {ok, results: [{skill, instance, decision: proceed|stop, why}], run: continue|stop}.
+  - status:   optional; "not_connected" when the runner chose to plan without this connection
+
+Prints {ok, results: [{skill, instance, decision: proceed|stop|deferred, why}], run: continue|plan_only|stop}.
 A stopped system is not inspected (record it in coverage) and the run continues.
-A stopped tracker stops the run. Exit code 1 when the run must stop.
+A tracker the runner has not connected is deferred: the run continues as plan_only, through
+Proposal, with no tracker read or write (D-54). A tracker that is connected but reaches the wrong
+org or project stops the run. A provisional overlay names no instances, so its run is plan_only.
+Exit code 1 when the run must stop.
 """
 import argparse
 import json
@@ -42,7 +47,7 @@ def expected_instances(overlay):
         for inst in s["instances"]:
             yield s["skill"], inst["id"], inst["url"], inst.get("expected_identity", {}), False
     tr = sk.get("tracker")
-    if tr:
+    if tr and tr.get("instance"):
         inst = tr["instance"]
         exp = {"project": inst["project"]} if inst.get("project") else {}
         exp.update(inst.get("expected_identity", {}))
@@ -58,6 +63,16 @@ def check(overlay, reports):
     for skill, inst, url, exp, is_tracker in expected_instances(overlay):
         got = by.pop((skill, inst), [])
         why = None
+        if len(got) == 1 and got[0].get("status") == "not_connected":
+            if is_tracker:
+                if run == "continue":
+                    run = "plan_only"
+                results.append({"skill": skill, "instance": inst, "decision": "deferred",
+                                "why": "not connected; planning continues through Proposal with no tracker read or write"})
+            else:
+                results.append({"skill": skill, "instance": inst, "decision": "stop",
+                                "why": "not connected; this system is not inspected"})
+            continue
         if not got:
             why = "connect did not report an identity for this instance"
         elif len(got) > 1:
@@ -79,10 +94,12 @@ def check(overlay, reports):
             run = "stop"
         results.append({"skill": skill, "instance": inst, "decision": decision,
                         "why": why or "matches the overlay"})
+    if overlay.get("provisional") and run == "continue":
+        run = "plan_only"
     for (skill, inst), _ in sorted(by.items()):
         results.append({"skill": skill, "instance": inst, "decision": "stop",
                         "why": "this instance is not in the overlay; Groundwork only reads what the overlay names"})
-    return {"ok": all(r["decision"] == "proceed" for r in results), "run": run, "results": results}
+    return {"ok": all(r["decision"] in ("proceed", "deferred") for r in results), "run": run, "results": results}
 
 
 def main(argv=None):

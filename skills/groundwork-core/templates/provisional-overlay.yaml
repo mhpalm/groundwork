@@ -1,0 +1,76 @@
+# Provisional overlay (D-54): lets a run plan before any tracker or system is connected.
+# It reaches nothing, names no approver, and can never approve or write. Set the tracker
+# skill to the one the runner uses (or leave Jira); setup mode later replaces this file
+# with the org's approved overlay and the run is promoted and re-checked.
+schema_version: "1.0"
+overlay_format: "1.0"
+id: provisional
+provisional: true
+version: 1
+hash: null
+org_name: Not set up yet
+admins: []
+skills:
+  core: ">=1.0.0 <2.0.0"
+  systems: []
+  unsupported_systems: []
+  tracker:
+    skill: groundwork-tracker-jira
+    version: ">=1.0.0 <2.0.0"
+    field_map:
+      key:
+        slot: label
+      points: Story Points
+      hours: Original Estimate
+      phase: label
+      blocked: Flagged
+      depends_on: Blocks
+      not_ready: label
+      role: label
+      work_types:
+        story: Story
+        task: Task
+      phase_release: version
+working_day_hours: 6
+assumed_executor: junior_no_context
+roles:
+  - key: developer
+    name: Developer
+  - key: admin
+    name: Admin
+  - key: analyst
+    name: Analyst
+  - key: qa
+    name: QA
+  - key: business_user
+    name: Business User
+  - key: trainer
+    name: Trainer
+  - key: comms
+    name: Comms
+  - key: maintainer
+    name: Maintainer
+  - key: approver
+    name: Approver
+task_hierarchy:
+  task_to_epic: parent
+  steps_as: checklist
+approval_gates: []
+evidence_max_age_days: 7
+create_window_days: 3
+anchor:
+  tracker_ref: null
+role_holders: []
+tracker_access_assumed: false
+environments: []
+labels:
+  draft: gw-draft
+  not_ready: gw-not-ready
+plan_store:
+  mode: attachments
+  repo: null
+  path: null
+naming:
+  epic: "{title}"
+  task: "{verb} {object}"
+  label: groundwork

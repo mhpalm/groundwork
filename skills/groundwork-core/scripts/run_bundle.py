@@ -25,6 +25,8 @@ from gw_hash import item_hash  # noqa: E402
 
 TEXT = (".json", ".jsonl", ".md", ".yaml", ".yml", ".txt")
 
+PROVISIONAL_ID = "provisional"
+
 
 def export(run_dir):
     plan = json.load(open(os.path.join(run_dir, "plan.json"), encoding="utf-8"))
@@ -51,7 +53,13 @@ def problems(bundle, overlay):
         return ["not a Groundwork run bundle"]
     if item_hash(bundle) != bundle.get("hash"):
         probs.append("bundle hash does not match its contents; it was changed after export")
-    if bundle["overlay_id"] != overlay["id"]:
+    promoting = bundle["overlay_id"] == PROVISIONAL_ID and overlay["id"] != PROVISIONAL_ID
+    if promoting:
+        # D-54: a plan drafted before setup moves into the org's approved overlay. A provisional run
+        # inspected nothing, so it may carry no evidence; the core reruns Discover to Proposal after import.
+        if any(f["path"].startswith("evidence/") and f["path"].endswith(".json") for f in bundle["files"]):
+            probs.append("a provisional bundle carries evidence; a provisional run inspects nothing, so it was changed")
+    elif bundle["overlay_id"] != overlay["id"]:
         probs.append(f"bundle was made under overlay {bundle['overlay_id']!r}, not {overlay['id']!r} (CR-12); "
                      "start a new run under this org's overlay instead")
     elif overlay.get("hash") and bundle["overlay_hash"] != overlay["hash"]:
@@ -96,7 +104,11 @@ def do_import(bundle, overlay, runs_root):
         os.makedirs(os.path.dirname(full), exist_ok=True)
         with open(full, "w", encoding="utf-8") as fh:
             fh.write(f["content"])
-    return {"ok": True, "run_dir": dest, "files": len(bundle["files"])}
+    out = {"ok": True, "run_dir": dest, "files": len(bundle["files"])}
+    if bundle["overlay_id"] == PROVISIONAL_ID and overlay["id"] != PROVISIONAL_ID:
+        out["promoted_from_provisional"] = True
+        out["rerun_from"] = "discover"
+    return out
 
 
 def main(argv=None):

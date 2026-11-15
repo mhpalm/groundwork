@@ -50,6 +50,7 @@ Attribution and license live in `SKILL.md` frontmatter under `license` and `meta
 | `readiness` | The fields and settings `map` needs, found or missing, from `discover_config` | Drives the setup field readiness pass |
 | `configure` | Procedure to create a missing field or label, as a keyed, idempotent, held write | Only in setup mode, only with an admin's approval |
 | `list_children` | Every item under an epic with its tracker id, key, plan-owned hash and last-updated time | Cross-checks find\_by\_key and lists an epic |
+| `find_epics` | Up to 10 open epics in the overlay's project whose title or summary matches the given terms: tracker key, title (untrusted), status, last updated | Intake only, read-only; the runner picks, never the core |
 | `find_by_key` | Zero or one item for a key, `searched across the whole tracker project` | More than one is an error, never a pick |
 | `read_epic` | The epic and its items as plan-shaped data, every free-text field marked untrusted | Used by release, revise and preflight |
 | `write` | Ensure a phase's release container exists by exact name (a version, milestone or label; never renamed, released or deleted), create item (work type, release container, key and not-ready flag set in the same call), update plan-owned fields, add link, add comment, set or clear not-ready | Only after approval, from the numbered write list |
