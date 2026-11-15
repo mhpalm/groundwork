@@ -236,6 +236,17 @@ change_requests = {
     }),
 }
 
+plan_status = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/plan-status/1.0",
+    "title": "Groundwork plan status (status-<n>.json; the latest wins over plan.status)",
+    **obj({
+        "schema_version": {"const": "1.0"}, "plan_id": PLAN_ID, "n": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["retired"]},
+        "set_by": obj({"plan_version": {"type": "integer", "minimum": 1}, "proposal_hash": HEX}),
+        "at": TS, "hash": HEX,
+    }),
+}
+
 proposal_context = {
     "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/proposal-context/1.0",
     "title": "Groundwork proposal context (stored at Proposal; create renders only from stored inputs)",
@@ -255,6 +266,12 @@ manifest = {
         "schema_version": {"const": "1.0"}, "plan_id": PLAN_ID, "seq": {"type": "integer", "minimum": 1},
         "prev_hash": nullable(HEX), "written_at": TS, "run_id": STR,
         "relies_on": arr(obj({"ref": STR, "hash": HEX})),
+        # retire: the status intent is recorded before status-<n>.json is written, then the final
+        # manifest records that file's hash; a status file the manifest neither intends nor records is a stop
+        "status_file": nullable(obj({"state": {"enum": ["intent", "recorded"]}, "n": {"type": "integer", "minimum": 1},
+                                     "hash": HEX, "at": TS,
+                                     "set_by": obj({"plan_version": {"type": "integer", "minimum": 1},
+                                                    "proposal_hash": HEX})})),
         "items": arr(obj({"key": STR, "tracker_id": STR, "owned_hash": HEX,
                           "links": arr(obj({"type": STR, "to_key": STR})), "not_ready": {"type": "boolean"},
                           "split_comment": {"type": "boolean"},
@@ -267,6 +284,8 @@ manifest = {
         "hash": HEX,
     }),
 }
+
+manifest["required"] = [k for k in manifest["properties"] if k != "status_file"]
 
 journal = {
     "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/journal/1.0", "title": "Groundwork journal line",
@@ -380,7 +399,7 @@ import sys
 out = os.path.join(os.path.dirname(__file__), "..", "..", "skills", "groundwork-core", "schemas")
 check = "--check" in sys.argv
 stale = []
-for name, sch in [("plan", plan), ("evidence", evidence), ("approval", approval), ("proposal-context", proposal_context), ("change-requests", change_requests), ("manifest", manifest), ("journal", journal),
+for name, sch in [("plan", plan), ("evidence", evidence), ("approval", approval), ("proposal-context", proposal_context), ("change-requests", change_requests), ("plan-status", plan_status), ("manifest", manifest), ("journal", journal),
                   ("handshake", handshake), ("skill-manifest", skill_manifest), ("rules", rules), ("review", review), ("overlay", overlay)]:
     path = os.path.join(out, f"{name}.schema.json")
     text = json.dumps(sch, indent=2) + "\n"

@@ -239,7 +239,7 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
 # Writes a plan-level set may authorize (planning model 4.3): closes, the change-request log,
 # the plan status file and the snapshot, plus the lock and manifest bookkeeping around them.
 PLAN_LEVEL_WRITES = ("lock_claim", "lock_release", "manifest_put", "add_label", "close_item", "cr_log_put", "status_put",
-                     "snapshot_put")
+                     "snapshot_put", "remove_label", "close_epic")
 
 
 def write_list_scope_problems(wl, scope, phases):

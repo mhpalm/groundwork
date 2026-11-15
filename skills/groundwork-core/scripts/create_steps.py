@@ -269,9 +269,17 @@ def scope_decision(count, overlay, requested=None):
     return {"ok": True, "count": count, "limit": limit}
 
 
-def make_manifest(prev, items, plan_id, run, seq, now, relies_on):
+_KEEP = object()
+
+
+def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_KEEP):
+    """status_file: the retire record to set; by default it is carried forward from prev, so a later
+    manifest can never drop a recorded or intended status file."""
     m = {"schema_version": "1.0", "plan_id": plan_id, "seq": seq, "prev_hash": prev["hash"] if prev else None,
          "written_at": fmt(now), "run_id": run, "relies_on": relies_on, "items": items}
+    sf = (prev or {}).get("status_file") if status_file is _KEEP else status_file
+    if sf is not None:
+        m["status_file"] = sf
     if prev and seq != prev["seq"] + 1:
         raise ValueError("manifest seq must be the previous seq + 1")
     if not prev and seq != 1:

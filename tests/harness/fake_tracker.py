@@ -33,6 +33,8 @@ class FakeTracker:
         self.search_lag = search_lag_writes
         self._recent = []     # keys not yet visible to search
         self.clock = T0
+        self.epic_state = {}  # epic key -> open | closed (open when absent)
+        self.epic_labels = {}  # epic key -> set of labels
 
     def tick(self, seconds=1):
         self.clock += dt.timedelta(seconds=seconds)
@@ -85,6 +87,14 @@ class FakeTracker:
         self._write()
         self.items[tid]["state"] = "open"
         self.items[tid]["closed_as"] = []
+
+    def remove_epic_label(self, epic, label):
+        self._write()
+        self.epic_labels.setdefault(epic, set()).discard(label)
+
+    def close_epic(self, epic):
+        self._write()
+        self.epic_state[epic] = "closed"
 
     def raw(self, tid):
         i = self.items[tid]
@@ -295,3 +305,87 @@ def run_close(tr, plan, overlay, closes, run="run-c", account="acct-dev", crash_
                 written[k]["close"]["state"] = "closed"
             put()
     return {"ok": True, **plan_steps}
+
+
+def latest_status(tr, plan_id):
+    ss = [v for k, v in tr.store.items() if k.startswith(f"{plan_id}-status-")]
+    return copy.deepcopy(max(ss, key=lambda s: s["n"])) if ss else None
+
+
+def retire_items(tr, plan, overlay, epic):
+    fm = overlay["skills"]["tracker"]["field_map"]
+    manifest = latest_manifest(tr, plan["id"])
+    written = {i["key"]: i for i in (manifest or {}).get("items", [])}
+    plan_keys = {t["key"] for t in plan["tasks"]}
+    found = {it["key"]: it for it in tr.list_children(epic)}
+    for k in sorted(plan_keys - set(found)):  # written but not yet linked under the epic
+        for it in tr.find_by_key(k):
+            found[k] = it
+    out = []
+    for k, it in sorted(found.items()):
+        w = written.get(k)
+        out.append({"key": k, "person_added": k not in plan_keys, "unrecorded": k in plan_keys and w is None,
+                    "status": create_steps.read_status(tr.raw(it["tracker_id"]), w, fm)["status"]})
+    return out
+
+
+def run_retire(tr, plan, overlay, approved, choices, proposal_hash, run="run-r", account="acct-dev", epic="VOL-1",
+               resuming=None, crash_after=None, draft_label=None):
+    """Follow the retire write order. approved: the retire plan the runner approved (retire.plan_retire).
+    crash_after: 'closes' | 'intent' | 'status' | 'recorded' | 'snapshot' | 'epic' stops the session there."""
+    import retire
+    manifest, status = latest_manifest(tr, plan["id"]), latest_status(tr, plan["id"])
+    g = retire.gate("resume" if resuming else "retire", plan, manifest, status, tr.epic_state.get(epic, "open"), resuming)
+    if not g["ok"]:
+        return g
+    probs = retire.recheck(approved, retire_items(tr, plan, overlay, epic), choices)
+    if probs:
+        return {"ok": False, "problems": probs}
+    decision = create_steps.lock_decision(tr.comments, run, account, tr.clock)
+    if decision["decision"] == "claim":
+        tr.comment(account, decision["post"])
+        decision = create_steps.lock_decision(tr.comments, run, account, tr.clock)
+    if decision["decision"] != "held":
+        return {"ok": False, "lock": decision}
+    if draft_label and draft_label in tr.epic_labels.get(epic, set()):
+        tr.remove_epic_label(epic, draft_label)
+    res = run_close(tr, plan, overlay, approved["closes"], run=run, account=account)
+    if not res["ok"]:
+        return res
+    if crash_after == "closes":
+        return {"ok": False, "crashed": "closes"}
+    manifest = latest_manifest(tr, plan["id"])
+
+    def put(sf):
+        nonlocal manifest
+        m = create_steps.make_manifest(manifest, manifest["items"], plan["id"], run, manifest["seq"] + 1, tr.clock, [],
+                                       status_file=sf)
+        tr.put(f"{plan['id']}-manifest-{m['seq']}", m)
+        manifest = m
+
+    sf = manifest.get("status_file")
+    if sf is None:
+        n = (status["n"] + 1) if status else 1
+        sf = retire.status_intent(retire.status_record(plan, n, proposal_hash, create_steps.fmt(tr.clock)))
+        put(sf)
+    if crash_after == "intent":
+        return {"ok": False, "crashed": "intent"}
+    if latest_status(tr, plan["id"]) is None:
+        tr.put(f"{plan['id']}-status-{sf['n']}", retire.rebuild_status(plan["id"], sf))
+    if crash_after == "status":
+        return {"ok": False, "crashed": "status"}
+    if sf["state"] != "recorded":
+        put(dict(sf, state="recorded"))
+    if crash_after == "recorded":
+        return {"ok": False, "crashed": "recorded"}
+    snap = f"{plan['id']}-snapshot-retire"
+    if snap not in tr.store:
+        tr.put(snap, {"plan_id": plan["id"], "manifest_seq": manifest["seq"], "status_n": sf["n"]})
+    if crash_after == "snapshot":
+        return {"ok": False, "crashed": "snapshot"}
+    if tr.epic_state.get(epic, "open") != "closed":
+        tr.close_epic(epic)
+    if crash_after == "epic":
+        return {"ok": False, "crashed": "epic"}
+    tr.comment(account, create_steps.lock_line("release", run, account, tr.clock))
+    return {"ok": True, "status_n": sf["n"]}

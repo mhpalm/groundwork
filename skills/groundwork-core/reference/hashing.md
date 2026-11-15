@@ -23,5 +23,5 @@ The scripts in `scripts/gw_hash.py` are the definition; this list mirrors them.
 - `proposal_hash` is SHA-256 of the UTF-8 bytes of `proposal.md` exactly as rendered.
 - `view_hash` covers the reviewer bundle `{schema_version, plan: reviewer view, evidence (sorted by id), checklist_version, rules (sorted by id)}`.
 - `review_hash` covers `{findings, view_hash}` of the reviewer's output.
-- Evidence, manifest and overlay hashes cover the record without its own `hash` field.
+- Evidence, manifest, overlay and status-file hashes cover the record without its own `hash` field. A manifest's `status_file` is part of the manifest, so the chain binds it; the status file's own hash covers `{schema_version, plan_id, n, status, set_by, at}`. A retire write list binds only `{schema_version, plan_id, status}` of the status file, since `set_by` names the proposal's own hash.
 - The plan-owned hash of a tracker item covers `{title (whitespace collapsed), body_owned (the text between the groundwork owned markers, trailing spaces trimmed), role_key, phase, key}` as the tracker skill's `normalize` reads them back.

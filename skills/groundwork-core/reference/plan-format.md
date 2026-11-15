@@ -186,6 +186,22 @@ Evidence holds structure, configuration and counts only. Counts are never groupe
 
 **Approval sets.** The records for one proposal form a set: same `plan_id`, same `plan_version` (the current version, the latest plan of record stored) and same `proposal_hash`. Only a set's own records are checked against it; every other record is information. A phase set has `scope: phases` and kind `initial`, `release`, `revision` or `exception`. A plan-level set has `scope: plan_level`, `phases: []`, one kind for all its records, and kind `decline`, `own_epic` or `retire` (no new plan version) or `later` (a new version that only adds outline content and offers no phase). `plan_store_ref` names the stored proposal context the proposal was rendered from.
 
+## Plan status file
+
+`<plan.id>-status-<n>` (`schemas/plan-status.schema.json`) records a status change made without a new plan version. In v1 the only such status is `retired`:
+
+```yaml
+schema_version: "1.0"
+plan_id: gw-01JCX7Q3RZ9V4N2T8K5M6P0ABC
+n: 1
+status: retired
+set_by: {plan_version: 3, proposal_hash: sha256}   # the verified plan-level set of kind retire
+at: "2026-11-15T13:00:00Z"
+hash: sha256 of the record without hash
+```
+
+The latest status file wins over `plan.status`. It is valid only while the latest manifest's `status_file` intends or records it with the same number and hash (revise-mode.md, "Retire").
+
 ## Proposal context
 
 `proposal-context-<n>.json` (`schemas/proposal-context.schema.json`) is written at Proposal and stored in the plan store. It holds every fact the proposal shows that depends on the session or on a tracker read: degraded-check lines, and for a plan-level proposal its summary, the epic's items at that time (keys and statuses only, marking person-added items) and the pending sets it replaces. Create renders the proposal again only from the plan of record, the write list and this file, and compares the bytes with `proposal_hash`.
