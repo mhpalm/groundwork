@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "harness"))
 from common import GOLDEN, NOW, fresh  # noqa: E402
 import check_identity  # noqa: E402
 import gw_yaml  # noqa: E402
+import render_proposal  # noqa: E402
 import revise_diff  # noqa: E402
 import run_bundle  # noqa: E402
 import validate_plan  # noqa: E402
@@ -86,7 +87,9 @@ class G6Revise(unittest.TestCase):
         self.want = fixture("G6", "expected-diff.json")
 
     def diff(self, new=None, tracker=None):
-        return revise_diff.diff(self.base, new or self.new, tracker or self.tracker, self.ov)
+        tracker = tracker or self.tracker
+        manifest = {"items": [{"key": i["key"]} for i in tracker]}  # everything written is under the epic
+        return revise_diff.diff(self.base, new or self.new, tracker, self.ov, manifest)
 
     def test_diff_shape(self):
         d = self.diff()
@@ -101,6 +104,8 @@ class G6Revise(unittest.TestCase):
         self.assertTrue(set(self.want["changed_include"]) <= changed)
         self.assertFalse(set(self.want["changed_exclude"]) & changed)
         self.assertIn("P1-T04", {r["key"].split(":")[-1] for r in d["relies_on"]})
+        self.assertEqual(d["adopted"], ["P1-T04"])  # the person's retitle, adopted, gets an update the manifest records
+        self.assertIn("P1-T04", d["edits"])
 
     def test_editing_done_work_is_refused(self):
         new = copy.deepcopy(self.new)
@@ -114,6 +119,16 @@ class G6Revise(unittest.TestCase):
         d = self.diff(new)
         self.assertFalse(d["ok"])
         self.assertEqual([r["task"] for r in d["refused"]], ["P1-T04"])
+
+    def test_an_unwritten_task_retitled_is_not_an_edit(self):
+        """Second review, finding 7: only written tasks get update_item writes."""
+        new = copy.deepcopy(self.new)
+        t = next(t for t in new["tasks"] if t["phase"] == "P3" and t["id"] in {x["id"] for x in self.base["tasks"]})
+        t["title"] = t["title"] + " again"
+        d = self.diff(new)
+        self.assertIn(t["id"], d["changed_unwritten"])
+        self.assertNotIn(t["id"], d["edits"])
+        render_proposal.write_list(new, self.ov, ["P1"], edits=d["edits"])  # P1 offered alone: no error
 
     def test_removing_done_work_is_refused(self):
         new = copy.deepcopy(self.new)

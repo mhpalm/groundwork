@@ -87,6 +87,7 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
     probs = []
     if overlay.get("provisional"):
         return [], ["a provisional overlay names no approvers; set up Groundwork for the tracker first (D-54)"]
+    resuming_writes = False
     if plan_state is not None:
         # the retire gate (planning model 7): a retired plan, a retire in progress or a closed epic
         # refuses every set except the resume of the retire's own set
@@ -95,6 +96,9 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
         own = (plan["version"], sha256_hex(proposal_text.encode("utf-8")))
         if scope == "plan_level" and sf:
             g = retire.gate("resume", plan, plan_state.get("manifest"), plan_state.get("status"), plan_state["epic"], own)
+            # the retire's own set already started writing under a valid approval: its resume is not
+            # held to the create window, or a crash could leave the plan stuck mid-retire for good
+            resuming_writes = g["ok"] and g.get("resume_of_retire", False)
         else:
             g = retire.gate("create" if scope == "phases" else "retire", plan, plan_state.get("manifest"),
                             plan_state.get("status"), plan_state["epic"])
@@ -175,15 +179,21 @@ def _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, no
         if unverified_writer and not rec["accept_unverified_writer"]:
             probs.append(f"comment {c['ref']}: the tracker skill is unverified on this surface and the record does not accept that")
             continue
-        if (now - ts(c["created_at"])).days >= window:
-            probs.append(f"comment {c['ref']}: older than create_window_days ({window}); approvers must post fresh records")
+        if (now - ts(c["created_at"])).days >= window and not resuming_writes:
+            # an expired record is information, never a problem: fresh records for the same proposal
+            # can still reach quorum, so a crashed create can be finished after the window
+            info.append(f"comment {c['ref']}: older than create_window_days ({window}); not counted, post a fresh record")
             continue
         records.append((c, rec, gate))
     return records, probs
 
 
+def open_blockers(review):
+    return [f["id"] for f in review.get("findings", []) if f.get("severity") == "blocker" and f.get("resolution") != "fixed"]
+
+
 def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review, phases, now, unverified_writer, info=None,
-                     latest_stored_version=None, plan_state=None):
+                     latest_stored_version=None, plan_state=None, view=None):
     """Return (ok, problems, accepted_phases) for a phase set (initial, release, revision).
 
     Only records for the plan's current version and this proposal count (the
@@ -196,6 +206,12 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
         return False, ["no phases were named for create; name the approved phases to write"], []
     records, probs = _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info,
                                    latest_stored_version, "phases", plan_state)
+    import render_proposal
+    if not overlay.get("provisional") and proposal_text != render_proposal.proposal(plan, overlay, wl.get("phases", []), wl):
+        probs.append("the proposal does not re-render from the plan of record and the write list; approvals bind only "
+                     "what Groundwork rendered")
+    if view is not None and review["view_hash"] != view_hash(view_bundle(plan, view["evidence"], CHECKLIST_VERSION, view["rules"])):
+        probs.append("the review was not made from this plan's reviewer view")
     gates = {g["id"]: g for g in overlay["approval_gates"]}
     accepted = set()
     phase_gates = [g for g in gates.values() if g["applies_to"] == "all_phases"]
@@ -223,7 +239,7 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
 
 
 def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info=None,
-                      latest_stored_version=None, plan_state=None, bundle=None):
+                      latest_stored_version=None, plan_state=None, stored=None, view=None):
     """Return (ok, problems, kind) for a plan-level set (decline, own_epic, retire, later).
 
     The same grouping filter and per-record checks as a phase set. Every all_phases
@@ -248,18 +264,32 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
         who = {c["author_account_id"] for c, rec, g in records if g["id"] == gate["id"]}
         if len(who) < gate.get("min_approvers", 1):
             probs.append(f"gate {gate['id']} has no plan-level quorum ({len(who)} of {gate.get('min_approvers', 1)})")
-    if wl.get("kind") in plan_bundle_kinds():
-        # the set stores no plan version, so the review it binds must be of its own closes-and-decisions
-        # bundle, never the plan's ordinary Gap review (planning model 4.3)
-        if bundle is None:
-            probs.append("a decline, own epic or retire set needs its closes-and-decisions bundle to verify the review")
-        else:
-            want = plan_level_bundle(plan, wl, {"items": bundle["epic_items"], "summary": bundle["summary"]},
-                                     bundle["checklist_version"], bundle["rules"], bundle["assessment"])
-            if view_hash(bundle) != view_hash(want):
-                probs.append("the closes-and-decisions bundle does not match this plan and write list")
-            elif review["view_hash"] != view_hash(bundle):
+    # stored: {context, assessment, rules} as stored at Proposal. The proposal and the review bundle are
+    # rebuilt from them here, never taken from a file the session supplies.
+    if stored is None:
+        probs.append("a plan-level set is verified only against its stored proposal context")
+    else:
+        import render_proposal
+        try:
+            again = render_proposal.plan_level_proposal(plan, overlay, wl, stored["context"])
+        except (ValueError, KeyError) as e:
+            again = None
+            probs.append(f"the stored proposal context does not fit this set: {e}")
+        if again is not None and proposal_text != again:
+            probs.append("the proposal does not re-render from the plan of record, the write list and the stored "
+                         "context; approvals bind only what Groundwork rendered")
+        if wl.get("kind") in plan_bundle_kinds():
+            # the set stores no plan version, so the review it binds must be of its own closes-and-decisions
+            # bundle, never the plan's ordinary Gap review (planning model 4.3)
+            want = plan_level_bundle(plan, wl, stored["context"], CHECKLIST_VERSION, stored["rules"], stored.get("assessment"))
+            if review["view_hash"] != view_hash(want):
                 probs.append("the review was not made from this set's closes-and-decisions bundle")
+        elif view is not None and review["view_hash"] != view_hash(view_bundle(plan, view["evidence"], CHECKLIST_VERSION,
+                                                                               view["rules"])):
+            probs.append("the review was not made from this plan's reviewer view")
+    blockers = open_blockers(review)
+    if blockers:
+        probs.append(f"the review has open blocker findings ({', '.join(blockers)}); fix them and review again")
     probs += write_list_scope_problems(wl, "plan_level", [])
     return (not probs), probs, (kinds[0] if len(kinds) == 1 else None)
 
@@ -326,6 +356,10 @@ def verify_chain(manifests):
     return latest, probs
 
 
+def cli_rules(a):
+    return [r for p in a.rules for r in json.load(open(p, encoding="utf-8")).get("rules", [])]
+
+
 def cli_plan_state(a):
     load = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
     return {"manifest": load(a.manifest), "status": load(a.status), "epic": a.epic}
@@ -385,11 +419,15 @@ def main(argv=None):
         print(review_hash(rev))
         return 0
     if a.cmd in ("approvals", "plan-level"):
-        missing = [f for f, v in (("--latest-version", a.latest_version), ("--manifest", a.manifest), ("--status", a.status),
-                                  ("--epic", a.epic)) if v is None]
+        need = [("--latest-version", a.latest_version), ("--manifest", a.manifest), ("--status", a.status),
+                ("--epic", a.epic), ("--rules", a.rules or None), ("--evidence", a.evidence)]
+        if a.cmd == "plan-level":
+            need.append(("--context", a.context))
+        missing = [f for f, v in need if v is None]
         if missing:
             print(json.dumps({"ok": False, "problems": [f"{', '.join(missing)} required: approvals are never verified "
-                                                         "without the latest stored version and the retire gate"]}, indent=2))
+                                                         "without the latest stored version, the retire gate and the "
+                                                         "stored inputs the proposal and review are rebuilt from"]}, indent=2))
             return 1
     if a.cmd == "approvals":
         plan = J(a.files[0])
@@ -399,7 +437,8 @@ def main(argv=None):
         info = []
         phases = [x.strip() for x in (a.phases or "").split(",") if x.strip()]
         ok, probs, accepted = verify_approvals(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
-                                               phases, ts(a.now), unverified, info, a.latest_version, cli_plan_state(a))
+                                               phases, ts(a.now), unverified, info, a.latest_version, cli_plan_state(a),
+                                               {"evidence": load_evidence(a.evidence), "rules": cli_rules(a)})
         print(json.dumps({"ok": ok, "accepted_phases": accepted, "problems": probs, "superseded": info}, indent=2))
         return 0 if ok else 1
     if a.cmd == "plan-level":
@@ -410,7 +449,9 @@ def main(argv=None):
         info = []
         ok, probs, kind = verify_plan_level(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),
                                             ts(a.now), unverified, info, a.latest_version, cli_plan_state(a),
-                                            J(a.bundle) if a.bundle else None)
+                                            {"context": J(a.context), "assessment": J(a.assessment) if a.assessment else None,
+                                             "rules": cli_rules(a)},
+                                            {"evidence": load_evidence(a.evidence), "rules": cli_rules(a)})
         print(json.dumps({"ok": ok, "kind": kind, "problems": probs, "other_sets": info}, indent=2))
         return 0 if ok else 1
     if a.cmd == "manifest-chain":

@@ -62,8 +62,10 @@ def model_changes(base, new):
     return out
 
 
-def diff(base, new, tracker, overlay):
-    out = {"added": [], "changed": [], "close": [], "close_items": [], "dropped": [], "deps_changed": [], "phases_offered": [],
+def diff(base, new, tracker, overlay, manifest=None):
+    """manifest: the latest manifest. A task is "never written" only when neither the tracker read
+    nor the manifest knows its key; without the manifest, nothing is dropped."""
+    out = {"added": [], "changed": [], "close": [], "close_items": [], "dropped": [], "adopted": [], "changed_unwritten": [], "deps_changed": [], "phases_offered": [],
            "drift": [], "refused": [], "relies_on": []}
     if new["id"] != base["id"]:
         out["refused"].append({"task": None, "why": "the revised plan has a different plan id; revise keeps the epic's plan id"})
@@ -107,8 +109,14 @@ def diff(base, new, tracker, overlay):
             if new_h != item["owned_hash"]:
                 out["refused"].append({"task": tid, "why": "a person changed this task in the tracker; the tracker wins, so the "
                                                            "revised plan must adopt that text (marked from_tracker) before other edits"})
+            else:
+                # adopted: the manifest still records the old text, so the write list binds an update to the
+                # adopted text, and create records it (adopt_update) without writing over the person's edit
+                out["adopted"].append(tid)
             continue
-        if new_h != base_h:
+        if new_h != base_h and item is None:
+            out["changed_unwritten"].append(tid)  # never written: the new text is simply created later
+        elif new_h != base_h:
             if finished(item):
                 out["refused"].append({"task": tid, "why": f"{item['status'].replace('_', ' ')} work is not edited; "
                                                            "add a follow-up task with a new id"})
@@ -133,8 +141,15 @@ def diff(base, new, tracker, overlay):
         if finished(item):
             out["refused"].append({"task": tid, "why": f"a {item['status'].replace('_', ' ')} task cannot be removed from the plan"})
             continue
-        if item is None:  # never written: removing it from the plan is enough, there is nothing to close
-            out["dropped"].append(tid)
+        if item is None:
+            recorded = b["key"] in {i["key"] for i in (manifest or {}).get("items", [])}
+            if manifest is None or recorded:
+                out["refused"].append({"task": tid, "why": "the tracker read doesn't show this task but "
+                                       + ("the manifest records it as written: find it by key before removing it"
+                                          if recorded else "no manifest was given, so it can't be told apart from a "
+                                          "written task: pass the latest manifest")})
+                continue
+            out["dropped"].append(tid)  # never written: removing it from the plan is enough, there is nothing to close
             continue
         out["close"].append(tid)
         out["close_items"].append({"key": b["key"], "reason": "not_planned"})
@@ -150,6 +165,8 @@ def diff(base, new, tracker, overlay):
         if k in tr:
             out["relies_on"].append({"key": k, "tracker_id": tr[k]["tracker_id"], "updated_at": tr[k]["updated_at"]})
     out["model"] = model_changes(base, new)
+    # what render_proposal.py write-list --edits takes: every written task whose text moves, adopted text included
+    out["edits"] = sorted(set(x["task"] for x in out["changed"]) | set(out["adopted"]))
     out["ok"] = not out["refused"]
     return out
 
@@ -160,9 +177,11 @@ def main(argv=None):
     ap.add_argument("new")
     ap.add_argument("tracker")
     ap.add_argument("--overlay", required=True)
+    ap.add_argument("--manifest", required=True, help="the latest manifest, or - when nothing was written yet")
     a = ap.parse_args(argv)
-    J = lambda p: json.load(open(p, encoding="utf-8"))
-    out = diff(J(a.base), J(a.new), J(a.tracker), gw_yaml.load(a.overlay))
+    J = lambda p: None if p == "-" else json.load(open(p, encoding="utf-8"))
+    manifest = {"items": []} if a.manifest == "-" else J(a.manifest)
+    out = diff(J(a.base), J(a.new), J(a.tracker), gw_yaml.load(a.overlay), manifest)
     print(json.dumps(out, indent=2))
     return 0 if out["ok"] else 1
 

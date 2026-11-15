@@ -9,7 +9,7 @@ Usage:
             [--pending PHASE_ID ...]
   retire.py status PLAN.json --n N --proposal-hash HEX --at TS   (at write time, under the lock)
   retire.py rebuild PLAN_ID MANIFEST.json      (resume: the status file from the manifest's intent)
-  retire.py recheck RETIRE_PLAN.json ITEMS.json CHOICES.json   (at write time, before any write)
+  retire.py recheck VERIFIED_WRITE_LIST.json ITEMS.json CONTEXT.json   (at write time, before any write)
   retire.py gate OP --plan PLAN.json --manifest MANIFEST.json|- --status STATUS.json|- --epic open|closed
             [--resuming PLAN_VERSION:PROPOSAL_HASH]
 
@@ -63,20 +63,41 @@ def plan_retire(items, choices):
             left.append({"key": it["key"], "owner_role_key": c["leave"]})
         else:
             probs.append(f"{it['key']} is in progress: the runner chooses close, or leave open with a named owner role")
-    return {"ok": not probs, "closes": closes, "left_open": left, "person_added": person, "problems": probs}
+    seen = [{"key": i["key"], "status": i["status"], "person_added": bool(i.get("person_added"))}
+            for i in sorted(items, key=lambda i: i["key"])]
+    return {"ok": not probs, "closes": closes, "left_open": left, "person_added": person, "problems": probs, "seen": seen}
 
 
-def recheck(approved, items, choices):
-    """At write time, re-derive the retire from the items as they are now. Items finished since the
-    proposal are skipped by the close procedure; anything else the approved set did not name stops."""
-    cur = plan_retire(items, choices)
-    probs = list(cur["problems"])
-    ok_keys = {c["key"] for c in approved["closes"]}
-    probs += [f"{c['key']} would close but the approved retire does not name it: propose again"
-              for c in cur["closes"] if c["key"] not in ok_keys]
-    left = {(x["key"], x["owner_role_key"]) for x in approved["left_open"]}
-    probs += [f"{x['key']} would be left open but the approved retire does not say so: propose again"
-              for x in cur["left_open"] if (x["key"], x["owner_role_key"]) not in left]
+def recheck(wl, items, seen):
+    """At write time, check the items as they are now against the verified retire write list.
+
+    wl: the verified write list (its close_item writes and left_open); seen: the statuses the
+    proposal showed ({key: status}, from the stored proposal context). Nothing at write time can
+    add a close or change a choice: an item finished since is skipped by the close procedure, and
+    anything else the approved set didn't name stops with "propose again"."""
+    if wl.get("kind") != "retire":
+        return ["recheck takes the verified retire write list"]
+    closes = {w["key"] for w in wl["writes"] if w["kind"] == "close_item"}
+    left = {x["key"] for x in wl.get("left_open", [])}
+    person = set(wl.get("person_added", []))
+    probs = []
+    for it in sorted(items, key=lambda i: i["key"]):
+        k, st = it["key"], it["status"]
+        if it.get("person_added"):
+            if k not in person and st not in ("done", "closed_not_done"):
+                probs.append(f"{k} was added by a person after the proposal and is not named in it: propose again")
+            continue
+        if it.get("unrecorded"):
+            probs.append(f"{k} is plan-owned but no manifest records it: resume that create first, then propose again")
+            continue
+        if st in ("done", "closed_not_done"):
+            continue
+        if k in left:
+            continue
+        if k not in closes:
+            probs.append(f"{k} is open but the approved retire neither closes it nor leaves it open: propose again")
+        elif st == "in_progress" and seen.get(k) != "in_progress":
+            probs.append(f"{k} was started after the retire was approved; closing it needs a new choice: propose again")
     return probs
 
 
@@ -191,7 +212,7 @@ def main(argv=None):
         ap.add_argument(x)
     ap.add_argument("--draft-label", action="store_true")
     ap.add_argument("--pending", nargs="*", default=[])
-    ap.add_argument("--n", type=int, default=1)
+    ap.add_argument("--n", type=int, help="status: the latest status file's number plus one (1 when there is none)")
     a = ap.parse_args(argv)
     J = lambda p: None if p in (None, "-") else json.load(open(p, encoding="utf-8"))
     if a.cmd == "plan":
@@ -204,8 +225,11 @@ def main(argv=None):
         except (ValueError, KeyError, TypeError) as e:
             out = {"ok": False, "problems": [f"cannot rebuild the status file: {e}"]}
     elif a.cmd == "recheck":
-        probs = recheck(J(a.files[0]), J(a.files[1]), J(a.files[2]))
+        seen = {i["key"]: i["status"] for i in J(a.files[2])["items"]}
+        probs = recheck(J(a.files[0]), J(a.files[1]), seen)
         out = {"ok": not probs, "problems": probs}
+    elif a.cmd == "status" and a.n is None:
+        out = {"ok": False, "problems": ["--n required: the number is allocated under the lock at write time"]}
     elif a.cmd == "status":
         st = status_record(J(a.files[0]), a.n, a.proposal_hash, a.at)
         out = {"status_record": st, "intent": status_intent(st)}

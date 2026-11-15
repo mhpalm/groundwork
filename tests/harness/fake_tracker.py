@@ -345,7 +345,7 @@ def retire_items(tr, plan, overlay, epic):
     return out
 
 
-def run_retire(tr, plan, overlay, approved, choices, proposal_hash, run="run-r", account="acct-dev", epic="VOL-1",
+def run_retire(tr, plan, overlay, approved, proposal_hash, run="run-r", account="acct-dev", epic="VOL-1",
                resuming=None, crash_after=None, draft_label=None):
     """Follow the retire write order. approved: the retire plan the runner approved (retire.plan_retire).
     crash_after: 'closes' | 'intent' | 'status' | 'recorded' | 'snapshot' | 'epic' stops the session there."""
@@ -354,7 +354,8 @@ def run_retire(tr, plan, overlay, approved, choices, proposal_hash, run="run-r",
     g = retire.gate("resume" if resuming else "retire", plan, manifest, status, tr.epic_state.get(epic, "open"), resuming)
     if not g["ok"]:
         return g
-    probs = retire.recheck(approved, retire_items(tr, plan, overlay, epic), choices)
+    wl = retire.write_list(plan, overlay, approved)
+    probs = retire.recheck(wl, retire_items(tr, plan, overlay, epic), {i["key"]: i["status"] for i in approved["seen"]})
     if probs:
         return {"ok": False, "problems": probs}
     decision = create_steps.lock_decision(tr.comments, run, account, tr.clock)

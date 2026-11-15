@@ -11,6 +11,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "harness"))
 from common import fresh  # noqa: E402
 import check_hashes  # noqa: E402
+import render_proposal  # noqa: E402
 import validate_plan  # noqa: E402
 from gw_canon import sha256_hex  # noqa: E402
 from gw_hash import phase_hashes, plan_hash, review_hash, write_list_hash  # noqa: E402
@@ -27,8 +28,8 @@ def setup_case():
     anchor = {"overlay_id": overlay["id"], "version": overlay["version"], "hash": overlay["hash"],
               "gates": {g["id"]: [a["account_id"] for a in g["approvers"]] for g in overlay["approval_gates"]},
               "author_account_id": PD}
-    proposal = "proposal text\n"
     wl = {"schema_version": "1.0", "plan_id": plan["id"], "plan_version": plan["version"], "phases": ["P0"], "writes": []}
+    proposal = render_proposal.proposal(plan, overlay, wl["phases"], wl)
     review = {"view_hash": "a" * 64, "findings": []}
     return plan, overlay, anchor, proposal, wl, review
 
@@ -64,6 +65,9 @@ class ApprovalVersions(unittest.TestCase):
             plan["version"] = 2
             wl = dict(wl, plan_version=2)
             old = record(plan, prop, wl, rev, ["P0"], version=1, rid="A-1", phash="0" * 64)
+        wl = dict(wl, phases=["P1"])
+        prop = render_proposal.proposal(plan, overlay, wl["phases"], wl)  # the release proposal at version N
+        old = record(plan, prop, wl, rev, ["P0"], version=plan["version"] - 1, rid="A-1", phash="0" * 64)
         new = record(plan, prop, wl, rev, ["P1"], rid="A-2")
         info = []
         ok, probs, acc = check_hashes.verify_approvals(plan, overlay, anchor, [old, new], prop, wl, rev, ["P1"], NOW, False, info)

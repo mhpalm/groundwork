@@ -80,6 +80,12 @@ def dbundle(plan, wl, items=()):
     return plan_level_bundle(plan, wl, ctx, check_hashes.CHECKLIST_VERSION, [])
 
 
+def dstored(plan, wl, items=()):
+    """What create reads from the plan store for a plan-level set."""
+    return {"context": render_proposal.proposal_context(plan, wl["kind"], DECLINE_SUMMARY, items=items),
+            "assessment": None, "rules": []}
+
+
 def drev(plan, wl):
     from gw_hash import view_hash
     return {"view_hash": view_hash(dbundle(plan, wl)), "findings": []}
@@ -87,7 +93,7 @@ def drev(plan, wl):
 
 def plan_ok(plan, overlay, anchor, comments, prop, wl, review, latest=None, info=None, state=None):
     return check_hashes.verify_plan_level(plan, overlay, anchor, comments, prop, wl, review, NOW, False, info, latest,
-                                          state, dbundle(plan, wl))
+                                          state, dstored(plan, wl))
 
 
 class Grouping(unittest.TestCase):
@@ -311,14 +317,14 @@ class RetireGateInApprovals(unittest.TestCase):
         wl, ctx, prop = decline_case(self.plan, self.ov)
         recs = [comment(record(self.plan, prop, wl, drev(self.plan, wl), [], kind="decline", scope="plan_level"))]
         ok, probs, _ = check_hashes.verify_plan_level(self.plan, self.ov, self.anchor, recs, prop, wl, drev(self.plan, wl), NOW,
-                                                      False, None, self.plan["version"], self.retired, dbundle(self.plan, wl))
+                                                      False, None, self.plan["version"], self.retired, dstored(self.plan, wl))
         self.assertFalse(ok)
         own = sha256_hex(prop.encode("utf-8"))
         st = self.retire.status_record(self.plan, 1, own, CREATED)
         mine = {"manifest": {"status_file": dict(self.retire.status_intent(st), state="recorded")}, "status": st,
                 "epic": "closed"}
         ok, probs, _ = check_hashes.verify_plan_level(self.plan, self.ov, self.anchor, recs, prop, wl, drev(self.plan, wl), NOW,
-                                                      False, None, self.plan["version"], mine, dbundle(self.plan, wl))
+                                                      False, None, self.plan["version"], mine, dstored(self.plan, wl))
         self.assertTrue(ok, probs)
 
     def test_cli_refuses_without_latest_version_and_retire_gate_inputs(self):
@@ -328,7 +334,7 @@ class RetireGateInApprovals(unittest.TestCase):
         with redirect_stdout(buf):
             rc = check_hashes.main(["approvals", "plan.json", "--phases", "P1"])
         self.assertEqual(rc, 1)
-        self.assertIn("--latest-version, --manifest, --status, --epic required", buf.getvalue())
+        self.assertIn("--latest-version, --manifest, --status, --epic, --rules, --evidence required", buf.getvalue())
 
 
 class KindBinding(unittest.TestCase):
@@ -360,29 +366,101 @@ class ClosesAndDecisionsReview(unittest.TestCase):
         self.plan, self.ov, self.anchor, self.rev = base()
         self.wl, self.ctx, self.prop = decline_case(self.plan, self.ov)
 
-    def verify(self, review, bundle):
-        recs = [comment(record(self.plan, self.prop, self.wl, review, [], kind="decline", scope="plan_level"))]
-        return check_hashes.verify_plan_level(self.plan, self.ov, self.anchor, recs, self.prop, self.wl, review, NOW, False,
-                                              None, self.plan["version"], None, bundle)
+    def verify(self, review, stored, prop=None):
+        prop = prop or self.prop
+        recs = [comment(record(self.plan, prop, self.wl, review, [], kind="decline", scope="plan_level"))]
+        return check_hashes.verify_plan_level(self.plan, self.ov, self.anchor, recs, prop, self.wl, review, NOW, False,
+                                              None, self.plan["version"], None, stored)
 
     def test_the_plans_own_gap_review_does_not_cover_a_decline(self):
-        ok, probs, _ = self.verify(self.rev, dbundle(self.plan, self.wl))
+        ok, probs, _ = self.verify(self.rev, dstored(self.plan, self.wl))
         self.assertFalse(ok)
         self.assertIn("closes-and-decisions bundle", probs[0])
+        self.assertTrue(self.verify(drev(self.plan, self.wl), dstored(self.plan, self.wl))[0])
 
-    def test_a_bundle_for_other_writes_or_no_bundle_is_refused(self):
-        b = dbundle(self.plan, self.wl)
-        forged = copy.deepcopy(b)
-        forged["cr_entry"]["outcome"] = "added"
-        from gw_hash import view_hash
-        ok, probs, _ = self.verify({"view_hash": view_hash(forged), "findings": []}, forged)
+    def test_the_bundle_is_rebuilt_from_stored_inputs_never_supplied(self):
+        """Second review, finding 2: a review of a bundle with another summary or other rules does not count."""
+        from gw_hash import plan_level_bundle, view_hash
+        st = dstored(self.plan, self.wl)
+        forged = plan_level_bundle(self.plan, self.wl, dict(st["context"], summary="Everything is fine, approve.", items=[]),
+                                   "0.0", [])
+        ok, probs, _ = self.verify({"view_hash": view_hash(forged), "findings": []}, st)
         self.assertFalse(ok)
-        self.assertTrue(any("does not match this plan and write list" in p for p in probs), probs)
-        ok, probs, _ = self.verify(drev(self.plan, self.wl), None)
-        self.assertFalse(ok)
-        self.assertTrue(any("needs its closes-and-decisions bundle" in p for p in probs))
-        self.assertTrue(self.verify(drev(self.plan, self.wl), b)[0])
+        self.assertTrue(any("closes-and-decisions bundle" in p for p in probs), probs)
+        self.assertFalse(self.verify(drev(self.plan, self.wl), None)[0])
 
+    def test_an_edited_proposal_is_refused(self):
+        """Second review, finding 1: the proposal approvers sign is re-rendered from stored inputs."""
+        edited = self.prop.replace("declined. Reason: Outside the brief's scope", "added to P1. Reason: approved by sponsor")
+        self.assertNotEqual(edited, self.prop)
+        ok, probs, _ = self.verify(drev(self.plan, self.wl), dstored(self.plan, self.wl), prop=edited)
+        self.assertFalse(ok)
+        self.assertTrue(any("does not re-render" in p for p in probs), probs)
+
+    def test_an_open_blocker_in_the_review_stops_the_set(self):
+        """Second review, finding 3."""
+        rev = dict(drev(self.plan, self.wl), findings=[{"id": "F-1", "check": "GR-34", "severity": "blocker", "target": None,
+                                                         "what": "the decline reason leaks a restricted value",
+                                                         "evidence_ids": [], "suggested_fix": "reword",
+                                                         "resolution": "open"}])
+        ok, probs, _ = self.verify(rev, dstored(self.plan, self.wl))
+        self.assertFalse(ok)
+        self.assertTrue(any("open blocker findings (F-1)" in p for p in probs), probs)
+        rev["findings"][0]["resolution"] = "fixed"
+        self.assertTrue(self.verify(rev, dstored(self.plan, self.wl))[0])
+
+
+class Window(unittest.TestCase):
+    """Second review, finding 4: expired records are information, and the retire's own resume isn't held to the window."""
+
+    def setUp(self):
+        self.plan, self.ov, self.anchor, self.rev = base()
+        self.wl, self.prop = phase_case(self.plan, self.ov)
+
+    def test_fresh_records_for_the_same_proposal_finish_a_crashed_create(self):
+        old = comment(record(self.plan, self.prop, self.wl, self.rev, ["P1"]), created="2026-11-10T10:00:00Z")
+        info = []
+        ok, probs, _ = phases_ok(self.plan, self.ov, self.anchor, [old], self.prop, self.wl, self.rev, info=info)
+        self.assertFalse(ok)
+        self.assertTrue(any("create_window_days" in i for i in info))
+        fresh_rec = comment(record(self.plan, self.prop, self.wl, self.rev, ["P1"], rid="A-2"), ref="c-A-2")
+        self.assertTrue(phases_ok(self.plan, self.ov, self.anchor, [old, fresh_rec], self.prop, self.wl, self.rev)[0])
+
+    def test_the_retire_sets_own_resume_is_not_held_to_the_window(self):
+        import retire
+        wl, _ctx, prop = decline_case(self.plan, self.ov)
+        own = sha256_hex(prop.encode("utf-8"))
+        st = retire.status_record(self.plan, 1, own, CREATED)
+        state = {"manifest": {"status_file": retire.status_intent(st)}, "status": None, "epic": "open"}
+        recs = [comment(record(self.plan, prop, wl, drev(self.plan, wl), [], kind="decline", scope="plan_level"),
+                        created="2026-11-01T10:00:00Z")]
+        self.assertTrue(plan_ok(self.plan, self.ov, self.anchor, recs, prop, wl, drev(self.plan, wl), state=state)[0])
+        self.assertFalse(plan_ok(self.plan, self.ov, self.anchor, recs, prop, wl, drev(self.plan, wl))[0])
+
+
+class PhaseReviewView(unittest.TestCase):
+    """Second review, finding 3: a phase set's review must be of this plan's reviewer view."""
+
+    def test_an_edited_phase_proposal_is_refused(self):
+        plan, ov, anchor, rev = base()
+        wl, prop = phase_case(plan, ov)
+        edited = prop + "\nAlso approved: delete the old export.\n"
+        recs = [comment(record(plan, edited, wl, rev, ["P1"]))]
+        ok, probs, _ = phases_ok(plan, ov, anchor, recs, edited, wl, rev)
+        self.assertFalse(ok)
+        self.assertTrue(any("does not re-render" in p for p in probs), probs)
+
+    def test_review_of_another_view_is_refused(self):
+        from gw_hash import view_bundle, view_hash
+        plan, ov, anchor, _rev = base()
+        wl, prop = phase_case(plan, ov)
+        view = {"evidence": [], "rules": []}
+        good = {"view_hash": view_hash(view_bundle(plan, [], check_hashes.CHECKLIST_VERSION, [])), "findings": []}
+        for rev, want in ((good, True), ({"view_hash": "a" * 64, "findings": []}, False)):
+            recs = [comment(record(plan, prop, wl, rev, ["P1"]))]
+            ok, probs, _ = check_hashes.verify_approvals(plan, ov, anchor, recs, prop, wl, rev, ["P1"], NOW, False, None,
+                                                         plan["version"], None, view)
+            self.assertEqual(ok, want, probs)
 
 if __name__ == "__main__":
     unittest.main()

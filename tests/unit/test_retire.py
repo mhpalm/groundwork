@@ -38,7 +38,7 @@ def approve(tr, plan, ov, choices=None):
 
 def retired():
     tr, plan, ov = created()
-    r = run_retire(tr, plan, ov, approve(tr, plan, ov), {}, PH_HASH)
+    r = run_retire(tr, plan, ov, approve(tr, plan, ov), PH_HASH)
     assert r["ok"], r
     return tr, plan, ov
 
@@ -115,7 +115,7 @@ class Run(unittest.TestCase):
         item(tr, "P1-T02")["category"] = "in_progress"
         tr.close(item(tr, "P1-T03")["tracker_id"], "completed")
         choices = {item(tr, "P1-T02")["key"]: {"leave": "developer"}}
-        r = run_retire(tr, plan, ov, approve(tr, plan, ov, choices), choices, PH_HASH)
+        r = run_retire(tr, plan, ov, approve(tr, plan, ov, choices), PH_HASH)
         self.assertTrue(r["ok"], r)
         self.assertEqual(item(tr, "P1-T02")["state"], "open")
         self.assertEqual(item(tr, "P1-T03")["closed_as"], ["completed"])
@@ -125,7 +125,7 @@ class Run(unittest.TestCase):
         tr, plan, ov = created()
         tr.epic_labels["VOL-1"] = {"gw-draft"}
         w0 = tr.writes
-        run_retire(tr, plan, ov, approve(tr, plan, ov), {}, PH_HASH, draft_label="gw-draft", crash_after="closes")
+        run_retire(tr, plan, ov, approve(tr, plan, ov), PH_HASH, draft_label="gw-draft", crash_after="closes")
         self.assertEqual(tr.epic_labels["VOL-1"], set())
         self.assertGreater(tr.writes, w0)
 
@@ -135,7 +135,7 @@ class Run(unittest.TestCase):
         tr.link_parent(tid, "VOL-1")
         rp = approve(tr, plan, ov)
         self.assertEqual(rp["person_added"], ["person:1"])
-        self.assertTrue(run_retire(tr, plan, ov, rp, {}, PH_HASH)["ok"])
+        self.assertTrue(run_retire(tr, plan, ov, rp, PH_HASH)["ok"])
         self.assertEqual(tr.items[tid]["state"], "open")
 
     def test_a_plan_item_no_manifest_records_stops_until_create_resumes(self):
@@ -149,33 +149,40 @@ class Run(unittest.TestCase):
         self.assertFalse(r["ok"])
         self.assertIn("resume that create first", r["problems"][0])
         self.assertTrue(run_create(tr, plan, ov, PH)["ok"])
-        self.assertTrue(run_retire(tr, plan, ov, approve(tr, plan, ov), {}, PH_HASH)["ok"])
+        self.assertTrue(run_retire(tr, plan, ov, approve(tr, plan, ov), PH_HASH)["ok"])
 
     def test_work_started_after_approval_stops_the_retire(self):
         tr, plan, ov = created()
         rp = approve(tr, plan, ov)
         item(tr, "P1-T04")["category"] = "in_progress"  # someone picked it up after the runner approved
-        r = run_retire(tr, plan, ov, rp, {}, PH_HASH)
+        r = run_retire(tr, plan, ov, rp, PH_HASH)
         self.assertFalse(r["ok"])
-        self.assertTrue(any("in progress" in p for p in r["problems"]))
+        self.assertTrue(any("started after the retire was approved" in p for p in r["problems"]), r)
         self.assertEqual(item(tr, "P1-T04")["state"], "open")
         self.assertIsNone(latest_status(tr, plan["id"]))
 
-    def test_a_close_the_approval_did_not_name_stops(self):
+    def test_write_time_cannot_change_a_choice_or_add_a_close(self):
+        """Second review, finding 10: recheck reads the verified write list, never choices typed at write time."""
         tr, plan, ov = created()
         k = item(tr, "P1-T04")["key"]
         item(tr, "P1-T04")["category"] = "in_progress"
         rp = approve(tr, plan, ov, {k: {"leave": "developer"}})
-        r = run_retire(tr, plan, ov, rp, {k: "close"}, PH_HASH)
-        self.assertFalse(r["ok"])
-        self.assertTrue(any("does not name it" in p for p in r["problems"]))
+        self.assertTrue(run_retire(tr, plan, ov, rp, PH_HASH)["ok"])
+        self.assertEqual(item(tr, "P1-T04")["state"], "open")  # left open, as approved
+        wl = retire.write_list(plan, ov, rp)
+        extra = {"key": "gw:x:P9-T01", "status": "todo"}
+        self.assertTrue(any("neither closes it nor leaves it open" in p
+                            for p in retire.recheck(wl, [extra], {})))
+        self.assertTrue(retire.recheck(rp, [], {}))  # a retire plan is not the verified write list
+        late = {"key": "person:9", "status": "todo", "person_added": True}
+        self.assertTrue(any("added by a person after the proposal" in p for p in retire.recheck(wl, [late], {})))
 
 
 class Crash(unittest.TestCase):
     def crash_then_resume(self, where):
         tr, plan, ov = created()
         rp = approve(tr, plan, ov)
-        self.assertEqual(run_retire(tr, plan, ov, rp, {}, PH_HASH, crash_after=where)["crashed"], where)
+        self.assertEqual(run_retire(tr, plan, ov, rp, PH_HASH, crash_after=where)["crashed"], where)
         return tr, plan, ov, rp
 
     def test_resume_of_the_retire_set_completes_after_every_crash_point(self):
@@ -186,7 +193,7 @@ class Crash(unittest.TestCase):
                 if where != "closes":
                     self.assertFalse(gate(tr, plan, "create")["ok"])
                     self.assertFalse(gate(tr, plan, "resume", (plan["version"], "b" * 64))["ok"])
-                r = run_retire(tr, plan, ov, rp, {}, PH_HASH, resuming=own if where != "closes" else None)
+                r = run_retire(tr, plan, ov, rp, PH_HASH, resuming=own if where != "closes" else None)
                 self.assertTrue(r["ok"], (where, r))
                 self.assertEqual(tr.epic_state["VOL-1"], "closed")
                 self.assertEqual(latest_manifest(tr, plan["id"])["status_file"]["state"], "recorded")
@@ -252,13 +259,13 @@ class Gate(unittest.TestCase):
         self.assertFalse(gate(tr, plan, "resume", (plan["version"] + 1, PH_HASH))["ok"])
         self.assertTrue(gate(tr, plan, "resume", (plan["version"], PH_HASH))["resume_of_retire"])
         before = copy.deepcopy(tr.store)
-        r = run_retire(tr, plan, ov, approve(tr, plan, ov), {}, PH_HASH, run="run-r3", resuming=(plan["version"], PH_HASH))
+        r = run_retire(tr, plan, ov, approve(tr, plan, ov), PH_HASH, run="run-r3", resuming=(plan["version"], PH_HASH))
         self.assertTrue(r["ok"], r)
         self.assertEqual(tr.store, before)
 
     def test_a_second_retire_is_refused(self):
         tr, plan, ov = retired()
-        r = run_retire(tr, plan, ov, approve(tr, plan, ov), {}, "d" * 64, run="run-r4")
+        r = run_retire(tr, plan, ov, approve(tr, plan, ov), "d" * 64, run="run-r4")
         self.assertFalse(r["ok"])
 
     def test_a_closed_epic_refuses_create_even_without_a_status_file(self):
@@ -337,10 +344,11 @@ class Scripts(unittest.TestCase):
         rc, rb = run(retire, ["rebuild", plan["id"], P("m2.json")])
         self.assertEqual((rc, rb["status_record"]), (0, st["status_record"]))
         rp = approve(tr, plan, ov)
-        json.dump(rp, open(P("rp.json"), "w"))
+        import render_proposal
+        json.dump(retire.write_list(plan, ov, rp), open(P("wl.json"), "w"))
         json.dump(retire_items(tr, plan, ov, "VOL-1"), open(P("now.json"), "w"))
-        json.dump({}, open(P("ch.json"), "w"))
-        self.assertEqual(run(retire, ["recheck", P("rp.json"), P("now.json"), P("ch.json")])[0], 0)
+        json.dump(render_proposal.proposal_context(plan, "retire", "Retire.", items=rp["seen"]), open(P("ctx.json"), "w"))
+        self.assertEqual(run(retire, ["recheck", P("wl.json"), P("now.json"), P("ctx.json")])[0], 0)
 
     def test_retire_proposal_lists_left_open_person_added_and_voided_sets(self):
         import render_proposal

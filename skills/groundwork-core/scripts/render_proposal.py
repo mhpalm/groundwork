@@ -484,7 +484,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("what", choices=["proposal", "task", "epic", "write-list", "plan-level", "plan-write-list", "context"])
     ap.add_argument("--kind", help="plan-write-list and context: decline, own_epic, later (context also retire)")
-    ap.add_argument("--entry", help="plan-write-list: the change-request log entry JSON this set binds")
+    ap.add_argument("--entry", help="write-list (outcome added) and plan-write-list: the change-request log entry JSON this set binds")
     ap.add_argument("--summary", help="context: the proposal's what-and-why, in Groundwork's words")
     ap.add_argument("--items", help="context: JSON [{key, status, person_added}] read from the tracker at Proposal")
     ap.add_argument("--voided", nargs="*", default=[], help="context: pending sets this replaces")
@@ -524,7 +524,10 @@ def main(argv=None):
     else:
         closes = json.load(open(a.closes, encoding="utf-8")) if a.closes else None
         edits = [x.strip() for x in (a.edits or "").split(",") if x.strip()]
-        text = json.dumps(write_list(plan, overlay, offer, closes, edits=edits), indent=2)
+        entry = json.load(open(a.entry, encoding="utf-8")) if a.entry else None
+        if entry is not None and entry.get("outcome") != "added":
+            raise SystemExit("a revision write list binds a change request only with outcome added")
+        text = json.dumps(write_list(plan, overlay, offer, closes, cr_entry=entry, edits=edits), indent=2)
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(text)

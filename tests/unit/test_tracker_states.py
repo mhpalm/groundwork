@@ -220,10 +220,23 @@ class ClosedNotDone(unittest.TestCase):
             t["depends_on"] = [x for x in t["depends_on"] if x["task"] != unwritten["id"]]
         for ph in n2["phases"]:
             ph["task_ids"] = [x for x in ph["task_ids"] if x != unwritten["id"]]
-        d = revise_diff.diff(base, n2, tracker, ov)
+        d = revise_diff.diff(base, n2, tracker, ov, {"items": [{"key": i["key"]} for i in tracker]})
         self.assertIn(unwritten["id"], d["dropped"])
         self.assertNotIn(unwritten["key"], [c["key"] for c in d["close_items"]])
         self.assertTrue(all(c["key"] in written for c in d["close_items"]))
+        # second review, finding 11: a task the manifest records but the epic read doesn't show is never dropped
+        missing = next(i for i in tracker if i["status"] != "done")
+        mt = next(t for t in base["tasks"] if t["key"] == missing["key"])
+        n3 = copy.deepcopy(n2)
+        n3["tasks"] = [t for t in n3["tasks"] if t["id"] != mt["id"]]
+        for t in n3["tasks"]:
+            t["depends_on"] = [x for x in t["depends_on"] if x["task"] != mt["id"]]
+        for ph in n3["phases"]:
+            ph["task_ids"] = [x for x in ph["task_ids"] if x != mt["id"]]
+        d3 = revise_diff.diff(base, n3, [i for i in tracker if i is not missing], ov, {"items": [{"key": i["key"]} for i in tracker]})
+        self.assertNotIn(mt["id"], d3["dropped"])
+        self.assertTrue(any(r["task"] == mt["id"] and "manifest records it" in r["why"] for r in d3["refused"]))
+        self.assertFalse(revise_diff.diff(base, n2, tracker, ov)["ok"])  # no manifest: nothing is dropped
 
 
 class ReadScope(unittest.TestCase):
@@ -253,7 +266,7 @@ class ApprovedEdits(unittest.TestCase):
     def changed_keys(self, tr, new, ov):
         """Every key whose rendered text moved (a dependent's body names its dependency's title)."""
         m = {i["key"]: i["owned_hash"] for i in latest_manifest(tr, new["id"])["items"]}
-        return [p["key"] for p in fake_planned(new, ov) if p["key"] in m and m[p["key"]] != p["owned_hash"]]
+        return {p["key"]: p["owned_hash"] for p in fake_planned(new, ov) if p["key"] in m and m[p["key"]] != p["owned_hash"]}
 
     def test_write_list_binds_the_update_in_its_phase(self):
         _tr, new, ov, t = self.edited()
@@ -306,6 +319,43 @@ class ApprovedEdits(unittest.TestCase):
         self.assertFalse(pf["ok"])
         self.assertTrue(any(s["key"] == t["key"] and "drift" in s["why"] for s in pf["stops"]), pf["stops"])
         self.assertEqual(by_task(tr, "P1-T02")["title"], "A person's own wording")
+
+    def test_an_update_writes_only_the_text_the_write_list_binds(self):
+        """Second review, finding 6."""
+        tr, new, ov, t = self.edited()
+        ups = dict(self.changed_keys(tr, new, ov), **{t["key"]: "9" * 64})
+        pf = run_create(tr, new, ov, PH, run="run-2", updates=ups)
+        self.assertFalse(pf["ok"])
+        self.assertTrue(any(s["key"] == t["key"] and "differs from the text the approved update binds" in s["why"]
+                            for s in pf["stops"]), pf["stops"])
+        self.assertNotEqual(by_task(tr, "P1-T02")["title"], t["title"])
+        self.assertFalse(run_create(tr, new, ov, PH, run="run-3", updates=list(self.changed_keys(tr, new, ov)))["ok"])
+
+    def test_finished_work_is_never_updated(self):
+        """Second review, finding 5: the task was done between approval and create."""
+        tr, new, ov, t = self.edited()
+        ups = self.changed_keys(tr, new, ov)
+        tr.close(by_task(tr, "P1-T02")["tracker_id"], "Done")
+        before = by_task(tr, "P1-T02")["title"]
+        pf = run_create(tr, new, ov, PH, run="run-2", updates=ups)
+        self.assertFalse(pf["ok"])
+        self.assertTrue(any(s["key"] == t["key"] and "finished work is not edited" in s["why"] for s in pf["stops"]),
+                        pf["stops"])
+        self.assertEqual(by_task(tr, "P1-T02")["title"], before)
+
+    def test_adopted_tracker_text_is_recorded_not_stopped(self):
+        """Second review, finding 8: a person's edit the plan adopts is recorded through adopt_update."""
+        tr, plan, ov = created()
+        by_task(tr, "P1-T02")["title"] = "Add the CSV export endpoint, as the team renamed it"
+        new = copy.deepcopy(plan)
+        new["version"] += 1
+        next(x for x in new["tasks"] if x["id"] == "P1-T02")["title"] = "Add the CSV export endpoint, as the team renamed it"
+        ups = self.changed_keys(tr, new, ov)
+        self.assertFalse(run_create(tr, new, ov, PH, run="run-2")["ok"])  # without the bound update it is drift
+        pf = run_create(tr, new, ov, PH, run="run-3", updates=ups)
+        self.assertTrue(pf["ok"], pf)
+        key = by_task(tr, "P1-T02")["key"]
+        self.assertEqual([a["action"] for a in pf["actions"] if a["key"] == key], ["adopt_update"])
 
 
 def fake_planned(plan, ov):

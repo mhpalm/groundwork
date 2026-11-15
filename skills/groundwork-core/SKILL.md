@@ -58,7 +58,7 @@ Never compute a hash, validate a plan or write proposal text by hand. Run the sc
 | `check_hashes.py owned FIELDS.json` / `manifest-chain ...` | Plan-owned hash of an item read back; verify the manifest chain |
 | `check_identity.py --overlay ... --connect CONNECT.json` | At Intake, before any discovery call: does each sign-in reach the org the overlay names |
 | `run_bundle.py export|import ...` | Pack a run folder for another session; import refuses another overlay's bundle or a changed one |
-| `revise_diff.py BASE.json NEW.json TRACKER.json --overlay ...` | Revise mode: added, changed, closed, drift and refused items against the tracker |
+| `revise_diff.py BASE.json NEW.json TRACKER.json --overlay ... --manifest ...` | Revise mode: added, changed, adopted, closed, dropped, drift and refused items against the tracker, the brief and approach changes, and the `edits` the write list binds |
 
 Run state lives in `runs/<overlay.id>/<plan.id>/` under the overlay's `run_storage` for this surface (`plan.json`, `evidence/`, `journal.jsonl`, `handshakes.jsonl`, `proposal.md`, `write-list.json`, reviewer files). Write every stage's output there before moving on, and append a journal line (`schemas/journal.schema.json`) for each stage start, stop and write. On cloud and app surfaces the folder ends with the session, so export a run bundle at every stop until the draft epic exists.
 

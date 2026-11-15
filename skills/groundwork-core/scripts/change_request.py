@@ -9,9 +9,10 @@ Usage:
   change_request.py base LOG.json CR-n --plan-version N --manifest-seq N
   change_request.py assess BASE_PLAN.json NEW_PLAN.json LOG.json CR-n --cost drafted|outline|unknown
                     [--approved-unwritten P1,P2]
-  change_request.py decide LOG.json CR-n --outcome added|later|own_epic|declined --reason TEXT
-                    --plan-version N --proposal-hash HEX
+  change_request.py decide LOG.json CR-n --write-list VERIFIED_WRITE_LIST.json --proposal-hash HEX
+                    [--restricted RESTRICTED.json]   (outcome and reason come from the bound entry)
   change_request.py basis RELEASED_PLAN.json CURRENT_PLAN.json --phase P
+  change_request.py release-check CURRENT_PLAN.json --phase P --released P1=PLAN_AT_RELEASE.json ...
 
 The log is change-requests-<n>.json in the plan store, outside plan_hash. Each
 write is the latest file plus one entry, numbered under the lock, so two sets at
@@ -274,8 +275,12 @@ def bound_entry(wl):
     return e
 
 
-def decide_bound(latest, wl, proposal_hash):
+def decide_bound(latest, wl, proposal_hash, cr_id=None):
+    if not re.fullmatch(r"[0-9a-f]{64}", proposal_hash or ""):
+        raise ValueError("decided_by names the verified proposal's full sha256 (64 hex characters)")
     e = bound_entry(wl)
+    if cr_id is not None and cr_id != e["id"]:
+        raise ValueError(f"the write list decides {e['id']}, not {cr_id}")
     return decide(latest, e["id"], e["outcome"], e["reason"], wl["plan_version"], proposal_hash)
 
 
@@ -348,7 +353,11 @@ def main(argv=None):
         if not a.write_list:
             print(json.dumps({"ok": False, "problems": ["--write-list required: the outcome comes from the verified write list"]}))
             return 1
-        log, entry = decide_bound(J(a.files[0]), J(a.write_list), a.proposal_hash)
+        try:
+            log, entry = decide_bound(J(a.files[0]), J(a.write_list), a.proposal_hash, a.files[1])
+        except (ValueError, KeyError) as e:
+            print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
+            return 1
         out = {"log": log, "entry": entry, "problems": log_problems(log, restricted(a))}
     elif a.cmd == "release-check":
         rel = {x.split("=", 1)[0]: J(x.split("=", 1)[1]) for x in a.released}

@@ -290,5 +290,35 @@ class ReleaseStopsOnBasisChange(unittest.TestCase):
         self.assertEqual(revise_diff.model_changes(to_format1(base), to_format1(new)), {})
 
 
+
+class RevisionDecides(unittest.TestCase):
+    """Second review, finding 9: an add decided by a revision binds its entry through write-list --entry."""
+
+    def test_write_list_cli_binds_an_added_entry_and_decide_reads_it(self):
+        import io
+        import json
+        import tempfile
+        from contextlib import redirect_stdout
+        plan, ov = g1()
+        log, _ = logged(plan)
+        d = tempfile.mkdtemp()
+        P = lambda n: os.path.join(d, n)
+        json.dump(plan, open(P("plan.json"), "w"))
+        json.dump({"id": "CR-1", "outcome": "added", "reason": "Fits the outcome"}, open(P("e.json"), "w"))
+        ovp = os.path.join(os.path.dirname(__file__), "..", "golden", "G1", "overlay", "overlay.yaml")
+        with redirect_stdout(io.StringIO()):
+            render_proposal.main(["write-list", P("plan.json"), "--overlay", ovp, "--offer", "P1", "--entry", P("e.json"),
+                                  "--out", P("wl.json")])
+        wl = json.load(open(P("wl.json")))
+        json.dump({"id": "CR-1", "outcome": "declined", "reason": "x"}, open(P("bad.json"), "w"))
+        with redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+            render_proposal.main(["write-list", P("plan.json"), "--overlay", ovp, "--offer", "P1", "--entry", P("bad.json")])
+        log2, e = cr.decide_bound(log, wl, "d" * 64, "CR-1")
+        self.assertEqual(e["outcome"], "added")
+        with self.assertRaises(ValueError):
+            cr.decide_bound(log, wl, "a76e")
+        with self.assertRaises(ValueError):
+            cr.decide_bound(log, wl, "d" * 64, "CR-2")
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,8 +8,9 @@ mean, so the decision is the same on every tracker and every surface.
 
 Usage:
   create_steps.py lock LOCK_COMMENTS.json --run RUN_ID --account ACCOUNT --now TS
-  create_steps.py preflight PLANNED.json FOUND.json MANIFEST.json --phases P1,P2
+  create_steps.py preflight PLANNED.json FOUND.json MANIFEST.json --phases P1,P2 --write-list VERIFIED_WRITE_LIST.json
   create_steps.py manifest PREV_MANIFEST.json|- ITEMS.json --plan-id ID --run RUN_ID --seq N --now TS [--relies-on REFS.json]
+                  [--status-file STATUS_FILE_ENTRY.json]
   create_steps.py status RAW.json MANIFEST.json|- --overlay OVERLAY.yaml
   create_steps.py close CLOSES.json MANIFEST.json|- FOUND.json
   create_steps.py scope COUNT --overlay OVERLAY.yaml [--limit N]
@@ -104,11 +105,22 @@ def lock_decision(comments, run, account, now):
 def preflight(planned, found, manifest, phases, approved_updates=()):
     """Decide create | skip | adopt | update | adopt_update | link_parent | stop per planned item (spec section 8 table).
 
-    approved_updates: the keys the verified write list updates (its update_item writes). A written
+    approved_updates: {key: owned_hash} from the verified write list's update_item writes. A written
     item whose planned text differs from what the manifest recorded is updated only when the write
-    list names it; otherwise create stops, so an approved edit is never skipped silently and an
-    unapproved one is never written."""
-    approved_updates = set(approved_updates)
+    list names it with exactly the planned hash, and only while the item is not finished; otherwise
+    create stops, so an approved edit is never skipped silently and nothing else is ever written."""
+    approved_updates = dict(approved_updates) if isinstance(approved_updates, dict) else {k: None for k in approved_updates}
+
+    def update_problem(p, f):
+        bound = approved_updates.get(p["key"])
+        if p["key"] not in approved_updates:
+            return ("the plan's text for this task differs from what was written, and the approved write "
+                    "list has no update for it; revise and approve the change")
+        if bound != p["owned_hash"]:
+            return "the rendered text differs from the text the approved update binds; render again from the plan of record"
+        if f.get("status") in ("done", "closed_not_done"):
+            return f"the task is {f['status'].replace('_', ' ')} now, and finished work is not edited; revise with a follow-up task"
+        return None
     written = {i["key"]: i for i in (manifest or {}).get("items", [])}
     found_by_key = {}
     dupes = set()
@@ -160,16 +172,16 @@ def preflight(planned, found, manifest, phases, approved_updates=()):
                 report("stop", "an item with this key exists that Groundwork never recorded and it differs from the plan: drift")
                 continue
         elif f["owned_hash"] != w["owned_hash"]:
-            if in_scope and key in approved_updates and f["owned_hash"] == p["owned_hash"]:
+            if in_scope and f["owned_hash"] == p["owned_hash"] and update_problem(p, f) is None:
                 # the approved update reached the tracker, but the session ended before the manifest
                 actions.append({"key": key, "action": "adopt_update", "tracker_id": f["tracker_id"]})
             else:
                 report("stop", "a person changed a plan-owned field since it was written: drift")
                 continue
         elif in_scope and p["owned_hash"] != w["owned_hash"]:
-            if key not in approved_updates:
-                report("stop", "the plan's text for this task differs from what was written, and the approved write "
-                               "list has no update for it; revise and approve the change")
+            why = update_problem(p, f)
+            if why:
+                report("stop", why)
                 continue
             actions.append({"key": key, "action": "update", "tracker_id": f["tracker_id"]})
         elif in_scope:
@@ -336,7 +348,7 @@ def main(argv=None):
         if not a.write_list:
             print(json.dumps({"ok": False, "problems": ["--write-list required: preflight updates only what it approves"]}))
             return 1
-        ups = [w["key"] for w in J(a.write_list)["writes"] if w["kind"] == "update_item"]
+        ups = {w["key"]: w["owned_hash"] for w in J(a.write_list)["writes"] if w["kind"] == "update_item"}
         out = preflight(J(a.files[0]), J(a.files[1]), J(a.files[2]), [x.strip() for x in a.phases.split(",")], ups)
     elif a.cmd == "status":
         import gw_yaml
