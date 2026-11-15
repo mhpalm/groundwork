@@ -128,7 +128,7 @@ def task_body_2(plan, overlay, t):
         ch = t["changes_existing"]
         names = {r["id"]: r["name"] for r in plan["request"]["starting_point"]["resources"]}
         lines.append("**Risk**")
-        lines.append("- Changes: " + ", ".join(f"{r} ({names.get(r, '?')})" for r in ch["resources"]))
+        lines.append("- Changes: " + ", ".join(names.get(r, r) for r in ch["resources"]))
         lines.append(f"- Why: {ch['why_needed']}")
         lines.append(f"- Could break: {'; '.join(ch['could_break'])}")
         lines.append(f"- Checked by: {', '.join(title(x) for x in ch['regression_check'])}")
