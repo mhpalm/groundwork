@@ -147,20 +147,37 @@
             "training",
             "comms",
             "signoff_prep",
-            "handoff"
+            "handoff",
+            "spike",
+            "measurement",
+            "reconciliation"
           ]
         },
         "role_key": {
-          "enum": [
-            "developer",
-            "admin",
-            "analyst",
-            "qa",
-            "business_user",
-            "trainer",
-            "comms",
-            "maintainer",
-            "approver"
+          "anyOf": [
+            {
+              "enum": [
+                "developer",
+                "admin",
+                "analyst",
+                "qa",
+                "business_user",
+                "trainer",
+                "comms",
+                "maintainer",
+                "approver",
+                "legal",
+                "finance",
+                "procurement",
+                "security",
+                "vendor_contact",
+                "facilitator"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^x-[a-z0-9_]+$"
+            }
           ]
         },
         "points": {
@@ -221,20 +238,58 @@
                   "vendor",
                   "job",
                   "access",
-                  "availability"
+                  "availability",
+                  "elapsed",
+                  "external_event"
                 ]
               },
               "owner_role_key": {
-                "enum": [
-                  "developer",
-                  "admin",
-                  "analyst",
-                  "qa",
-                  "business_user",
-                  "trainer",
-                  "comms",
-                  "maintainer",
-                  "approver"
+                "anyOf": [
+                  {
+                    "enum": [
+                      "developer",
+                      "admin",
+                      "analyst",
+                      "qa",
+                      "business_user",
+                      "trainer",
+                      "comms",
+                      "maintainer",
+                      "approver",
+                      "legal",
+                      "finance",
+                      "procurement",
+                      "security",
+                      "vendor_contact",
+                      "facilitator"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^x-[a-z0-9_]+$"
+                  }
+                ]
+              },
+              "condition": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "legacy_ref": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
                 ]
               }
             },
@@ -371,7 +426,10 @@
                 "record_created",
                 "record_updated",
                 "doc_submitted",
-                "comment_posted"
+                "comment_posted",
+                "document",
+                "decision_record",
+                "measurement"
               ]
             },
             "text": {
@@ -535,6 +593,31 @@
               "type": "null"
             }
           ]
+        },
+        "brief_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^B-\\d+$"
+          }
+        },
+        "approach_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^AD-\\d+$"
+          }
+        },
+        "derived_from_rec": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^REC-\\d+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -677,6 +760,333 @@
         "model",
         "compat"
       ]
+    },
+    "brief_field": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^B-\\d+$"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "answered",
+            "not_applicable",
+            "open"
+          ]
+        },
+        "na_reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "open_question": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^Q-\\d+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phase": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^P\\d+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "enum": [
+            "runner",
+            "role_confirmed",
+            "evidence",
+            "from_tracker",
+            "pasted"
+          ]
+        },
+        "basis_role_key": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "enum": [
+                    "developer",
+                    "admin",
+                    "analyst",
+                    "qa",
+                    "business_user",
+                    "trainer",
+                    "comms",
+                    "maintainer",
+                    "approver",
+                    "legal",
+                    "finance",
+                    "procurement",
+                    "security",
+                    "vendor_contact",
+                    "facilitator"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^x-[a-z0-9_]+$"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "derived_from": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "sensitivity": {
+          "enum": [
+            "normal",
+            "restricted"
+          ]
+        },
+        "value_rev": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "key",
+        "value",
+        "status",
+        "na_reason",
+        "open_question",
+        "phase",
+        "source",
+        "basis_role_key",
+        "derived_from",
+        "sensitivity",
+        "value_rev"
+      ]
+    },
+    "approach": {
+      "type": "object",
+      "properties": {
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^O-\\d+$"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "enum": [
+                  "reuse_extend",
+                  "smaller",
+                  "do_nothing",
+                  "new",
+                  "other"
+                ]
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^ev-[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{8}$"
+                }
+              },
+              "not_inspected_reason": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pros": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "cons": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "rejected_because": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "brief_ref": {
+                        "type": "string",
+                        "pattern": "^B-\\d+$"
+                      },
+                      "why": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "brief_ref",
+                      "why"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "summary",
+              "kind",
+              "evidence",
+              "not_inspected_reason",
+              "pros",
+              "cons",
+              "rejected_because"
+            ]
+          },
+          "minItems": 2
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^AD-\\d+$"
+              },
+              "decision": {
+                "type": "string",
+                "minLength": 1
+              },
+              "chosen_option": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^O-\\d+$"
+                  },
+                  {
+                    "const": "deferred"
+                  }
+                ]
+              },
+              "deferred_to_task": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^P\\d+-T\\d{2,}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "brief_refs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^B-\\d+$"
+                }
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^ev-[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{8}$"
+                }
+              },
+              "trait_conflict": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(x-)?[a-z][a-z0-9_]*$"
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "decision",
+              "chosen_option",
+              "deferred_to_task",
+              "brief_refs",
+              "evidence"
+            ]
+          },
+          "minItems": 1
+        },
+        "unchanged": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^R\\d+$"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "options",
+        "decisions",
+        "unchanged"
+      ]
     }
   },
   "type": "object",
@@ -699,7 +1109,8 @@
         "proposed",
         "active",
         "revising",
-        "complete"
+        "complete",
+        "retired"
       ]
     },
     "overlay": {
@@ -1153,16 +1564,30 @@
             "pattern": "^A\\d+$"
           },
           "role_key": {
-            "enum": [
-              "developer",
-              "admin",
-              "analyst",
-              "qa",
-              "business_user",
-              "trainer",
-              "comms",
-              "maintainer",
-              "approver"
+            "anyOf": [
+              {
+                "enum": [
+                  "developer",
+                  "admin",
+                  "analyst",
+                  "qa",
+                  "business_user",
+                  "trainer",
+                  "comms",
+                  "maintainer",
+                  "approver",
+                  "legal",
+                  "finance",
+                  "procurement",
+                  "security",
+                  "vendor_contact",
+                  "facilitator"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^x-[a-z0-9_]+$"
+              }
             ]
           },
           "system": {
@@ -1275,14 +1700,8 @@
         "type": "object",
         "properties": {
           "kind": {
-            "enum": [
-              "test",
-              "uat",
-              "cutover",
-              "rollback",
-              "docs",
-              "handoff"
-            ]
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
           },
           "tasks": {
             "type": "array",
@@ -1329,6 +1748,13 @@
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/finding"
+                  }
+                },
+                "not_run": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 }
               },
@@ -1449,6 +1875,41 @@
           "by"
         ]
       }
+    },
+    "traits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(x-)?[a-z][a-z0-9_]*$"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          },
+          "from_plan_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version",
+          "from_plan_version"
+        ]
+      }
+    },
+    "brief": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/brief_field"
+      }
+    },
+    "approach": {
+      "$ref": "#/$defs/approach"
     }
   },
   "additionalProperties": false,

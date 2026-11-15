@@ -133,6 +133,47 @@ def write_list(plan, overlay, offer):
     return {"schema_version": "1.0", "plan_id": plan["id"], "plan_version": plan["version"], "phases": sorted(offer), "writes": writes}
 
 
+def brief_value(f):
+    if f["status"] == "not_applicable":
+        return f"not applicable: {f['na_reason']}"
+    if f["status"] == "open":
+        return f"open, see {f['open_question']}"
+    if f["sensitivity"] == "restricted":
+        return "restricted, answered"
+    return f["value"]
+
+
+def model_sections(plan, overlay):
+    """Brief, traits and approach (plan format 2). Restricted values render only as 'restricted, answered'."""
+    out = ["## Brief", "| Id | Field | Answer | Source |", "| --- | --- | --- | --- |"]
+    for f in plan["brief"]:
+        src = f["source"] + (f", confirmed by {role_name(overlay, f['basis_role_key'])}" if f["basis_role_key"] else "")
+        parked = f" (parked on {f['phase']})" if f["phase"] else ""
+        out.append(f"| {f['id']} | {f['key']} | {brief_value(f)}{parked} | {src} |")
+    out.append("")
+    out.append("**Traits:** " + (", ".join(f"{t['id']} {t['version']}" for t in plan["traits"]) or "none of the listed traits apply"))
+    out.append("")
+    ap = plan["approach"]
+    out.append("## Approach")
+    out.append("**Options considered**")
+    for o in ap["options"]:
+        basis = f"{len(o['evidence'])} evidence item{'s' if len(o['evidence']) != 1 else ''}" if o["evidence"] else f"not inspected: {o['not_inspected_reason']}"
+        verdict = f" Rejected because of {o['rejected_because']['brief_ref']}: {o['rejected_because']['why']}" if o["rejected_because"] else " Chosen."
+        out.append(f"- **{o['id']}** ({o['kind'].replace('_', ' ')}) {o['summary']} Basis: {basis}.{verdict}")
+    out.append("")
+    out.append("**Decisions**")
+    for d in ap["decisions"]:
+        if d["chosen_option"] == "deferred":
+            out.append(f"- **{d['id']}** {d['decision']} Deferred: settled by {d['deferred_to_task']}; tasks that rely on it wait until then.")
+        else:
+            out.append(f"- **{d['id']}** {d['decision']} Chose {d['chosen_option']}. Serves {', '.join(d['brief_refs']) or 'nothing listed'}.")
+    if ap["unchanged"]:
+        out.append("")
+        out.append("**Stays unchanged:** " + ", ".join(ap["unchanged"]))
+    out.append("")
+    return out
+
+
 def proposal(plan, overlay, offer, wl=None):
     tasks = {t["id"]: t for t in plan["tasks"]}
     phases = sorted(plan["phases"], key=lambda p: p["order"])
@@ -167,6 +208,12 @@ def proposal(plan, overlay, offer, wl=None):
         out.append(f"- **{r['id']} {r['name']}** ({r['kind']}, {r['location']}): {how}. "
                    + (f"Changed by {', '.join(changed)}." if changed else "Not changed."))
     out.append("")
+    if "brief" in plan:
+        out += model_sections(plan, overlay)
+    if overlay.get("org_process"):
+        out.append("## Org processes that apply")
+        out += [f"- **{x['name']}** {x['note']}" for x in overlay["org_process"]]
+        out.append("")
     out.append("## What was and wasn't inspected")
     out.append("| System | Instance | Status | Read-only | Inspected | Not inspected |")
     out.append("| --- | --- | --- | --- | --- | --- |")
@@ -184,6 +231,8 @@ def proposal(plan, overlay, offer, wl=None):
         out.append(f"Independent review by {how} on {rev['surface']} ({rev['model']}), reviewer view {short(rev['view_hash'])}.")
         if rev["not_performed"]:
             out.append("Checks the reviewer could not perform: " + "; ".join(rev["not_performed"]) + ".")
+    if val and val.get("not_run"):
+        out.append("Checks not run in the session that made this proposal: " + "; ".join(val["not_run"]) + ".")
     else:
         out.append("No independent review is recorded. This plan cannot be approved until one is.")
     minors = [f for f in (val["results"] if val else []) + (rev["findings"] if rev else []) if f["severity"] == "minor"]

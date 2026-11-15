@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-eaddc074",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T34",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read src/auth/roles.ts",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "file",
+    "name": "example-org/volunteer-portal:src/auth/roles.ts@main"
+  },
+  "facts": {
+    "requireRole": {
+      "signed_out": "redirect /login",
+      "wrong_role": 403
+    }
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "6a205e78f672f8915361a95fcc5305b7ea5bc96932eac1afed3906acfaa89c3d"
+}

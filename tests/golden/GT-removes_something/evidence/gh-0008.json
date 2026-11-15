@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-0d0be73a",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T37",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read src/routes/events.ts",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "file",
+    "name": "example-org/volunteer-portal:src/routes/events.ts@main"
+  },
+  "facts": {
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/events/:id/signups",
+        "guard": "requireRole('coordinator')",
+        "handler": "signupsPage"
+      }
+    ],
+    "not_found_helper": "notFound(res)",
+    "loader": "getEvent(id)"
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "ff992b5bdc2292678781dabb8f8dcc2ff2686632838ea318f12a7b3f86eb4015"
+}

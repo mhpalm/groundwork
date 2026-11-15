@@ -6,7 +6,7 @@
   "overlay": {
     "id": "example-org",
     "version": 1,
-    "hash": "29a18ce2a714cd04a8bcfd549758d8c0d9af3f685f8cb82437735e0f1fdb0910"
+    "hash": "ecfd637ffd00ecaa5540e4ebb3a7f5e273a807a7763e227363c35c4cd2190545"
   },
   "title": "Check-in training for coordinators",
   "request": {
@@ -277,7 +277,12 @@
         "pattern": "core.access-request",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P1-T01",
@@ -370,7 +375,25 @@
         "pattern": "github.docs-change",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": {
+        "resources": [
+          "R1"
+        ],
+        "why_needed": "The guide has no check-in section today.",
+        "could_break": [
+          "Links into the existing guide sections"
+        ],
+        "regression_check": [
+          "P2-T03"
+        ]
+      },
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [
+        "AD-1"
+      ],
+      "derived_from_rec": null
     },
     {
       "id": "P1-T02",
@@ -458,7 +481,12 @@
         "pattern": "core.training-material",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P1-T03",
@@ -555,7 +583,12 @@
         "pattern": "core.dry-run",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P1-T04",
@@ -635,7 +668,12 @@
         "pattern": "core.revise-material",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P2-T01",
@@ -712,7 +750,12 @@
         "pattern": "core.announce",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P2-T02",
@@ -794,7 +837,12 @@
         "pattern": "core.training-session",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P2-T03",
@@ -858,7 +906,7 @@
         "done_today": "The result is posted on this task."
       },
       "visible_result": {
-        "type": "comment_posted",
+        "type": "measurement",
         "text": "UAT result posted"
       },
       "production_change": false,
@@ -870,7 +918,13 @@
         "pattern": "core.uat",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-2",
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P2-T04",
@@ -950,7 +1004,12 @@
         "pattern": "core.signoff",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P2-T05",
@@ -1018,9 +1077,330 @@
         "pattern": "core.handoff",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     }
   ],
+  "traits": [
+    {
+      "id": "changes_how_people_work",
+      "version": "1.0.0",
+      "from_plan_version": 1
+    }
+  ],
+  "brief": [
+    {
+      "id": "B-1",
+      "key": "outcome",
+      "value": "Coordinators check volunteers in correctly using the guide, without asking anyone.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-2",
+      "key": "success_measure",
+      "value": "A coordinator checks in a test volunteer on staging using only the guide.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-3",
+      "key": "scope_in",
+      "value": "The guide page, training slides with a dry run, one session, a guide-only check and sign-off.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-4",
+      "key": "non_goals",
+      "value": "Changes to the check-in screen; a recorded video.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-5",
+      "key": "starting_point",
+      "value": "Extends the existing coordinator guide.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "evidence",
+      "basis_role_key": "comms",
+      "derived_from": [
+        "ev-github-gh-950546b8"
+      ],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-6",
+      "key": "consumers",
+      "value": "Volunteer coordinators.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-7",
+      "key": "constraints",
+      "value": "The guide ships with the next regular deploy.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-8",
+      "key": "risks",
+      "value": "Coordinators miss the session; the guide drifts from the screen.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-9",
+      "key": "deliverable_signoffs",
+      "value": "The Program Director signs off the training material.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-10",
+      "key": "run_owner_after_handoff",
+      "value": "The coordinator lead.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-11",
+      "key": "external_dependencies",
+      "value": null,
+      "status": "not_applicable",
+      "na_reason": "Everything is inside the portal and the shared training folder.",
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-12",
+      "key": "budget",
+      "value": null,
+      "status": "not_applicable",
+      "na_reason": "No spend; existing team time only.",
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-13",
+      "key": "legal_duties",
+      "value": null,
+      "status": "not_applicable",
+      "na_reason": "No personal data is collected or moved.",
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-14",
+      "key": "nonfunctional",
+      "value": "The guide page reads well on a phone.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-15",
+      "key": "comms_audiences",
+      "value": "Coordinators, through the session invitation.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-16",
+      "key": "affected_people",
+      "value": "All volunteer coordinators.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-17",
+      "key": "training_need",
+      "value": "How to check a volunteer in, in one live session with slides.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-18",
+      "key": "support_after",
+      "value": "The coordinator lead answers questions after handoff.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    }
+  ],
+  "approach": {
+    "options": [
+      {
+        "id": "O-1",
+        "summary": "Add a check-in section to the existing coordinator guide and train from it.",
+        "kind": "reuse_extend",
+        "evidence": [
+          "ev-github-gh-950546b8"
+        ],
+        "not_inspected_reason": null,
+        "pros": [
+          "One source of truth"
+        ],
+        "cons": [
+          "Needs a docs pull request"
+        ],
+        "rejected_because": null
+      },
+      {
+        "id": "O-2",
+        "summary": "Send coordinators a one-page note instead of training them.",
+        "kind": "smaller",
+        "evidence": [],
+        "not_inspected_reason": "Nothing exists to inspect; it would be new text.",
+        "pros": [
+          "Faster"
+        ],
+        "cons": [
+          "No practice"
+        ],
+        "rejected_because": {
+          "brief_ref": "B-1",
+          "why": "Without practice coordinators are unlikely to check volunteers in correctly first time."
+        }
+      }
+    ],
+    "decisions": [
+      {
+        "id": "AD-1",
+        "decision": "Extend the coordinator guide and run one live session from it.",
+        "chosen_option": "O-1",
+        "deferred_to_task": null,
+        "brief_refs": [
+          "B-1",
+          "B-3"
+        ],
+        "evidence": [
+          "ev-github-gh-950546b8"
+        ]
+      }
+    ],
+    "unchanged": []
+  },
   "standard_work": [
     {
       "kind": "test",
@@ -1060,6 +1440,21 @@
         "P2-T05"
       ],
       "not_applicable_reason": null
+    },
+    {
+      "kind": "training",
+      "tasks": [
+        "P1-T02",
+        "P2-T02"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "support_handoff",
+      "tasks": [
+        "P2-T05"
+      ],
+      "not_applicable_reason": null
     }
   ],
   "review": {
@@ -1071,7 +1466,7 @@
     "release": "unreleased",
     "core": "groundwork-core@1.0.0",
     "contract": "1.0",
-    "plan_format": "1.0",
+    "plan_format": "2.0",
     "skills": [
       {
         "name": "groundwork-system-github",
@@ -1087,7 +1482,7 @@
     "overlay": {
       "id": "example-org",
       "version": 1,
-      "hash": "29a18ce2a714cd04a8bcfd549758d8c0d9af3f685f8cb82437735e0f1fdb0910",
+      "hash": "ecfd637ffd00ecaa5540e4ebb3a7f5e273a807a7763e227363c35c4cd2190545",
       "format": "1.0"
     },
     "validator": "1.0.0",

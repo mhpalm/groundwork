@@ -82,9 +82,15 @@ naming: {epic: "{title}", task: "{verb} {object}", label: groundwork}
 access_requests: {how: "text shown in P0 tasks", link: url, on_behalf_allowed: true}
 channels: {release: name or url, announcements: name or url}
 run_storage: {claude-code-local: "~/groundwork/runs"}
+executor_profiles: {analyst: junior_with_context}   # optional, per role; same enum as assumed_executor
+traits: []                          # optional org-only traits, ids start with x-
+org_process:                        # optional, rendered into proposals, never asked per run
+  - {name: "Change freeze", note: "No production changes in the last two weeks of term"}
 ```
 
-**Executor profiles.** `assumed_executor` is an enum, so an overlay cannot weaken the one-day rule by describing an expert: `junior_no_context` (default: a junior developer with no access to the original team), `junior_with_context`, `mid_no_context`. Instructions for non-developer roles are written to the same standard: someone new to the task, with no one to ask.
+**Executor profiles.** `assumed_executor` is an enum, so an overlay cannot weaken the one-day rule by describing an expert: `junior_no_context` (default: a junior developer with no access to the original team), `junior_with_context`, `mid_no_context`. Instructions for non-developer roles are written to the same standard: someone new to the task, with no one to ask. `executor_profiles` sets a profile per role key, from the same enum, and a role not listed uses `assumed_executor`; GR-02 and GR-06 judge each task against its own role's profile. Every key must be a mapped role.
+
+**Overlay traits and org process.** `traits` adds org-only traits (ids start with `x-`) in the same shape as `reference/traits.yaml`. They may only add questions, standard work and roles, their roles must be mapped, and they never replace a core trait. `org_process` lists standing processes such as change freezes, change boards or spend approval; proposals show them, and Clarify never asks about them.
 
 **Hierarchy options.** The brief's "sub-tasks or linked tasks" covers two separate choices. `task_to_epic` says how a task attaches to its epic: as a child (`parent`) or through an issue link (`linked`), whichever the org's tracker uses. `steps_as` says how a task's numbered steps appear: as a `checklist` inside the task, which the tracker skill knows how to render and read back, or as `subtasks` with no points and no estimate, all inside the parent's one day. Either way a step is never a separate unit of work.
 

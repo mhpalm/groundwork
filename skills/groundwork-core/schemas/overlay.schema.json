@@ -358,16 +358,30 @@
         "type": "object",
         "properties": {
           "key": {
-            "enum": [
-              "developer",
-              "admin",
-              "analyst",
-              "qa",
-              "business_user",
-              "trainer",
-              "comms",
-              "maintainer",
-              "approver"
+            "anyOf": [
+              {
+                "enum": [
+                  "developer",
+                  "admin",
+                  "analyst",
+                  "qa",
+                  "business_user",
+                  "trainer",
+                  "comms",
+                  "maintainer",
+                  "approver",
+                  "legal",
+                  "finance",
+                  "procurement",
+                  "security",
+                  "vendor_contact",
+                  "facilitator"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^x-[a-z0-9_]+$"
+              }
             ]
           },
           "name": {
@@ -382,6 +396,149 @@
         ]
       },
       "minItems": 1
+    },
+    "executor_profiles": {
+      "type": "object",
+      "patternProperties": {
+        "^(x-)?[a-z][a-z0-9_]*$": {
+          "enum": [
+            "junior_no_context",
+            "junior_with_context",
+            "mid_no_context"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "traits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^x-[a-z][a-z0-9_]*$"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]*$"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "text"
+              ]
+            }
+          },
+          "standard_work": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            }
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "developer",
+                    "admin",
+                    "analyst",
+                    "qa",
+                    "business_user",
+                    "trainer",
+                    "comms",
+                    "maintainer",
+                    "approver",
+                    "legal",
+                    "finance",
+                    "procurement",
+                    "security",
+                    "vendor_contact",
+                    "facilitator"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^x-[a-z0-9_]+$"
+                }
+              ]
+            }
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "with": {
+                  "type": "string",
+                  "pattern": "^(x-)?[a-z][a-z0-9_]*$"
+                },
+                "about": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "with",
+                "about"
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version",
+          "summary",
+          "questions",
+          "standard_work",
+          "roles",
+          "conflicts"
+        ]
+      }
+    },
+    "org_process": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "note"
+        ]
+      }
     },
     "task_hierarchy": {
       "type": "object",
@@ -492,16 +649,30 @@
         "type": "object",
         "properties": {
           "role_key": {
-            "enum": [
-              "developer",
-              "admin",
-              "analyst",
-              "qa",
-              "business_user",
-              "trainer",
-              "comms",
-              "maintainer",
-              "approver"
+            "anyOf": [
+              {
+                "enum": [
+                  "developer",
+                  "admin",
+                  "analyst",
+                  "qa",
+                  "business_user",
+                  "trainer",
+                  "comms",
+                  "maintainer",
+                  "approver",
+                  "legal",
+                  "finance",
+                  "procurement",
+                  "security",
+                  "vendor_contact",
+                  "facilitator"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^x-[a-z0-9_]+$"
+              }
             ]
           },
           "display": {

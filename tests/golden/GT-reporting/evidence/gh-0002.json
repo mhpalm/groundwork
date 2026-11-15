@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-bf8adf2e",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T38",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read CODEOWNERS on main",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "file",
+    "name": "example-org/volunteer-portal:CODEOWNERS@main"
+  },
+  "facts": {
+    "owners": [
+      {
+        "pattern": "*",
+        "team": "example-org/portal-maintainers"
+      }
+    ]
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "58a328f991e990ef6c84df1799d84c86d49483be83756f0818d50926ef44ff3a"
+}

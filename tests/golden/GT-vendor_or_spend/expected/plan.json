@@ -1,0 +1,2652 @@
+{
+  "schema_version": "1.0",
+  "id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T39",
+  "version": 1,
+  "status": "draft",
+  "overlay": {
+    "id": "example-org",
+    "version": 1,
+    "hash": "f9fc0dc1de9d84a1049218654b455b34c39e1bbe4019f782e5dbd0be623c0a78"
+  },
+  "title": "CSV export of event sign-ups",
+  "request": {
+    "original_text": "Create project: let coordinators download an event's sign-ups as a CSV.",
+    "restatement": "Add a coordinator-only CSV download of an event's sign-ups to the volunteer portal, with docs, UAT, release and handoff.",
+    "clarifications": [
+      {
+        "id": "C-1",
+        "question": "Which columns, in what order?",
+        "answer": "First name, Last name, Email, Shift, Signed up (UTC), ISO 8601 UTC.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
+      },
+      {
+        "id": "C-2",
+        "question": "Who may export which events?",
+        "answer": "Any coordinator, any event, as for the sign-ups page today.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
+      },
+      {
+        "id": "C-3",
+        "question": "File format details?",
+        "answer": "UTF-8 with BOM, comma-separated, RFC 4180 quoting, formula prefix on =, +, -, @.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
+      },
+      {
+        "id": "C-4",
+        "question": "Database changes or deletion enforcement?",
+        "answer": "No database change; handling guidance only.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
+      },
+      {
+        "id": "C-5",
+        "question": "Does the announcement need review?",
+        "answer": "No.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
+      },
+      {
+        "id": "C-6",
+        "question": "Does anything already exist that this builds on, or is it from scratch?",
+        "answer": "The portal app and the coordinator guide exist; nothing for export has been started.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
+      }
+    ],
+    "starting_point": {
+      "kind": "extends_existing",
+      "resources": [
+        {
+          "id": "R1",
+          "name": "Volunteer portal app",
+          "kind": "code",
+          "location": "https://github.com/example-org/volunteer-portal",
+          "inspected": [
+            "ev-github-gh-abf252a3",
+            "ev-github-gh-0d0be73a",
+            "ev-github-gh-aaf43453",
+            "ev-github-gh-eaddc074",
+            "ev-github-gh-bd49b4d6"
+          ],
+          "not_inspected_reason": null
+        },
+        {
+          "id": "R2",
+          "name": "Coordinator guide",
+          "kind": "doc",
+          "location": "https://github.com/example-org/volunteer-portal/blob/main/docs/user-guide/coordinators/signups.md",
+          "inspected": [
+            "ev-github-gh-950546b8"
+          ],
+          "not_inspected_reason": null
+        }
+      ]
+    }
+  },
+  "scope": {
+    "in": [
+      "CSV serializer, route and button",
+      "Coordinator guide section",
+      "Staging test, UAT, release, rollback, announcement and handoff"
+    ],
+    "out": [
+      "Enforcing file deletion",
+      "Database changes",
+      "Exports for non-coordinators"
+    ],
+    "assumptions": [
+      {
+        "text": "Docs ship with each deploy because the app serves docs/user-guide at /help.",
+        "basis": "ev-github-gh-950546b8"
+      }
+    ]
+  },
+  "epic": {
+    "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:epic",
+    "tracker_ref": null,
+    "title": "CSV export of event sign-ups",
+    "summary": "Coordinators can download an event's sign-ups as a CSV from the sign-ups page, documented, tested, released and handed off.",
+    "links": []
+  },
+  "executor": {
+    "profile": "junior_no_context",
+    "working_day_hours": 6
+  },
+  "open_questions": [],
+  "coverage": [
+    {
+      "system": "github",
+      "instance": "gh",
+      "skill": "groundwork-system-github",
+      "skill_version": "1.0.0",
+      "surface": "claude-code-local",
+      "status": "inspected",
+      "read_only": "enforced",
+      "inspected": [
+        "repo settings",
+        "workflows",
+        "environments",
+        "source files",
+        "tags"
+      ],
+      "not_inspected": [
+        "release and announcements channels"
+      ],
+      "reason": ""
+    },
+    {
+      "system": "jira",
+      "instance": "main",
+      "skill": "groundwork-tracker-jira",
+      "skill_version": "1.0.0",
+      "surface": "claude-code-local",
+      "status": "partial",
+      "read_only": "enforced",
+      "inspected": [
+        "project VOL configuration"
+      ],
+      "not_inspected": [
+        "issues"
+      ],
+      "reason": "Configuration only; issues are not needed for planning."
+    }
+  ],
+  "access_list": [
+    {
+      "id": "A1",
+      "role_key": "developer",
+      "system": "github",
+      "instance": "gh",
+      "level": "write on example-org/volunteer-portal (Actions and tag push)",
+      "needed_by": [
+        "P0-T02",
+        "P1-T01",
+        "P1-T02",
+        "P1-T03",
+        "P1-T04",
+        "P1-T05",
+        "P2-T01",
+        "P2-T03",
+        "P2-T04",
+        "P3-T01",
+        "P3-T02",
+        "P3-T05"
+      ]
+    },
+    {
+      "id": "A2",
+      "role_key": "developer",
+      "system": "github",
+      "instance": "gh",
+      "level": "coordinator test account on staging",
+      "needed_by": [
+        "P1-T05",
+        "P2-T03"
+      ]
+    },
+    {
+      "id": "A3",
+      "role_key": "business_user",
+      "system": "github",
+      "instance": "gh",
+      "level": "coordinator login on staging",
+      "needed_by": [
+        "P2-T02"
+      ]
+    },
+    {
+      "id": "A4",
+      "role_key": "comms",
+      "system": "channels",
+      "instance": "announcements",
+      "level": "post in the announcements channel",
+      "needed_by": [
+        "P3-T04"
+      ]
+    },
+    {
+      "id": "A5",
+      "role_key": "developer",
+      "system": "channels",
+      "instance": "release",
+      "level": "post in the release channel",
+      "needed_by": [
+        "P3-T01"
+      ]
+    }
+  ],
+  "phases": [
+    {
+      "id": "P0",
+      "order": 0,
+      "name": "Setup",
+      "goal": "Every access request is in and the portal runs locally.",
+      "state": "drafted",
+      "depends_on": [],
+      "task_ids": [
+        "P0-T01",
+        "P0-T02"
+      ]
+    },
+    {
+      "id": "P1",
+      "order": 1,
+      "name": "Build and staging test",
+      "goal": "The export, button and guide are merged and tested on staging.",
+      "state": "drafted",
+      "depends_on": [
+        "P0"
+      ],
+      "task_ids": [
+        "P1-T01",
+        "P1-T02",
+        "P1-T03",
+        "P1-T04",
+        "P1-T05"
+      ]
+    },
+    {
+      "id": "P2",
+      "order": 2,
+      "name": "UAT and release prep",
+      "goal": "Coordinators sign off and the rollback and release notes are ready.",
+      "state": "drafted",
+      "depends_on": [
+        "P1"
+      ],
+      "task_ids": [
+        "P2-T01",
+        "P2-T02",
+        "P2-T03",
+        "P2-T04"
+      ]
+    },
+    {
+      "id": "P3",
+      "order": 3,
+      "name": "Release and handoff",
+      "goal": "The export is live, confirmed, announced and handed off.",
+      "state": "drafted",
+      "depends_on": [
+        "P2"
+      ],
+      "task_ids": [
+        "P3-T01",
+        "P3-T02",
+        "P3-T03",
+        "P3-T04",
+        "P3-T05"
+      ]
+    },
+    {
+      "id": "P4",
+      "order": 4,
+      "name": "Trait work",
+      "goal": "The standard work the pinned traits add is done.",
+      "state": "drafted",
+      "depends_on": [
+        "P3"
+      ],
+      "task_ids": [
+        "P4-T01"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "P0-T01",
+      "order": 1,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P0-T01",
+      "phase": "P0",
+      "title": "Request access for every role in this plan",
+      "work_type": "task",
+      "kind": "setup",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 1.5,
+      "parallel_group": null,
+      "depends_on": [],
+      "waits_on": [],
+      "access": [],
+      "evidence_refs": [],
+      "produces": [
+        {
+          "type": "access_request",
+          "name": "A1"
+        },
+        {
+          "type": "access_request",
+          "name": "A2"
+        },
+        {
+          "type": "access_request",
+          "name": "A3"
+        },
+        {
+          "type": "access_request",
+          "name": "A4"
+        },
+        {
+          "type": "access_request",
+          "name": "A5"
+        }
+      ],
+      "instructions": {
+        "purpose": "Get every account and permission this plan needs requested on day one, so no one is blocked later.",
+        "prerequisites": [],
+        "steps": [
+          {
+            "text": "Open the Access list table in the epic description. It has five lines, A1 to A5.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Open the access request link in the epic description.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Submit one request per line, naming the person the epic's role-holders list gives for that role, and paste this task's key into the reason.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "If the form says the person already has that access, note 'already granted' for that line.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Post one comment on this task with five lines: the access id, then the request reference or 'already granted'.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "If any request is refused, add that to the comment and mention the Program Director.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "All five lines have a request reference or 'already granted'."
+        ],
+        "verify": [
+          "The comment on this task has five lines, A1 to A5."
+        ],
+        "done_today": "The comment is posted. Waiting for grants is tracked on the tasks that need them."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Comment listing A1 to A5 with request references"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.access-request",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P0-T02",
+      "order": 2,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P0-T02",
+      "phase": "P0",
+      "title": "Set up the portal locally and run the tests",
+      "work_type": "task",
+      "kind": "setup",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 4,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P0-T01",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "A1 granted",
+          "kind": "access",
+          "owner_role_key": "maintainer"
+        }
+      ],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-0c6bf23c",
+        "ev-github-gh-5b2843e5"
+      ],
+      "produces": [],
+      "instructions": {
+        "purpose": "Prove the developer can build, test and run the portal before any change is made.",
+        "prerequisites": [
+          "A1 is granted.",
+          "Node 20 and Docker on the developer's machine."
+        ],
+        "steps": [
+          {
+            "text": "Install Node 20 and Docker if they are not already installed.",
+            "refs": [
+              "ev-github-gh-0c6bf23c"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Clone example-org/volunteer-portal and check out main.",
+            "refs": [
+              "ev-github-gh-abf252a3"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Run npm ci, then cp .env.example .env.",
+            "refs": [
+              "ev-github-gh-0c6bf23c"
+            ],
+            "from_evidence": "ev-github-gh-0c6bf23c"
+          },
+          {
+            "text": "Run npm run db:up, then npm run seed.",
+            "refs": [
+              "ev-github-gh-0c6bf23c"
+            ],
+            "from_evidence": "ev-github-gh-0c6bf23c"
+          },
+          {
+            "text": "Run npm run lint and npm test, and copy the final summary lines.",
+            "refs": [
+              "ev-github-gh-5b2843e5"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Run npm run dev and open http://localhost:3000; sign in with the coordinator from the README's Local logins section.",
+            "refs": [
+              "ev-github-gh-0c6bf23c"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Post a comment on this task with the test summary and 'local app runs'.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "npm test passes on a clean checkout of main.",
+          "The app runs locally and the seeded coordinator can sign in."
+        ],
+        "verify": [
+          "The comment shows the passing test summary."
+        ],
+        "done_today": "The comment with the test summary is posted."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Comment with the test summary"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "github.local-setup",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P1-T01",
+      "order": 3,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P1-T01",
+      "phase": "P1",
+      "title": "Add the sign-ups CSV serializer",
+      "work_type": "story",
+      "kind": "build",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 5,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P0-T02",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-bd49b4d6",
+        "ev-github-gh-5b2843e5",
+        "ev-github-gh-0f86b0c8"
+      ],
+      "produces": [
+        {
+          "type": "function",
+          "name": "toSignupCsv"
+        }
+      ],
+      "instructions": {
+        "purpose": "Turn a list of sign-ups into a safe CSV file body, tested on its own before any route uses it.",
+        "prerequisites": [
+          "P0-T02 is done."
+        ],
+        "steps": [
+          {
+            "text": "Run git checkout main, git pull, then git checkout -b feat/signups-csv-serializer.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Create src/lib/csv.ts exporting toSignupCsv(signups), which takes the Signup list returned by getSignups.",
+            "refs": [
+              "ev-github-gh-bd49b4d6"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Write the header row First name,Last name,Email,Shift,Signed up (UTC) and one row per sign-up, with createdAt as ISO 8601 UTC.",
+            "refs": [
+              "ev-github-gh-bd49b4d6"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Quote cells per RFC 4180, start the file with a UTF-8 byte-order mark, and prefix any cell starting with =, +, - or @ with an apostrophe.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Create tests/lib/csv.test.ts with cases for the header, quoting, the formula prefix, an empty list and the byte-order mark.",
+            "refs": [
+              "ev-github-gh-5b2843e5"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Run npm run lint and npm test until both pass.",
+            "refs": [
+              "ev-github-gh-5b2843e5"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Push the branch, open a pull request to main using the template's Summary, Testing and Jira sections, and put this task's Jira key in the title.",
+            "refs": [
+              "ev-github-gh-0f86b0c8"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Paste the pull request link into a comment on this task.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "toSignupCsv returns the five columns in order with RFC 4180 quoting and the formula prefix.",
+          "New tests pass and the ci check is green.",
+          "No new dependency is added."
+        ],
+        "verify": [
+          "The ci check on the pull request is green."
+        ],
+        "done_today": "The pull request is open with green CI and review requested, linked on this task."
+      },
+      "visible_result": {
+        "type": "pr_opened",
+        "text": "PR opened, CI green"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "github.code-change",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [
+        "AD-1"
+      ],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P1-T02",
+      "order": 4,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P1-T02",
+      "phase": "P1",
+      "title": "Add the CSV export endpoint",
+      "work_type": "story",
+      "kind": "build",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 5,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P1-T01",
+          "satisfied_by": "merged"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Portal Maintainer code owner review",
+          "kind": "review",
+          "owner_role_key": "maintainer"
+        }
+      ],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-0d0be73a",
+        "ev-github-gh-eaddc074",
+        "ev-github-gh-bd49b4d6",
+        "ev-github-gh-aaf43453",
+        "ev-github-gh-3ddd06d5"
+      ],
+      "produces": [
+        {
+          "type": "route",
+          "name": "/events/:id/signups.csv"
+        }
+      ],
+      "instructions": {
+        "purpose": "Coordinators need to download an event's sign-ups as a file. This task adds the server route that returns the CSV.",
+        "prerequisites": [
+          "P1-T01 is merged, so toSignupCsv exists in src/lib/csv.ts.",
+          "Your local setup from P0-T02 works."
+        ],
+        "steps": [
+          {
+            "text": "Run git checkout main, git pull, then git checkout -b feat/signups-csv-endpoint.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Open src/routes/events.ts, find the signups route and read signupsPage: it calls getEvent(id) and returns notFound(res) when the result is null.",
+            "refs": [
+              "ev-github-gh-0d0be73a"
+            ],
+            "from_evidence": "ev-github-gh-0d0be73a"
+          },
+          {
+            "text": "Below that line, add router.get('/events/:id/signups.csv', requireRole('coordinator'), signupsCsv).",
+            "refs": [
+              "ev-github-gh-0d0be73a",
+              "ev-github-gh-eaddc074"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Write signupsCsv next to signupsPage: call getEvent(id) and return notFound(res) if null; then call getSignups(id) and pass the result to toSignupCsv.",
+            "refs": [
+              "ev-github-gh-0d0be73a",
+              "ev-github-gh-bd49b4d6",
+              "toSignupCsv"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Set Content-Type to text/csv; charset=utf-8 and Content-Disposition to attachment with filename event-<id>-signups-<YYYY-MM-DD>.csv, using today's UTC date.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Create tests/routes/events.signups-csv.test.ts, copying the setup lines and the loginAs import from tests/routes/events.signups.test.ts.",
+            "refs": [
+              "ev-github-gh-aaf43453"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Add six tests: coordinator on event 1 gets 200, text/csv, the header row First name,Last name,Email,Shift,Signed up (UTC) and 3 data rows; event 2 returns only the header; event 999 returns 404; volunteer gets 403; signed-out is redirected to /login; the file name header matches the pattern.",
+            "refs": [
+              "ev-github-gh-aaf43453",
+              "ev-github-gh-eaddc074",
+              "ev-github-gh-3ddd06d5"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Run npm run lint and npm test until both pass.",
+            "refs": [
+              "ev-github-gh-5b2843e5"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Run npm run db:up, npm run seed and npm run dev; sign in as the README's seeded coordinator, open http://localhost:3000/events/1/signups.csv, check the columns First name, Last name, Email, Shift, Signed up (UTC) in order with 3 rows, then delete the file.",
+            "refs": [
+              "ev-github-gh-0c6bf23c",
+              "ev-github-gh-3ddd06d5"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Push the branch and open a pull request to main with the template's Summary, Testing and Jira sections; put this task's Jira key (like VOL-12) in the title.",
+            "refs": [
+              "ev-github-gh-0f86b0c8",
+              "ev-github-gh-bf8adf2e"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Paste the pull request link into a comment on this task.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The route returns the plan's five columns in order, for coordinators only.",
+          "Volunteers get 403, signed-out users go to /login, unknown events get 404.",
+          "Six new tests pass, the existing suite passes, and the ci check is green.",
+          "No new dependency is added."
+        ],
+        "verify": [
+          "The ci check on the pull request is green, and the local check showed the right columns and row count."
+        ],
+        "done_today": "The pull request is open with green CI and review requested, linked on this task. The merge is P1-T03's dependency."
+      },
+      "visible_result": {
+        "type": "pr_opened",
+        "text": "PR opened, CI green"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "github.code-change",
+        "rules_checked": []
+      },
+      "changes_existing": {
+        "resources": [
+          "R1"
+        ],
+        "why_needed": "No route returns sign-ups as a file today; the sign-ups route only renders the page.",
+        "could_break": [
+          "The existing sign-ups route and its coordinator-only check, which the new route sits beside"
+        ],
+        "regression_check": [
+          "P1-T05"
+        ]
+      },
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [
+        "AD-1"
+      ],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P1-T03",
+      "order": 5,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P1-T03",
+      "phase": "P1",
+      "title": "Add the Download CSV button",
+      "work_type": "story",
+      "kind": "build",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 4,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P1-T02",
+          "satisfied_by": "merged"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Portal Maintainer code owner review",
+          "kind": "review",
+          "owner_role_key": "maintainer"
+        }
+      ],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-0d0be73a",
+        "ev-github-gh-aaf43453"
+      ],
+      "produces": [
+        {
+          "type": "ui",
+          "name": "Download CSV button"
+        }
+      ],
+      "instructions": {
+        "purpose": "Give coordinators a visible way to download the file from the page they already use.",
+        "prerequisites": [
+          "P1-T02 is merged."
+        ],
+        "steps": [
+          {
+            "text": "Run git checkout main, git pull, then git checkout -b feat/signups-csv-button.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Open the sign-ups page template rendered by signupsPage and add a Download CSV link to /events/<id>/signups.csv, shown only to coordinators.",
+            "refs": [
+              "ev-github-gh-0d0be73a",
+              "/events/:id/signups.csv"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Add a test to tests/routes/events.signups.test.ts that the coordinator's page contains the link and the volunteer's does not.",
+            "refs": [
+              "ev-github-gh-aaf43453"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Run npm run lint and npm test until both pass.",
+            "refs": [
+              "ev-github-gh-5b2843e5"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Run the app locally, sign in as the seeded coordinator, open /events/1/signups and click Download CSV; check a file downloads.",
+            "refs": [
+              "ev-github-gh-0c6bf23c"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Push, open a pull request to main with the template sections and this task's Jira key in the title, and link it on this task.",
+            "refs": [
+              "ev-github-gh-0f86b0c8"
+            ],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "Coordinators see a Download CSV link on the sign-ups page; others do not.",
+          "Tests pass and the ci check is green."
+        ],
+        "verify": [
+          "The ci check is green and the local click downloaded the file."
+        ],
+        "done_today": "The pull request is open with green CI and review requested, linked on this task."
+      },
+      "visible_result": {
+        "type": "pr_opened",
+        "text": "PR opened, CI green"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "github.code-change",
+        "rules_checked": []
+      },
+      "changes_existing": {
+        "resources": [
+          "R1"
+        ],
+        "why_needed": "Coordinators need a visible way to reach the export from the sign-ups page.",
+        "could_break": [
+          "The sign-ups page layout and its existing tests"
+        ],
+        "regression_check": [
+          "P1-T05"
+        ]
+      },
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [
+        "AD-1"
+      ],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P1-T04",
+      "order": 6,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P1-T04",
+      "phase": "P1",
+      "title": "Add the CSV section to the coordinator guide",
+      "work_type": "task",
+      "kind": "docs",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 3,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P1-T03",
+          "satisfied_by": "merged"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Portal Maintainer code owner review",
+          "kind": "review",
+          "owner_role_key": "maintainer"
+        }
+      ],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-950546b8",
+        "ev-github-gh-cd4fded7"
+      ],
+      "produces": [
+        {
+          "type": "doc",
+          "name": "CSV guide section"
+        }
+      ],
+      "instructions": {
+        "purpose": "Coordinators need to know the export exists and how to handle the file safely.",
+        "prerequisites": [
+          "P1-T03 is merged."
+        ],
+        "steps": [
+          {
+            "text": "Run git checkout main, git pull, then git checkout -b docs/signups-csv.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Open docs/user-guide/coordinators/signups.md and add a section 'Download sign-ups as a CSV': where the button is, the five columns, and the file name.",
+            "refs": [
+              "ev-github-gh-950546b8",
+              "Download CSV button"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Add the handling guidance: the file holds volunteers' personal data; delete it after the event and don't forward it.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Add a line under Unreleased in CHANGELOG.md.",
+            "refs": [
+              "ev-github-gh-cd4fded7"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Push, open a pull request to main with the template sections and this task's Jira key, and link it on this task.",
+            "refs": [
+              "ev-github-gh-0f86b0c8"
+            ],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The guide has the new section with columns, file name and handling guidance.",
+          "The ci check is green."
+        ],
+        "verify": [
+          "Preview the Markdown on the pull request and check the section renders."
+        ],
+        "done_today": "The pull request is open with green CI and review requested, linked on this task."
+      },
+      "visible_result": {
+        "type": "pr_opened",
+        "text": "PR opened, CI green"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "github.docs-change",
+        "rules_checked": []
+      },
+      "changes_existing": {
+        "resources": [
+          "R2"
+        ],
+        "why_needed": "The guide is where coordinators look; the export and its handling rules must be in it.",
+        "could_break": [
+          "Links into the existing guide section"
+        ],
+        "regression_check": [
+          "P2-T02"
+        ]
+      },
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P1-T05",
+      "order": 7,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P1-T05",
+      "phase": "P1",
+      "title": "Test the export on staging",
+      "work_type": "task",
+      "kind": "test",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 3,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P1-T04",
+          "satisfied_by": "deployed"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Portal Maintainer code owner review",
+          "kind": "review",
+          "owner_role_key": "maintainer"
+        },
+        {
+          "what": "A2 granted",
+          "kind": "access",
+          "owner_role_key": "admin"
+        }
+      ],
+      "access": [
+        "A1",
+        "A2"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86",
+        "ev-github-gh-eaddc074",
+        "ev-github-gh-950546b8"
+      ],
+      "produces": [
+        {
+          "type": "record",
+          "name": "tested commit"
+        }
+      ],
+      "instructions": {
+        "purpose": "Prove the merged change works on staging before anyone else tests it.",
+        "prerequisites": [
+          "P1-T04 is merged and deployed to staging.",
+          "A2 is granted."
+        ],
+        "steps": [
+          {
+            "text": "Open the latest staging deploy run in the Actions tab and copy the deployed commit SHA from its summary; check it is main's head after P1-T04's merge.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Open https://staging.portal.example.org and sign in with the staging coordinator test account (A2).",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Open an event with sign-ups, click Download CSV, and check the columns First name, Last name, Email, Shift, Signed up (UTC) and the file name pattern.",
+            "refs": [
+              "Download CSV button"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Sign out and open /events/1/signups.csv directly; check you are redirected to /login.",
+            "refs": [
+              "ev-github-gh-eaddc074"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Open /help and check the coordinator guide shows the new section.",
+            "refs": [
+              "ev-github-gh-950546b8",
+              "CSV guide section"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Delete the downloaded file, then post a test record comment on this task: the tested commit SHA and the result of each check.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "Every check passed on staging, or each failure is recorded.",
+          "The comment records the tested commit SHA."
+        ],
+        "verify": [
+          "The comment lists the SHA and each check's result."
+        ],
+        "done_today": "The test record comment with the tested commit is posted."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Test record comment with the tested commit"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "github.staging-test",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P2-T01",
+      "order": 8,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P2-T01",
+      "phase": "P2",
+      "title": "Write the UAT script",
+      "work_type": "task",
+      "kind": "uat",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 2,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P1-T05",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86"
+      ],
+      "produces": [
+        {
+          "type": "doc",
+          "name": "UAT script"
+        }
+      ],
+      "instructions": {
+        "purpose": "Give the coordinator a short script so UAT is quick and repeatable.",
+        "prerequisites": [
+          "P1-T05's test record shows every check passed."
+        ],
+        "steps": [
+          {
+            "text": "Write five numbered UAT steps a coordinator can follow on staging: open an event, click Download CSV, open the file, check the columns, delete the file.",
+            "refs": [
+              "Download CSV button"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "For each step, write the expected result in one line.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Add the staging URL https://staging.portal.example.org and the place to record pass or fail.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Post the script as a comment on this task and mention the Volunteer Coordinator for P2-T02.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The script has five steps, each with an expected result."
+        ],
+        "verify": [
+          "The comment holds the full script."
+        ],
+        "done_today": "The script is posted."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Script posted as a comment"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.uat-script",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P2-T02",
+      "order": 9,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P2-T02",
+      "phase": "P2",
+      "title": "Run UAT on staging",
+      "work_type": "task",
+      "kind": "uat",
+      "role_key": "business_user",
+      "points": 1,
+      "estimate_hours": 2,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P2-T01",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Volunteer Coordinator availability",
+          "kind": "availability",
+          "owner_role_key": "business_user"
+        },
+        {
+          "what": "A3 granted",
+          "kind": "access",
+          "owner_role_key": "admin"
+        }
+      ],
+      "access": [
+        "A3"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86"
+      ],
+      "produces": [
+        {
+          "type": "record",
+          "name": "UAT sign-off"
+        }
+      ],
+      "instructions": {
+        "purpose": "The people who will use the export confirm it does what they need.",
+        "prerequisites": [
+          "P2-T01's script.",
+          "A3 is granted."
+        ],
+        "steps": [
+          {
+            "text": "Open the UAT script on P2-T01 and https://staging.portal.example.org.",
+            "refs": [
+              "UAT script",
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Sign in with your staging coordinator login (A3) and follow each step, marking pass or fail.",
+            "refs": [
+              "UAT script"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Delete the downloaded file when done.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Copy the deployed commit SHA shown in the footer of staging's /help page into your comment.",
+            "refs": [
+              "ev-github-gh-950546b8"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Post a sign-off comment on this task: each step's result, the staging commit, and 'approved' or what must change.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "Every step has a pass or fail.",
+          "The comment says approved, or lists what must change."
+        ],
+        "verify": [
+          "The sign-off comment is on this task."
+        ],
+        "done_today": "The sign-off comment is posted."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "UAT sign-off comment with the staging commit"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.uat-run",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P2-T03",
+      "order": 10,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P2-T03",
+      "phase": "P2",
+      "title": "Rehearse the rollback on staging and post the runbook",
+      "work_type": "task",
+      "kind": "rollback",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 3,
+      "parallel_group": "B",
+      "depends_on": [
+        {
+          "task": "P2-T02",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [],
+      "access": [
+        "A1",
+        "A2"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86",
+        "ev-github-gh-cd4fded7"
+      ],
+      "produces": [
+        {
+          "type": "doc",
+          "name": "rollback runbook"
+        }
+      ],
+      "instructions": {
+        "purpose": "Make sure the team can undo the release quickly if production checks fail.",
+        "prerequisites": [
+          "P2-T02's sign-off is posted, so changing staging won't disturb UAT."
+        ],
+        "steps": [
+          {
+            "text": "Write a runbook comment: to roll back, run the deploy workflow by workflow_dispatch with ref set to the previous tag and environment set to the target.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": "ev-github-gh-1abaef86"
+          },
+          {
+            "text": "Rehearse it on staging: dispatch the deploy workflow with ref v2.13.0 and environment staging, and wait for it to finish.",
+            "refs": [
+              "ev-github-gh-1abaef86",
+              "ev-github-gh-cd4fded7"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Open https://staging.portal.example.org/events/1/signups and check the Download CSV link is gone.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Restore staging: dispatch the deploy workflow with ref main and environment staging, and check the link is back.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Copy the deployed commit SHA from that run's summary and add it, with the rehearsal log, to the runbook comment.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The runbook comment is posted with both rehearsal runs linked.",
+          "Staging runs main again, with its SHA recorded."
+        ],
+        "verify": [
+          "Both run links open successful runs, and staging shows the button."
+        ],
+        "done_today": "The runbook and rehearsal log comment is posted, ending with staging restored."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Runbook and rehearsal log comment, ending with the staging commit restored"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "github.rollback-rehearsal",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P2-T04",
+      "order": 11,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P2-T04",
+      "phase": "P2",
+      "title": "Prepare the release notes",
+      "work_type": "task",
+      "kind": "docs",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 2,
+      "parallel_group": "B",
+      "depends_on": [
+        {
+          "task": "P2-T02",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Portal Maintainer code owner review",
+          "kind": "review",
+          "owner_role_key": "maintainer"
+        }
+      ],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-cd4fded7"
+      ],
+      "produces": [
+        {
+          "type": "doc",
+          "name": "release notes"
+        }
+      ],
+      "instructions": {
+        "purpose": "Record what this release contains so the tag and the changelog agree.",
+        "prerequisites": [
+          "P2-T02's sign-off is posted."
+        ],
+        "steps": [
+          {
+            "text": "Run git checkout main, git pull, then git checkout -b docs/release-notes-csv.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "In CHANGELOG.md, rename Unreleased to the new version: raise the middle number of the latest tag by one and set the last to 0 (v2.13.0 becomes v2.14.0).",
+            "refs": [
+              "ev-github-gh-cd4fded7"
+            ],
+            "from_evidence": "ev-github-gh-cd4fded7"
+          },
+          {
+            "text": "Under it, write one line for the export and one for the guide section.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Push, open a pull request to main with the template sections and this task's Jira key, and link it on this task.",
+            "refs": [
+              "ev-github-gh-0f86b0c8"
+            ],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "CHANGELOG.md has the new version heading with the two lines.",
+          "The ci check is green."
+        ],
+        "verify": [
+          "The pull request diff shows only CHANGELOG.md."
+        ],
+        "done_today": "The pull request is open with green CI and review requested, linked on this task."
+      },
+      "visible_result": {
+        "type": "pr_opened",
+        "text": "PR opened, CI green"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "github.docs-change",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P3-T01",
+      "order": 12,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P3-T01",
+      "phase": "P3",
+      "title": "Start the production release",
+      "work_type": "task",
+      "kind": "cutover",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 1.5,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P2-T03",
+          "satisfied_by": "done"
+        },
+        {
+          "task": "P2-T04",
+          "satisfied_by": "merged"
+        },
+        {
+          "task": "P1-T05",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Portal Maintainer code owner review",
+          "kind": "review",
+          "owner_role_key": "maintainer"
+        },
+        {
+          "what": "A5 granted",
+          "kind": "access",
+          "owner_role_key": "admin"
+        }
+      ],
+      "access": [
+        "A1",
+        "A5"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86",
+        "ev-github-gh-cd4fded7"
+      ],
+      "produces": [
+        {
+          "type": "record",
+          "name": "production deploy run"
+        }
+      ],
+      "instructions": {
+        "purpose": "Start the production deploy of the version that passed staging tests and UAT.",
+        "prerequisites": [
+          "P2-T02 sign-off records the staging commit.",
+          "P2-T03 says main was redeployed to staging.",
+          "P2-T04 is merged."
+        ],
+        "steps": [
+          {
+            "text": "Run git checkout main, git pull, git fetch --tags.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Copy the tested commit SHA from P1-T05 and run git log --oneline <that SHA>..main. Only the release-notes merge should be listed; if anything else appears, do not tag: comment the list, set this task to Flagged, mention the Program Director, and stop.",
+            "refs": [
+              "tested commit"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Open the latest staging deploy run and copy the deployed SHA from its summary; it must equal git rev-parse main. If not, handle it as in step 2.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Work out the new version as in CONTRIBUTING.md (v2.13.0 becomes v2.14.0) and check CHANGELOG.md uses it; if not, handle it as in step 2.",
+            "refs": [
+              "ev-github-gh-cd4fded7",
+              "release notes"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Run git tag -a <new version> -m 'Sign-ups CSV export', then git push origin <new version>.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Open the Actions tab, find the deploy run for the tag, and confirm it waits for the production environment review.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Post the run link in the release channel and on this task, and mention the Portal Admin to review the deploy.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The tag is on the tested commit plus the release-notes merge, and staging runs that same commit.",
+          "Or, if extra commits appeared, no tag was pushed and the task is blocked with the list in a comment.",
+          "A production deploy run for the tag is waiting for review, and its link is on this task."
+        ],
+        "verify": [
+          "git ls-remote --tags origin <new version> returns the tag, and the run link opens the waiting run."
+        ],
+        "done_today": "The tag is pushed and the run waits for the Portal Admin's approval, or the task is blocked with a comment explaining why."
+      },
+      "visible_result": {
+        "type": "deployed_change",
+        "text": "Comment with tag and deploy run link, or a blocked comment"
+      },
+      "production_change": true,
+      "data_change": false,
+      "test_tasks": [
+        "P1-T05",
+        "P2-T02"
+      ],
+      "rollback_task": "P2-T03",
+      "exception": null,
+      "origin": {
+        "pattern": "github.tag-release",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P3-T02",
+      "order": 13,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P3-T02",
+      "phase": "P3",
+      "title": "Verify the production release",
+      "work_type": "task",
+      "kind": "cutover",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 1.5,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P3-T01",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Portal Admin production deploy approval",
+          "kind": "approval",
+          "owner_role_key": "admin"
+        },
+        {
+          "what": "Second Portal Admin approval if a rollback is needed",
+          "kind": "approval",
+          "owner_role_key": "admin"
+        }
+      ],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86",
+        "ev-github-gh-950546b8",
+        "ev-github-gh-eaddc074"
+      ],
+      "produces": [
+        {
+          "type": "record",
+          "name": "production checks"
+        }
+      ],
+      "instructions": {
+        "purpose": "Confirm the approved deploy worked without touching any volunteer's data, or roll it back.",
+        "prerequisites": [
+          "The Portal Admin approved P3-T01's deploy run.",
+          "P2-T03's runbook."
+        ],
+        "steps": [
+          {
+            "text": "Open the deploy run from P3-T01. If it failed, go to step 5.",
+            "refs": [
+              "production deploy run"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Run curl -sI https://portal.example.org/events/1/signups.csv while signed out and expect a redirect to /login.",
+            "refs": [
+              "ev-github-gh-1abaef86",
+              "ev-github-gh-eaddc074"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Open https://portal.example.org/help and check the coordinator guide shows the Download sign-ups as a CSV section.",
+            "refs": [
+              "ev-github-gh-950546b8"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "If both checks pass, comment the results here and mention the Volunteer Coordinator for P3-T03. You are done.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "If the run or a check failed, follow the runbook from P2-T03 to redeploy the previous tag to production, comment what failed, mention the Portal Admin for the second approval, and set this task to Flagged until it is given.",
+            "refs": [
+              "rollback runbook"
+            ],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "Either both checks passed on the new version, or the rollback was started and recorded."
+        ],
+        "verify": [
+          "The comment shows the run result and both check results."
+        ],
+        "done_today": "The change is live and checked, or the rollback is started with the reason recorded."
+      },
+      "visible_result": {
+        "type": "deployed_change",
+        "text": "Deployed change, checks recorded"
+      },
+      "production_change": true,
+      "data_change": false,
+      "test_tasks": [
+        "P1-T05",
+        "P2-T02"
+      ],
+      "rollback_task": "P2-T03",
+      "exception": null,
+      "origin": {
+        "pattern": "github.verify-release",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P3-T03",
+      "order": 14,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P3-T03",
+      "phase": "P3",
+      "title": "Confirm the export in production",
+      "work_type": "task",
+      "kind": "uat",
+      "role_key": "business_user",
+      "points": 1,
+      "estimate_hours": 0.5,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P3-T02",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "Volunteer Coordinator availability",
+          "kind": "availability",
+          "owner_role_key": "business_user"
+        }
+      ],
+      "access": [],
+      "evidence_refs": [
+        "ev-github-gh-1abaef86"
+      ],
+      "produces": [],
+      "instructions": {
+        "purpose": "The people who use the export confirm it works for real.",
+        "prerequisites": [
+          "P3-T02 reports both checks passed."
+        ],
+        "steps": [
+          {
+            "text": "Open https://portal.example.org, sign in with your usual coordinator account, and open one of your events' sign-ups pages.",
+            "refs": [
+              "ev-github-gh-1abaef86"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Click Download CSV and check the file opens with the five columns.",
+            "refs": [
+              "Download CSV button"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Delete the file, then comment 'confirmed' on this task, or what went wrong.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The coordinator confirms the export works in production."
+        ],
+        "verify": [
+          "The confirmation comment is on this task."
+        ],
+        "done_today": "The confirmation comment is posted."
+      },
+      "visible_result": {
+        "type": "measurement",
+        "text": "Confirmation comment that the export works in production"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.prod-confirm",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-2",
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P3-T04",
+      "order": 15,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P3-T04",
+      "phase": "P3",
+      "title": "Announce the export to coordinators",
+      "work_type": "task",
+      "kind": "comms",
+      "role_key": "comms",
+      "points": 1,
+      "estimate_hours": 1.5,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P3-T03",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [
+        {
+          "what": "A4 granted",
+          "kind": "access",
+          "owner_role_key": "admin"
+        }
+      ],
+      "access": [
+        "A4"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-950546b8"
+      ],
+      "produces": [],
+      "instructions": {
+        "purpose": "Tell coordinators the export exists, where the guide is, and how to handle a file that holds volunteers' personal data.",
+        "prerequisites": [
+          "P3-T03 confirms the export works in production."
+        ],
+        "steps": [
+          {
+            "text": "Open https://portal.example.org/help and copy the link to the Download sign-ups as a CSV section.",
+            "refs": [
+              "ev-github-gh-950546b8"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Write an announcement of no more than 150 words: what's new, the guide link, and the handling guidance (delete the file after the event, don't forward it).",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Post it in the announcements channel named in the epic. Discovery did not inspect that channel; if you can't post there, comment here and mention the Program Director.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Paste the announcement link into a comment on this task.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The announcement is posted, links to the guide section, and includes the handling guidance."
+        ],
+        "verify": [
+          "The link on this task opens the posted announcement."
+        ],
+        "done_today": "The announcement is posted and linked."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Announcement link comment"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.announcement",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P3-T05",
+      "order": 16,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P3-T05",
+      "phase": "P3",
+      "title": "Hand off to the portal maintainers",
+      "work_type": "task",
+      "kind": "handoff",
+      "role_key": "developer",
+      "points": 1,
+      "estimate_hours": 2,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P3-T02",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [],
+      "access": [
+        "A1"
+      ],
+      "evidence_refs": [
+        "ev-github-gh-bf8adf2e"
+      ],
+      "produces": [],
+      "instructions": {
+        "purpose": "Leave the maintainers everything they need to own the feature.",
+        "prerequisites": [
+          "P3-T02 reports the release is live."
+        ],
+        "steps": [
+          {
+            "text": "Write a handoff note: what shipped (the route, button and guide section), where the tests live, the rollback runbook link, and known limits (no enforced deletion).",
+            "refs": [
+              "/events/:id/signups.csv",
+              "rollback runbook"
+            ],
+            "from_evidence": null
+          },
+          {
+            "text": "Post it as a comment on this task and mention the Portal Maintainers.",
+            "refs": [
+              "ev-github-gh-bf8adf2e"
+            ],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The note covers what shipped, tests, rollback and known limits."
+        ],
+        "verify": [
+          "The comment is on this task with the maintainers mentioned."
+        ],
+        "done_today": "The handoff note is posted."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Handoff note comment"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.handoff",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    },
+    {
+      "id": "P4-T01",
+      "order": 17,
+      "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0T39:P4-T01",
+      "phase": "P4",
+      "title": "Complete the procurement work",
+      "work_type": "task",
+      "kind": "setup",
+      "role_key": "procurement",
+      "points": 1,
+      "estimate_hours": 3,
+      "parallel_group": null,
+      "depends_on": [
+        {
+          "task": "P3-T05",
+          "satisfied_by": "done"
+        }
+      ],
+      "waits_on": [],
+      "access": [],
+      "evidence_refs": [],
+      "produces": [],
+      "instructions": {
+        "purpose": "Carry out the procurement standard work that the vendor or spend trait requires.",
+        "prerequisites": [],
+        "steps": [
+          {
+            "text": "Open this project's brief and read the vendor or spend answers in the epic description.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Do the procurement work the brief describes and record the result in a comment on this task.",
+            "refs": [],
+            "from_evidence": null
+          },
+          {
+            "text": "Mention the role-holder named in the epic for anything you could not finish.",
+            "refs": [],
+            "from_evidence": null
+          }
+        ],
+        "acceptance_criteria": [
+          "The procurement result is recorded on this task."
+        ],
+        "verify": [
+          "The comment on this task shows the result."
+        ],
+        "done_today": "The result comment is posted."
+      },
+      "visible_result": {
+        "type": "comment_posted",
+        "text": "Comment with the procurement result"
+      },
+      "production_change": false,
+      "data_change": false,
+      "test_tasks": [],
+      "rollback_task": null,
+      "exception": null,
+      "origin": {
+        "pattern": "core.generic",
+        "rules_checked": []
+      },
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
+    }
+  ],
+  "traits": [
+    {
+      "id": "has_consumers",
+      "version": "1.0.0",
+      "from_plan_version": 1
+    },
+    {
+      "id": "vendor_or_spend",
+      "version": "1.0.0",
+      "from_plan_version": 1
+    }
+  ],
+  "brief": [
+    {
+      "id": "B-1",
+      "key": "outcome",
+      "value": "Coordinators can download an event's sign-ups as a CSV without asking a developer.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-2",
+      "key": "success_measure",
+      "value": "A coordinator downloads a correct CSV in production and confirms it on the confirmation task.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-3",
+      "key": "scope_in",
+      "value": "The CSV export, the button and the guide section, plus their test, UAT, release, rollback, announcement and handoff.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-4",
+      "key": "non_goals",
+      "value": "Enforcing file deletion; database changes; exports for non-coordinators.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-5",
+      "key": "starting_point",
+      "value": "Extends the volunteer portal and the coordinator guide.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "evidence",
+      "basis_role_key": "approver",
+      "derived_from": [
+        "ev-github-gh-0d0be73a",
+        "ev-github-gh-950546b8"
+      ],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-6",
+      "key": "consumers",
+      "value": "Volunteer coordinators.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-7",
+      "key": "constraints",
+      "value": "No new dependency; the change ships with a normal tagged release.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-8",
+      "key": "risks",
+      "value": "The file holds volunteers' personal data and may be forwarded.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-9",
+      "key": "deliverable_signoffs",
+      "value": null,
+      "status": "not_applicable",
+      "na_reason": "No deliverable sign-off beyond UAT, which the UAT run records.",
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-10",
+      "key": "run_owner_after_handoff",
+      "value": "Portal maintainers.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-11",
+      "key": "external_dependencies",
+      "value": null,
+      "status": "not_applicable",
+      "na_reason": "All work is inside the portal repo and its deploys.",
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-12",
+      "key": "budget",
+      "value": null,
+      "status": "not_applicable",
+      "na_reason": "No spend; existing team time only.",
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-13",
+      "key": "legal_duties",
+      "value": "Volunteers' personal data in the file is handled as the guide's handling section says.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-14",
+      "key": "nonfunctional",
+      "value": "The file opens in common spreadsheet tools (UTF-8 with a byte-order mark) and resists formula injection.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-15",
+      "key": "comms_audiences",
+      "value": "Coordinators, through the announcements channel.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-16",
+      "key": "consumer_list",
+      "value": "Coordinators only; no job or system reads the new route.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "evidence",
+      "basis_role_key": "developer",
+      "derived_from": [
+        "ev-github-gh-0d0be73a"
+      ],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-17",
+      "key": "consumer_notice",
+      "value": "An announcement after release.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-18",
+      "key": "compatibility",
+      "value": "The existing sign-ups page and route keep working unchanged.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-19",
+      "key": "vendor",
+      "value": "Answered for this fixture: Which vendor or product, if already known.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-20",
+      "key": "contract_status",
+      "value": "Answered for this fixture: Is there a contract or purchase order yet, and what is its status.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-21",
+      "key": "lead_time",
+      "value": "Answered for this fixture: How long do purchasing, contracts or vendor onboarding usually take here.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    }
+  ],
+  "approach": {
+    "options": [
+      {
+        "id": "O-1",
+        "summary": "Add the export beside the existing sign-ups route and page, reusing getSignups and the coordinator check.",
+        "kind": "reuse_extend",
+        "evidence": [
+          "ev-github-gh-0d0be73a",
+          "ev-github-gh-eaddc074",
+          "ev-github-gh-bd49b4d6"
+        ],
+        "not_inspected_reason": null,
+        "pros": [
+          "Reuses the tested data loader and role check",
+          "Ships with the normal release"
+        ],
+        "cons": [
+          "Touches the sign-ups page"
+        ],
+        "rejected_because": null
+      },
+      {
+        "id": "O-2",
+        "summary": "Do nothing: coordinators keep copying the sign-ups table by hand.",
+        "kind": "do_nothing",
+        "evidence": [],
+        "not_inspected_reason": "Nothing to inspect; this is today's manual practice.",
+        "pros": [
+          "No work"
+        ],
+        "cons": [
+          "Slow and error-prone"
+        ],
+        "rejected_because": {
+          "brief_ref": "B-1",
+          "why": "Copying by hand is exactly what the outcome replaces."
+        }
+      },
+      {
+        "id": "O-3",
+        "summary": "Build a separate reporting tool that reads the sign-ups database.",
+        "kind": "new",
+        "evidence": [],
+        "not_inspected_reason": "No reporting tool exists to inspect.",
+        "pros": [
+          "Could serve other reports later"
+        ],
+        "cons": [
+          "New deploy and dependencies"
+        ],
+        "rejected_because": {
+          "brief_ref": "B-7",
+          "why": "A new tool adds a dependency and a separate deploy, which the constraints rule out."
+        }
+      }
+    ],
+    "decisions": [
+      {
+        "id": "AD-1",
+        "decision": "Extend the portal's sign-ups route and page rather than build anything new.",
+        "chosen_option": "O-1",
+        "deferred_to_task": null,
+        "brief_refs": [
+          "B-1",
+          "B-3"
+        ],
+        "evidence": [
+          "ev-github-gh-0d0be73a"
+        ]
+      }
+    ],
+    "unchanged": []
+  },
+  "standard_work": [
+    {
+      "kind": "consumer_comms",
+      "tasks": [
+        "P3-T04"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "compat_test",
+      "tasks": [],
+      "not_applicable_reason": "No job or system reads the new route; the existing page's tests run in every CI build."
+    },
+    {
+      "kind": "test",
+      "tasks": [
+        "P1-T01",
+        "P1-T02",
+        "P1-T05"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "uat",
+      "tasks": [
+        "P2-T02"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "cutover",
+      "tasks": [
+        "P3-T01",
+        "P3-T02"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "rollback",
+      "tasks": [
+        "P2-T03"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "docs",
+      "tasks": [
+        "P1-T04"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "handoff",
+      "tasks": [
+        "P3-T05"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "procurement",
+      "tasks": [
+        "P4-T01"
+      ],
+      "not_applicable_reason": null
+    }
+  ],
+  "review": {
+    "validator": null,
+    "reviewer": null
+  },
+  "approvals": [],
+  "stamps": {
+    "release": "unreleased",
+    "core": "groundwork-core@1.0.0",
+    "contract": "1.0",
+    "plan_format": "2.0",
+    "skills": [
+      {
+        "name": "groundwork-system-github",
+        "version": "1.0.0",
+        "verified": "unverified"
+      },
+      {
+        "name": "groundwork-tracker-jira",
+        "version": "1.0.0",
+        "verified": "unverified"
+      }
+    ],
+    "overlay": {
+      "id": "example-org",
+      "version": 1,
+      "hash": "f9fc0dc1de9d84a1049218654b455b34c39e1bbe4019f782e5dbd0be623c0a78",
+      "format": "1.0"
+    },
+    "validator": "1.0.0",
+    "surface": "claude-code-local",
+    "model": "unknown",
+    "compat": []
+  },
+  "history": [
+    {
+      "version": 1,
+      "at": "2026-11-14T19:02:11Z",
+      "change": "drafted",
+      "by": "groundwork-core"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-abf252a3",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T32",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read repo settings and branch protection for main",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": true,
+  "subject": {
+    "type": "repo",
+    "name": "example-org/volunteer-portal"
+  },
+  "facts": {
+    "default_branch": "main",
+    "required_approving_reviews": 1,
+    "code_owner_review": true,
+    "required_checks": [
+      "ci"
+    ],
+    "tag_protection": false
+  },
+  "untrusted_text": [],
+  "sensitivity": "restricted",
+  "hash": "c24e77a4548cec5e74253b5daf428edf415dd274d711f513a67e177778fbe990"
+}

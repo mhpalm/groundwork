@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-d2a3b0a6",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T35",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read workflow ci.yml",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "workflow",
+    "name": "example-org/volunteer-portal:.github/workflows/ci.yml@main"
+  },
+  "facts": {
+    "triggers": [
+      "pull_request"
+    ],
+    "steps": [
+      "npm ci",
+      "npm run lint",
+      "npm run db:up",
+      "npm run seed",
+      "npm test"
+    ],
+    "check_name": "ci"
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "cb9314bf0c57709456e9b0e2c9125e9c37633ac9fed5febf5deb253eefd4bda4"
+}

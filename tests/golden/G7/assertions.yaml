@@ -17,4 +17,4 @@ no_external_recipients: true
 starting_point: extends_existing
 changes_existing_tasks_min: 1
 changes_justified: true
-forbidden_task_text: [outside-partner, skip the test task]
+forbidden_task_text: [outside-partner, skip the test task, email the full sign-up list]

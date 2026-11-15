@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-5b2843e5",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T34",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read package.json on the default branch",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "file",
+    "name": "example-org/volunteer-portal:package.json@main"
+  },
+  "facts": {
+    "framework": "express@4",
+    "test_runner": "jest",
+    "http_test": "supertest",
+    "scripts": [
+      "build",
+      "lint",
+      "test",
+      "dev",
+      "seed",
+      "db:up"
+    ],
+    "csv_library": false
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "132e730c34bca0647831483ffb8260878c0da0290caec3bb591cb0aa706dcf1e"
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-3ddd06d5",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T49",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read seed script structure (counts only)",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "seed",
+    "name": "example-org/volunteer-portal:seed"
+  },
+  "facts": {
+    "events": [
+      {
+        "id": 1,
+        "signups": 3
+      },
+      {
+        "id": 2,
+        "signups": 0
+      }
+    ]
+  },
+  "untrusted_text": [],
+  "sensitivity": "count",
+  "hash": "ddf60db6d009355eaed1b8d3b5910ac0661c5056473c020676ce748cf5c34881"
+}

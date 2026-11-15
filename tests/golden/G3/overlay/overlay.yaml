@@ -3,7 +3,7 @@ schema_version: "1.0"
 overlay_format: "1.0"
 id: example-org
 version: 1
-hash: "29a18ce2a714cd04a8bcfd549758d8c0d9af3f685f8cb82437735e0f1fdb0910"
+hash: ecfd637ffd00ecaa5540e4ebb3a7f5e273a807a7763e227363c35c4cd2190545
 org_name: Example Org
 admins:
   - account_id: acct-program-director
@@ -63,6 +63,8 @@ roles:
     name: Comms Lead
   - key: approver
     name: Program Director
+  - key: trainer
+    name: Coordinator Trainer
 task_hierarchy:
   task_to_epic: parent
   steps_as: checklist

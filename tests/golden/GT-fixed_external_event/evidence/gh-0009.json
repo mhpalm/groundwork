@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-aaf43453",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T32",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read the sign-ups route test",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "file",
+    "name": "example-org/volunteer-portal:tests/routes/events.signups.test.ts@main"
+  },
+  "facts": {
+    "helper": "loginAs(role)",
+    "helper_file": "tests/helpers/auth.ts",
+    "seeded_events": [
+      1,
+      2
+    ],
+    "setup_file": "tests/setup.ts",
+    "setup_runs": "npm run seed"
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "0325c5f834ba6a183e6f6c5fd8f89bd7022eb94f2e7b3ea9978e49e01ef5f30e"
+}

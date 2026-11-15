@@ -62,7 +62,7 @@ A description marker is never accepted as the only key slot, because a person ed
 
 ## Generic role keys
 
-Skills name roles with generic keys: `developer`, `admin`, `analyst`, `qa`, `business_user`, `trainer`, `comms`, `maintainer`, `approver`. The overlay maps each key to the org's role name. Plans store the key; the name is looked up at render time, so renaming a role in the overlay does not leave stale names. A pattern that needs a role the overlay doesn't map is a gap-review blocker.
+Skills name roles with generic keys: `developer`, `admin`, `analyst`, `qa`, `business_user`, `trainer`, `comms`, `maintainer`, `approver`, `legal`, `finance`, `procurement`, `security`, `vendor_contact`, `facilitator`. An overlay may add its own keys starting with `x-`. The overlay maps each key to the org's role name. Plans store the key; the name is looked up at render time, so renaming a role in the overlay does not leave stale names. A pattern that needs a role the overlay doesn't map is a gap-review blocker.
 
 ## Contract versioning and compatibility checks
 

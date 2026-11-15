@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-jira-main-478b6c7c",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T32",
+  "overlay_id": "example-org",
+  "system": "jira",
+  "instance": "main",
+  "skill": "groundwork-tracker-jira@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read Jira project configuration",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "project",
+    "name": "VOL"
+  },
+  "facts": {
+    "issue_types": [
+      "Epic",
+      "Story",
+      "Task"
+    ],
+    "labels": true,
+    "story_points_on": [
+      "Task"
+    ],
+    "link_types": [
+      "Blocks"
+    ],
+    "flagged_field": true
+  },
+  "untrusted_text": [],
+  "sensitivity": "config",
+  "hash": "8ddefd90d27516b5e8deab6327af4999d8e2e12c02c8809c855c782452b1771d"
+}

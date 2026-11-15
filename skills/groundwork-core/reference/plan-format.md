@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-# Plan format (1.0)
+# Plan format (2.0)
 
-The plan is one JSON document, `plan.json`, validated against `groundwork-core/schemas/plan.schema.json`. Everything a person reads (the proposal, the snapshot, the tracker items) is rendered from it by a script, so wording can vary between runs but structure cannot. Every persisted file (plan, evidence item, approval, journal line, manifest) starts with `schema_version`, and all hashes are SHA-256 over RFC 8785 canonical JSON, computed by `scripts/`, never by the model. The schema is shown as YAML for readability.
+The plan is one JSON document, `plan.json`, validated against `groundwork-core/schemas/plan.schema.json`. Everything a person reads (the proposal, the snapshot, the tracker items) is rendered from it by a script, so wording can vary between runs but structure cannot. Every persisted file (plan, evidence item, approval, journal line, manifest) starts with `schema_version`, and all hashes are SHA-256 over RFC 8785 canonical JSON, computed by `scripts/`, never by the model. The schema is shown as YAML for readability. Plan format 2.0 (`stamps.plan_format: "2.0"`) adds the brief, traits and approach of the planning model; a format-1.0 plan omits them, keeps format 1.0 for life, and is validated without the GR-29 to GR-34 checks.
 
 ## Schema
 
@@ -10,7 +10,7 @@ plan:
   schema_version: "1.0"
   id: gw-01JCX7Q3RZ9V4N2T8K5M6P0ABC   # ULID made at Intake; never reused
   version: 3                          # +1 on every change after the first proposal
-  status: draft | in_review | proposed | active | revising | complete
+  status: draft | in_review | proposed | active | revising | complete | retired
   overlay: {id, version, hash}        # the overlay this plan is bound to
   title: string
   request:
@@ -48,13 +48,14 @@ plan:
       title: string
       changes_existing: {resources: [R ids], why_needed, could_break: [..], regression_check: [test or uat task ids]} | null
       work_type: story | task          # story: user-facing value; task: everything else
-      kind: setup | design | build | config | data | test | uat | cutover | rollback | docs | training | comms | signoff_prep | handoff
-      role_key: generic role key      # name looked up in the overlay at render time
+      kind: setup | design | build | config | data | test | uat | cutover | rollback | docs | training | comms | signoff_prep | handoff | spike | measurement | reconciliation
+      role_key: generic role key      # name looked up in the overlay at render time; an overlay may add x- keys
       points: 1
       estimate_hours: number          # > 0 and <= executor.working_day_hours unless exception
       parallel_group: string
       depends_on: [{task, satisfied_by: done | merged | deployed}]
-      waits_on: [{what, kind: approval | review | merge | vendor | job | access | availability, owner_role_key}]
+      waits_on: [{what, kind: approval | review | merge | vendor | job | access | availability | elapsed | external_event,
+                  owner_role_key, condition, legacy_ref}]   # condition: required for elapsed, never a date
       access: [access_list ids]
       evidence_refs: [evidence ids]
       produces: [{type, name}]         # things this task creates that later tasks may reference
@@ -65,19 +66,55 @@ plan:
         acceptance_criteria: [string]
         verify: [string]
         done_today: string
-      visible_result: {type: pr_opened | merged_pr | deployed_change | record_created | record_updated | doc_submitted | comment_posted, text}
+      visible_result: {type: pr_opened | merged_pr | deployed_change | record_created | record_updated | doc_submitted | comment_posted
+                             | document | decision_record | measurement, text}
       production_change: boolean
       data_change: boolean
       test_tasks: [task ids]          # required when production_change
       rollback_task: task id          # required when production_change or data_change
       exception: null | {id, reason, days, checkpoints: [{day, visible_result}]}
       origin: {pattern, rules_checked: [rule ids]}
-  standard_work: [{kind: test | uat | cutover | rollback | docs | handoff, tasks: [task ids], not_applicable_reason}]
+      brief_refs: [brief ids]          # format 2: the brief fields this task serves
+      approach_refs: [decision ids]    # format 2: the approach decisions it relies on
+      derived_from_rec: REC id | null  # format 2: the assess recommendation it came from
+  standard_work: [{kind: test | uat | cutover | rollback | docs | handoff | <a pinned trait's kind>, tasks: [task ids], not_applicable_reason}]
   review: {validator: {version, passed, results}, reviewer: {surface, view_hash, independent, findings: [finding]}}
+  traits: [{id, version, from_plan_version}]       # format 2: pinned from reference/traits.yaml or the overlay
+  brief:                                            # format 2: what Clarify learned, one field per key
+    - id: B-1
+      key: outcome                    # core keys below, plus each pinned trait's question keys
+      value: string | null            # null when not answered, or when restricted
+      status: answered | not_applicable | open
+      na_reason: string | null        # required when not_applicable
+      open_question: Q id | null      # required when open; its blocks names the affected phases
+      phase: P id | null              # a field parked on a later phase; its question must block that phase
+      source: runner | role_confirmed | evidence | from_tracker | pasted   # never changes when confirmed
+      basis_role_key: role key | null # who confirmed it, as a role; required unless source is runner
+      derived_from: [evidence or working-text ids]
+      sensitivity: normal | restricted
+      value_rev: integer | null       # restricted only: bumped on each re-answer; the value stays in restricted.json
+  approach:                                         # format 2
+    options: [{id: O-1, summary, kind: reuse_extend | smaller | do_nothing | new | other, evidence: [ids],
+               not_inspected_reason, pros: [..], cons: [..], rejected_because: {brief_ref, why} | null}]
+    decisions: [{id: AD-1, decision, chosen_option: O id | deferred, deferred_to_task: task id | null,
+                 brief_refs: [brief ids], evidence: [ids], trait_conflict: [trait ids]}]
+    unchanged: [R ids]                # existing resources the plan deliberately leaves alone
   approvals: [approval ids]           # records live in the tracker; ids here for reference
   stamps: stamps
   history: [{version, at, change, by}]
 ```
+
+## The brief, traits and approach (plan format 2)
+
+**Brief.** Clarify always asks the core keys: `outcome`, `success_measure`, `scope_in`, `non_goals`, `starting_point`, `consumers`, `constraints`, `risks`, `deliverable_signoffs`, `run_owner_after_handoff`, `external_dependencies`, `budget`, `legal_duties`, `nonfunctional`, `comms_audiences`. Each pinned trait adds its question keys. There is no completeness gate: Clarify runs at most 3 rounds, "not applicable, because ..." is a one-tap answer, and anything still unanswered becomes `open` with an open question whose `blocks` names the phases it affects, so Draft always runs. Fields are confirmed one at a time; confirming adds `basis_role_key` and never changes `source`, so text from a document, ticket or paste stays marked as such. A statement that contradicts evidence becomes an open question. Org facts (change freezes, change boards, spend approval routes, release mechanics) are overlay `org_process`, never asked per run. Deadlines are `constraints`, shown and never scheduled.
+
+**Sensitivity.** A restricted value is never written to the plan, proposal, findings, snapshot or tracker: the plan stores `value: null` and `value_rev`, and the plaintext lives only in the run folder's `restricted.json`, which travels only in run bundles marked as containing restricted project data. Text confirmed from a tracker or a paste defaults to restricted. `outcome`, `success_measure`, `scope_in` and `non_goals` can never be restricted: when the source is sensitive the runner writes a normal paraphrase, so approvers always see what they approve. Plan approvers come only from overlay gates; `deliverable_signoffs` lists role keys for deliverable sign-off, each needing a `signoff_prep` task and a `waits_on` approval. `success_measure` is measured by exactly one task whose visible result is `measurement`.
+
+**Traits.** A trait (`reference/traits.yaml`) is a small, generic property of a project, such as `moves_data` or `has_consumers`. Traits combine by union only; a declared conflict between two pinned traits is settled by an approach decision listing both in `trait_conflict`. The runner confirms the proposed set, and "none of these" is valid. A trait that needs a role the overlay does not map is a GR-14 blocker. A trait added by a change request records `from_plan_version`.
+
+**Approach.** Chosen after Discover, so options rest on what actually exists. The options always include a `reuse_extend` option and a `smaller` or `do_nothing` option; every option not chosen cites the brief field that rules it out. Necessity is judged against the brief, never against the chosen approach: every task's `brief_refs`, directly or through a decision it cites, reaches `outcome` or `scope_in`. Every existing resource is either changed by a task or listed in `unchanged`. A decision may be `deferred` to a design task; until then it blocks every task that cites it except that design task. The approach picks a way to get there; it does not design the deliverable.
+
+**Roles and results.** The generic role keys add `legal`, `finance`, `procurement`, `security`, `vendor_contact` and `facilitator`; an overlay may add `x-` roles and `executor_profiles` per role, and GR-02 and GR-06 judge each task against its own role's profile. A sign-off or an event is a wait, never a visible result. An `elapsed` wait states its condition and the work done while waiting (for example a daily reconciliation task).
 
 ## Field rules that matter most
 

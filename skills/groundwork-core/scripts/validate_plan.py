@@ -23,6 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import gw_model  # noqa: E402
 import gw_yaml  # noqa: E402
 from gw_hash import item_hash  # noqa: E402
 from gw_schema import load_schema, validate  # noqa: E402
@@ -64,6 +65,7 @@ class Results:
     def __init__(self, offered):
         self.items = []
         self.offered = offered
+        self.not_run = []  # checks that could not run in this session, shown in the proposal
 
     def add(self, check, severity, target, what, fix="", evidence_ids=None, phase=None):
         self.items.append({
@@ -150,10 +152,15 @@ def find_cycle(deps):
     return None
 
 
-def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", proposal_text=None):
+def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", proposal_text=None,
+          restricted=None, done_tasks=None, profile="plan"):
+    """restricted: {brief id: plaintext} from the run folder's restricted.json, when this session has it.
+    done_tasks: task ids the tracker reports done or closed_not_done (revise), exempt from GR-31's trace rule.
+    profile: "plan", or "assess" for a reconstruction with no phases (open questions may block nothing)."""
     phases = {p["id"]: p for p in plan.get("phases", [])}
     drafted = [p["id"] for p in plan.get("phases", []) if p.get("state") != "outline"]
-    offered = set(offered_arg) if offered_arg else set(drafted)
+    # None means "not given": offer every drafted phase. An empty list means no phases.
+    offered = set(offered_arg) if offered_arg is not None else set(drafted)
     R = Results(offered)
 
     # Schema first: if the shape is wrong, later checks can't be trusted.
@@ -369,6 +376,14 @@ def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", pr
                 blocked.update(phases[b]["task_ids"])
             elif b in tasks:
                 blocked.add(b)
+    # A deferred approach decision acts as an open question for every task that cites it,
+    # except the design task that will settle it (GR-33).
+    if gw_model.is_model_plan(plan):
+        for d in plan.get("approach", {}).get("decisions", []):
+            if d["chosen_option"] == "deferred":
+                for tid, t in tasks.items():
+                    if d["id"] in t.get("approach_refs", []) and tid != d["deferred_to_task"]:
+                        blocked.add(tid)
     changed = True
     while changed:
         changed = False
@@ -377,8 +392,8 @@ def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", pr
                 blocked.add(tid)
                 changed = True
     for tid in sorted(blocked):
-        R.add("GR-04", "blocker", tid, "an open question blocks this task", "Answer the question or leave this phase out of the offer",
-              phase=tasks[tid]["phase"])
+        R.add("GR-04", "blocker", tid, "an open question or a deferred decision blocks this task",
+              "Answer the question or settle the decision, or leave this phase out of the offer", phase=tasks[tid]["phase"])
 
     # GR-18: a task that relies on a system nobody inspected waits behind an open question
     uninspected = {u["name"] for u in overlay.get("skills", {}).get("unsupported_systems", [])}
@@ -435,6 +450,9 @@ def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", pr
                 if r != x["id"] and r not in anc[x["id"]] and tasks[r]["phase"] != "P0":
                     R.add("GR-13", "blocker", x["id"], f"access {line['id']} is requested by {r}, which does not come before this task",
                           "Request it earlier", phase=x["phase"])
+
+    if gw_model.is_model_plan(plan):
+        model_checks(R, plan, overlay, ev_by_id, tasks, phases, role_keys, restricted, done_tasks or set(), profile)
 
     # GR-17: no secrets, personal or financial data
     for src, blob in (("plan", plan), ("evidence", evidence)):
@@ -535,6 +553,168 @@ def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", pr
     return R
 
 
+def model_checks(R, plan, overlay, ev_by_id, tasks, phases, role_keys, restricted, done_tasks, profile):
+    """GR-29, GR-31, GR-33 and GR-34 (plan format 2). GR-30 and GR-32 are reviewer checks."""
+    for k in ("brief", "traits", "approach"):
+        if k not in plan:
+            R.add("GR-29" if k != "approach" else "GR-31", "blocker", None, f"plan format 2 needs '{k}'", f"Add {k} (plan-format.md)")
+    if any(k not in plan for k in ("brief", "traits", "approach")):
+        return
+    brief = plan["brief"]
+    by_id = {f["id"]: f for f in brief}
+    by_key = {}
+    questions = {q["id"]: q for q in plan["open_questions"]}
+
+    # GR-29: brief structure
+    found, missing = gw_model.pinned_traits(plan, overlay)
+    for m in missing:
+        R.add("GR-29", "blocker", None, f"pinned trait {m} is not a known core or overlay trait", "Pin a trait from reference/traits.yaml")
+    if len(by_id) != len(brief):
+        R.add("GR-29", "blocker", None, "duplicate brief field ids", "Brief ids are unique")
+    for f in brief:
+        if f["key"] in by_key:
+            R.add("GR-29", "blocker", f["id"], f"brief key '{f['key']}' appears twice", "Keep one field per key")
+        by_key[f["key"]] = f
+    for key in gw_model.required_keys(plan, overlay):
+        if key not in by_key:
+            R.add("GR-29", "blocker", None, f"brief has no '{key}' field", "Ask it in Clarify, or mark it not applicable with a reason")
+    for f in brief:
+        fid, st = f["id"], f["status"]
+        if st == "answered" and f["sensitivity"] == "normal" and not (f["value"] or "").strip():
+            R.add("GR-29", "blocker", fid, "answered field has no value", "Record the answer")
+        if st == "not_applicable" and not (f["na_reason"] or "").strip():
+            R.add("GR-29", "blocker", fid, "not-applicable field has no reason", "Say why it does not apply")
+        if st == "open":
+            q = questions.get(f["open_question"] or "")
+            if not q:
+                R.add("GR-29", "blocker", fid, "open field names no open question", "Create the open question and name it")
+            elif not q["blocks"] and profile != "assess":
+                R.add("GR-29", "blocker", fid, f"open field's question {q['id']} blocks nothing", "Name the phases it affects in blocks")
+            elif f["phase"] and f["phase"] not in q["blocks"]:
+                R.add("GR-29", "blocker", fid, f"field is parked on {f['phase']} but {q['id']} does not block it", "Add the phase to blocks")
+        elif f["phase"]:
+            R.add("GR-29", "blocker", fid, "only an open field can be parked on a later phase", "Clear phase, or reopen the field")
+        if f["source"] != "runner" and not f["basis_role_key"]:
+            R.add("GR-29", "blocker", fid, f"field from source '{f['source']}' has no basis_role_key", "Record the role that confirmed it")
+        if f["basis_role_key"] and role_keys and f["basis_role_key"] not in role_keys:
+            R.add("GR-14", "blocker", fid, f"basis role '{f['basis_role_key']}' is not mapped in the overlay", "Map the role")
+        if f["sensitivity"] == "restricted":
+            if f["key"] in gw_model.UNRESTRICTABLE:
+                R.add("GR-29", "blocker", fid, f"'{f['key']}' can never be restricted; approvers must see it",
+                      "Write a normal paraphrase (source runner) and keep the original in restricted.json")
+            if f["value"] is not None or not f["value_rev"]:
+                R.add("GR-29", "blocker", fid, "restricted field must store value null and a value_rev",
+                      "Move the value to the run folder's restricted.json")
+        elif f["value_rev"] is not None:
+            R.add("GR-29", "blocker", fid, "value_rev is only for restricted fields", "Remove value_rev")
+        for d in f["derived_from"]:
+            if d.startswith("ev-") and d not in ev_by_id:
+                R.add("GR-29", "blocker", fid, f"derived_from names {d}, which discovery did not find", "Fix the reference")
+    signoff = by_key.get("deliverable_signoffs")
+    if signoff and signoff["status"] == "answered" and not any(t["kind"] == "signoff_prep" for t in tasks.values()):
+        R.add("GR-29", "blocker", signoff["id"], "deliverable sign-offs are named but no signoff_prep task exists",
+              "Add a signoff_prep task with a waits_on approval for each sign-off role")
+    sm = by_key.get("success_measure")
+    if sm and sm["status"] == "answered":
+        n = sum(t["visible_result"]["type"] == "measurement" for t in tasks.values())
+        outline = any(p["state"] == "outline" for p in phases.values())
+        if n > 1 or (n == 0 and not outline):
+            R.add("GR-29", "blocker", sm["id"], f"{n} measurement tasks; the success measure needs exactly one",
+                  "Give exactly one task a visible_result of type measurement")
+
+    # GR-31: approach structure
+    ap = plan["approach"]
+    opts = {o["id"]: o for o in ap["options"]}
+    ads = {d["id"]: d for d in ap["decisions"]}
+    kinds = {o["kind"] for o in ap["options"]}
+    if "reuse_extend" not in kinds:
+        R.add("GR-31", "blocker", None, "approach has no reuse or extend option", "Add the option that reuses or extends what exists")
+    if not kinds & {"smaller", "do_nothing"}:
+        R.add("GR-31", "blocker", None, "approach has no smaller or do-nothing option", "Add one")
+    chosen = {d["chosen_option"] for d in ap["decisions"]}
+    for oid, o in opts.items():
+        for e in o["evidence"]:
+            if e not in ev_by_id:
+                R.add("GR-31", "blocker", oid, f"option cites {e}, which discovery did not find", "Fix the reference")
+        if not o["evidence"] and not (o["not_inspected_reason"] or "").strip():
+            R.add("GR-31", "blocker", oid, "option cites no evidence and gives no reason", "Cite evidence or say why it was not inspected")
+        if oid in chosen and o["rejected_because"]:
+            R.add("GR-31", "blocker", oid, "a chosen option is also marked rejected", "Clear rejected_because")
+        if oid not in chosen:
+            rb = o["rejected_because"]
+            if not rb:
+                R.add("GR-31", "blocker", oid, "option is neither chosen nor rejected with a reason", "Cite the brief field that rules it out")
+            elif rb["brief_ref"] not in by_id:
+                R.add("GR-31", "blocker", oid, f"rejection cites {rb['brief_ref']}, which is not a brief field", "Fix the reference")
+    for aid, d in ads.items():
+        if d["chosen_option"] == "deferred":
+            if d["deferred_to_task"] not in tasks:
+                R.add("GR-31", "blocker", aid, "deferred decision names no task that will settle it", "Name the design task")
+        elif d["chosen_option"] not in opts:
+            R.add("GR-31", "blocker", aid, f"decision chooses {d['chosen_option']}, which is not an option", "Fix the reference")
+        elif d["deferred_to_task"]:
+            R.add("GR-31", "blocker", aid, "a decided decision still names a deferred task", "Clear deferred_to_task")
+        for b in d["brief_refs"]:
+            if b not in by_id:
+                R.add("GR-31", "blocker", aid, f"decision cites {b}, which is not a brief field", "Fix the reference")
+        for e in d["evidence"]:
+            if e not in ev_by_id:
+                R.add("GR-31", "blocker", aid, f"decision cites {e}, which discovery did not find", "Fix the reference")
+    for tid, t in tasks.items():
+        for b in t.get("brief_refs", []):
+            if b not in by_id:
+                R.add("GR-31", "blocker", tid, f"brief_refs names {b}, which is not a brief field", "Fix the reference", phase=t["phase"])
+        for a in t.get("approach_refs", []):
+            if a not in ads:
+                R.add("GR-31", "blocker", tid, f"approach_refs names {a}, which is not a decision", "Fix the reference", phase=t["phase"])
+        if tid not in done_tasks and not gw_model.traces_to_brief(plan, t):
+            R.add("GR-31", "blocker", tid, "task does not trace to the brief's outcome or scope", 
+                  "Cite the outcome or scope field it serves, directly or through a decision", phase=t["phase"])
+    sp = plan["request"]["starting_point"]
+    res = {r["id"] for r in sp["resources"]}
+    changed = {r for t in tasks.values() if t.get("changes_existing") for r in t["changes_existing"]["resources"]}
+    for r in ap["unchanged"]:
+        if r not in res:
+            R.add("GR-31", "blocker", r, "approach.unchanged names a resource the starting point does not list", "Fix the reference")
+    for r in sorted(res - changed - set(ap["unchanged"])):
+        R.add("GR-31", "blocker", r, "existing resource is neither changed by a task nor listed as unchanged",
+              "List it in approach.unchanged, or plan the change")
+
+    # GR-33: trait standard work, trait roles and trait conflicts
+    sw = {s["kind"]: s for s in plan["standard_work"]}
+    for k in gw_model.trait_kinds(plan, overlay):
+        s = sw.get(k)
+        if not s or (not s["tasks"] and not (s["not_applicable_reason"] or "").strip()):
+            R.add("GR-33", "blocker", None, f"trait standard work '{k}' has no task and no not-applicable reason",
+                  f"Add a {k} task, or state why it does not apply")
+        else:
+            for st in s["tasks"]:
+                if st not in tasks:
+                    R.add("GR-33", "blocker", st, f"standard work '{k}' lists unknown task {st}", "Fix the list")
+    pinned = {p["id"] for p, _t in found}
+    for p, t in found:
+        for role in t.get("roles", []):
+            if role_keys and role not in role_keys:
+                R.add("GR-14", "blocker", None, f"trait {p['id']} needs role '{role}', which the overlay does not map", "Map the role in setup")
+        for c in t.get("conflicts", []):
+            if c["with"] in pinned and p["id"] < c["with"]:
+                if not any({p["id"], c["with"]} <= set(d.get("trait_conflict", [])) for d in ap["decisions"]):
+                    R.add("GR-33", "blocker", None, f"traits {p['id']} and {c['with']} conflict ({c['about']}) and no decision settles it",
+                          "Add an approach decision with trait_conflict naming both")
+
+    # GR-34: restricted brief values never appear anywhere in the plan
+    restricted_ids = [f["id"] for f in brief if f["sensitivity"] == "restricted"]
+    if restricted_ids:
+        if restricted is None:
+            R.not_run.append("GR-34 value search: not run, restricted values unavailable in this session")
+        else:
+            text = [s for _p, s in strings(plan)]
+            for fid in restricted_ids:
+                v = (restricted.get(fid) or "").strip()
+                if len(v) >= 3 and any(v.lower() in s.lower() for s in text):
+                    R.add("GR-34", "blocker", fid, "a restricted brief value appears in the plan", "Remove it; refer to the field by id only")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("plan")
@@ -545,6 +725,9 @@ def main(argv=None):
     ap.add_argument("--stage", default="draft", choices=["draft", "proposal", "create"])
     ap.add_argument("--proposal")
     ap.add_argument("--out")
+    ap.add_argument("--restricted", help="restricted.json from the run folder: {brief id: value}")
+    ap.add_argument("--done", help="task ids the tracker reports done or closed_not_done, comma separated (revise)")
+    ap.add_argument("--profile", default="plan", choices=["plan", "assess"])
     a = ap.parse_args(argv)
     try:
         with open(a.plan, encoding="utf-8") as f:
@@ -552,14 +735,18 @@ def main(argv=None):
         overlay = gw_yaml.load(a.overlay) if a.overlay.endswith((".yaml", ".yml")) else json.load(open(a.overlay, encoding="utf-8"))
         evidence = load_evidence(a.evidence)
         proposal = open(a.proposal, encoding="utf-8").read() if a.proposal else None
+        restricted = json.load(open(a.restricted, encoding="utf-8")) if a.restricted else None
     except (OSError, ValueError) as e:
         print(f"cannot read inputs: {e}", file=sys.stderr)
         return 2
     now = parse_ts(a.now) if a.now else None
-    offer = [x.strip() for x in a.offer.split(",")] if a.offer else None
-    R = check(plan, overlay, evidence, offer, now, a.stage, proposal)
+    offer = [x.strip() for x in a.offer.split(",") if x.strip()] if a.offer is not None else None
+    done = {x.strip() for x in a.done.split(",") if x.strip()} if a.done else None
+    R = check(plan, overlay, evidence, offer, now, a.stage, proposal, restricted, done, a.profile)
     blockers = R.blocking()
     out = {"version": VERSION, "passed": not blockers, "results": R.export()}
+    if R.not_run:
+        out["not_run"] = R.not_run
     text = json.dumps(out, indent=2, ensure_ascii=False)
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:

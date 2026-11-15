@@ -407,7 +407,12 @@
         "pattern": "core.access-request",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P0-T02",
@@ -519,7 +524,12 @@
         "pattern": "github.local-setup",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P1-T01",
@@ -634,7 +644,14 @@
         "pattern": "github.code-change",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [
+        "AD-1"
+      ],
+      "derived_from_rec": null
     },
     {
       "id": "P1-T02",
@@ -798,7 +815,14 @@
         "regression_check": [
           "P1-T05"
         ]
-      }
+      },
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [
+        "AD-1"
+      ],
+      "derived_from_rec": null
     },
     {
       "id": "P1-T03",
@@ -919,7 +943,14 @@
         "regression_check": [
           "P1-T05"
         ]
-      }
+      },
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [
+        "AD-1"
+      ],
+      "derived_from_rec": null
     },
     {
       "id": "P1-T04",
@@ -1031,7 +1062,12 @@
         "regression_check": [
           "P2-T02"
         ]
-      }
+      },
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P1-T05",
@@ -1149,7 +1185,12 @@
         "pattern": "github.staging-test",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P2-T01",
@@ -1234,7 +1275,12 @@
         "pattern": "core.uat-script",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P2-T02",
@@ -1340,7 +1386,12 @@
         "pattern": "core.uat-run",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P2-T03",
@@ -1440,7 +1491,12 @@
         "pattern": "github.rollback-rehearsal",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P2-T04",
@@ -1532,7 +1588,12 @@
         "pattern": "github.docs-change",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P3-T01",
@@ -1667,7 +1728,12 @@
         "pattern": "github.tag-release",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P3-T02",
@@ -1779,7 +1845,12 @@
         "pattern": "github.verify-release",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P3-T03",
@@ -1846,8 +1917,8 @@
         "done_today": "The confirmation comment is posted."
       },
       "visible_result": {
-        "type": "comment_posted",
-        "text": "Confirmation comment"
+        "type": "measurement",
+        "text": "Confirmation comment that the export works in production"
       },
       "production_change": false,
       "data_change": false,
@@ -1858,7 +1929,13 @@
         "pattern": "core.prod-confirm",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-2",
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P3-T04",
@@ -1942,7 +2019,12 @@
         "pattern": "core.announcement",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     },
     {
       "id": "P3-T05",
@@ -2013,10 +2095,366 @@
         "pattern": "core.handoff",
         "rules_checked": []
       },
-      "changes_existing": null
+      "changes_existing": null,
+      "brief_refs": [
+        "B-3"
+      ],
+      "approach_refs": [],
+      "derived_from_rec": null
     }
   ],
+  "traits": [
+    {
+      "id": "has_consumers",
+      "version": "1.0.0",
+      "from_plan_version": 1
+    }
+  ],
+  "brief": [
+    {
+      "id": "B-1",
+      "key": "outcome",
+      "value": "Coordinators can download an event's sign-ups as a CSV without asking a developer.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-2",
+      "key": "success_measure",
+      "value": "A coordinator downloads a correct CSV in production and confirms it on the confirmation task.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-3",
+      "key": "scope_in",
+      "value": "The CSV export, the button and the guide section, plus their test, UAT, release, rollback, announcement and handoff.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-4",
+      "key": "non_goals",
+      "value": "Enforcing file deletion; database changes; exports for non-coordinators.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-5",
+      "key": "starting_point",
+      "value": "Extends the volunteer portal and the coordinator guide.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "evidence",
+      "basis_role_key": "approver",
+      "derived_from": [
+        "ev-github-gh-0d0be73a",
+        "ev-github-gh-950546b8"
+      ],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-6",
+      "key": "consumers",
+      "value": "Volunteer coordinators.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-7",
+      "key": "constraints",
+      "value": "No new dependency; the change ships with a normal tagged release.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-8",
+      "key": "risks",
+      "value": "The file holds volunteers' personal data and may be forwarded.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-9",
+      "key": "deliverable_signoffs",
+      "value": null,
+      "status": "not_applicable",
+      "na_reason": "No deliverable sign-off beyond UAT, which the UAT run records.",
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-10",
+      "key": "run_owner_after_handoff",
+      "value": "Portal maintainers.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-11",
+      "key": "external_dependencies",
+      "value": null,
+      "status": "not_applicable",
+      "na_reason": "All work is inside the portal repo and its deploys.",
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-12",
+      "key": "budget",
+      "value": null,
+      "status": "not_applicable",
+      "na_reason": "No spend; existing team time only.",
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-13",
+      "key": "legal_duties",
+      "value": "Volunteers' personal data in the file is handled as the guide's handling section says.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-14",
+      "key": "nonfunctional",
+      "value": "The file opens in common spreadsheet tools (UTF-8 with a byte-order mark) and resists formula injection.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-15",
+      "key": "comms_audiences",
+      "value": "Coordinators, through the announcements channel.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-16",
+      "key": "consumer_list",
+      "value": "Coordinators only; no job or system reads the new route.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "evidence",
+      "basis_role_key": "developer",
+      "derived_from": [
+        "ev-github-gh-0d0be73a"
+      ],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-17",
+      "key": "consumer_notice",
+      "value": "An announcement after release.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    },
+    {
+      "id": "B-18",
+      "key": "compatibility",
+      "value": "The existing sign-ups page and route keep working unchanged.",
+      "status": "answered",
+      "na_reason": null,
+      "open_question": null,
+      "phase": null,
+      "source": "runner",
+      "basis_role_key": null,
+      "derived_from": [],
+      "sensitivity": "normal",
+      "value_rev": null
+    }
+  ],
+  "approach": {
+    "options": [
+      {
+        "id": "O-1",
+        "summary": "Add the export beside the existing sign-ups route and page, reusing getSignups and the coordinator check.",
+        "kind": "reuse_extend",
+        "evidence": [
+          "ev-github-gh-0d0be73a",
+          "ev-github-gh-eaddc074",
+          "ev-github-gh-bd49b4d6"
+        ],
+        "not_inspected_reason": null,
+        "pros": [
+          "Reuses the tested data loader and role check",
+          "Ships with the normal release"
+        ],
+        "cons": [
+          "Touches the sign-ups page"
+        ],
+        "rejected_because": null
+      },
+      {
+        "id": "O-2",
+        "summary": "Do nothing: coordinators keep copying the sign-ups table by hand.",
+        "kind": "do_nothing",
+        "evidence": [],
+        "not_inspected_reason": "Nothing to inspect; this is today's manual practice.",
+        "pros": [
+          "No work"
+        ],
+        "cons": [
+          "Slow and error-prone"
+        ],
+        "rejected_because": {
+          "brief_ref": "B-1",
+          "why": "Copying by hand is exactly what the outcome replaces."
+        }
+      },
+      {
+        "id": "O-3",
+        "summary": "Build a separate reporting tool that reads the sign-ups database.",
+        "kind": "new",
+        "evidence": [],
+        "not_inspected_reason": "No reporting tool exists to inspect.",
+        "pros": [
+          "Could serve other reports later"
+        ],
+        "cons": [
+          "New deploy and dependencies"
+        ],
+        "rejected_because": {
+          "brief_ref": "B-7",
+          "why": "A new tool adds a dependency and a separate deploy, which the constraints rule out."
+        }
+      }
+    ],
+    "decisions": [
+      {
+        "id": "AD-1",
+        "decision": "Extend the portal's sign-ups route and page rather than build anything new.",
+        "chosen_option": "O-1",
+        "deferred_to_task": null,
+        "brief_refs": [
+          "B-1",
+          "B-3"
+        ],
+        "evidence": [
+          "ev-github-gh-0d0be73a"
+        ]
+      }
+    ],
+    "unchanged": []
+  },
   "standard_work": [
+    {
+      "kind": "consumer_comms",
+      "tasks": [
+        "P3-T04"
+      ],
+      "not_applicable_reason": null
+    },
+    {
+      "kind": "compat_test",
+      "tasks": [],
+      "not_applicable_reason": "No job or system reads the new route; the existing page's tests run in every CI build."
+    },
     {
       "kind": "test",
       "tasks": [
@@ -2072,7 +2510,7 @@
     "release": "unreleased",
     "core": "groundwork-core@1.0.0",
     "contract": "1.0",
-    "plan_format": "1.0",
+    "plan_format": "2.0",
     "skills": [
       {
         "name": "groundwork-system-github",

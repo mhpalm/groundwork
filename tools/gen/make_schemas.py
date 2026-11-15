@@ -14,7 +14,20 @@ PLAN_ID = {"type": "string", "pattern": "^gw-[0-9A-HJKMNP-TV-Z]{26}$"}
 TASK_ID = {"type": "string", "pattern": r"^P\d+-T\d{2,}$"}
 PHASE_ID = {"type": "string", "pattern": r"^P\d+$"}
 EV_ID = {"type": "string", "pattern": r"^ev-[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{8}$"}
-ROLE_KEYS = ["developer", "admin", "analyst", "qa", "business_user", "trainer", "comms", "maintainer", "approver"]
+EXECUTORS = ["junior_no_context", "junior_with_context", "mid_no_context"]
+ROLE_KEYS = ["developer", "admin", "analyst", "qa", "business_user", "trainer", "comms", "maintainer", "approver",
+             "legal", "finance", "procurement", "security", "vendor_contact", "facilitator"]
+# Overlays may add x- role keys; they can only add roles, never rename or remove the generic ones.
+ROLE = {"anyOf": [{"enum": ROLE_KEYS}, {"type": "string", "pattern": "^x-[a-z0-9_]+$"}]}
+B_ID = {"type": "string", "pattern": r"^B-\d+$"}
+AD_ID = {"type": "string", "pattern": r"^AD-\d+$"}
+O_ID = {"type": "string", "pattern": r"^O-\d+$"}
+Q_ID = {"type": "string", "pattern": r"^Q-\d+$"}
+R_ID = {"type": "string", "pattern": r"^R\d+$"}
+REC_ID = {"type": "string", "pattern": r"^REC-\d+$"}
+KIND = {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}
+TRAIT_ID = {"type": "string", "pattern": "^(x-)?[a-z][a-z0-9_]*$"}
+SOURCES = ["runner", "role_confirmed", "evidence", "from_tracker", "pasted"]
 SURFACES = ["claude-code-local", "claude-code-cloud", "claude-app"]
 SLUG = {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"}
 
@@ -51,12 +64,16 @@ task = obj({
     "key": {"type": "string", "pattern": r"^gw:gw-[0-9A-HJKMNP-TV-Z]{26}:P\d+-T\d{2,}$"},
     "phase": PHASE_ID, "title": STR,
     "work_type": {"enum": ["story", "task"]},
-    "kind": {"enum": ["setup", "design", "build", "config", "data", "test", "uat", "cutover", "rollback", "docs", "training", "comms", "signoff_prep", "handoff"]},
-    "role_key": {"enum": ROLE_KEYS}, "points": {"const": 1},
+    "kind": {"enum": ["setup", "design", "build", "config", "data", "test", "uat", "cutover", "rollback", "docs", "training", "comms", "signoff_prep", "handoff",
+                      "spike", "measurement", "reconciliation"]},
+    "role_key": ROLE, "points": {"const": 1},
     "estimate_hours": {"type": "number", "exclusiveMinimum": 0},
     "parallel_group": nullable(ANYSTR),
     "depends_on": arr(obj({"task": TASK_ID, "satisfied_by": {"enum": ["done", "merged", "deployed"]}})),
-    "waits_on": arr(obj({"what": STR, "kind": {"enum": ["approval", "review", "merge", "vendor", "job", "access", "availability"]}, "owner_role_key": {"enum": ROLE_KEYS}})),
+    "waits_on": arr(obj({"what": STR,
+                         "kind": {"enum": ["approval", "review", "merge", "vendor", "job", "access", "availability", "elapsed", "external_event"]},
+                         "owner_role_key": ROLE, "condition": nullable(STR), "legacy_ref": nullable(STR)},
+                        required=["what", "kind", "owner_role_key"])),
     "access": arr({"type": "string", "pattern": r"^A\d+$"}),
     "evidence_refs": arr(EV_ID),
     "produces": arr(obj({"type": STR, "name": STR})),
@@ -64,7 +81,8 @@ task = obj({
         "purpose": STR, "prerequisites": arr(STR), "steps": arr(step),
         "acceptance_criteria": arr(STR), "verify": arr(STR), "done_today": STR,
     }),
-    "visible_result": obj({"type": {"enum": ["pr_opened", "merged_pr", "deployed_change", "record_created", "record_updated", "doc_submitted", "comment_posted"]}, "text": STR}),
+    "visible_result": obj({"type": {"enum": ["pr_opened", "merged_pr", "deployed_change", "record_created", "record_updated", "doc_submitted", "comment_posted",
+                                             "document", "decision_record", "measurement"]}, "text": STR}),
     "production_change": {"type": "boolean"}, "data_change": {"type": "boolean"},
     "test_tasks": arr(TASK_ID), "rollback_task": nullable(TASK_ID),
     "exception": nullable(obj({"id": STR, "reason": STR, "days": {"type": "integer", "minimum": 2},
@@ -72,6 +90,30 @@ task = obj({
     "origin": obj({"pattern": nullable(STR), "rules_checked": arr(STR)}),
     "changes_existing": nullable(obj({"resources": arr({"type": "string", "pattern": r"^R\d+$"}, minItems=1), "why_needed": STR,
                                       "could_break": arr(STR, minItems=1), "regression_check": arr(TASK_ID, minItems=1)})),
+    # plan format 2: what the task serves and relies on (required there by GR-31)
+    "brief_refs": arr(B_ID), "approach_refs": arr(AD_ID), "derived_from_rec": nullable(REC_ID),
+})
+TASK_REQUIRED = [k for k in task["properties"] if k not in ("brief_refs", "approach_refs", "derived_from_rec")]
+task["required"] = TASK_REQUIRED
+
+brief_field = obj({
+    "id": B_ID, "key": KIND, "value": nullable(STR),
+    "status": {"enum": ["answered", "not_applicable", "open"]},
+    "na_reason": nullable(STR), "open_question": nullable(Q_ID), "phase": nullable(PHASE_ID),
+    "source": {"enum": SOURCES}, "basis_role_key": nullable(ROLE), "derived_from": arr(STR),
+    "sensitivity": {"enum": ["normal", "restricted"]}, "value_rev": nullable({"type": "integer", "minimum": 1}),
+})
+approach = obj({
+    "options": arr(obj({"id": O_ID, "summary": STR,
+                        "kind": {"enum": ["reuse_extend", "smaller", "do_nothing", "new", "other"]},
+                        "evidence": arr(EV_ID), "not_inspected_reason": nullable(STR), "pros": arr(STR), "cons": arr(STR),
+                        "rejected_because": nullable(obj({"brief_ref": B_ID, "why": STR}))}), minItems=2),
+    "decisions": arr(obj({"id": AD_ID, "decision": STR,
+                          "chosen_option": {"anyOf": [O_ID, {"const": "deferred"}]},
+                          "deferred_to_task": nullable(TASK_ID), "brief_refs": arr(B_ID), "evidence": arr(EV_ID),
+                          "trait_conflict": arr(TRAIT_ID)},
+                         required=["id", "decision", "chosen_option", "deferred_to_task", "brief_refs", "evidence"]), minItems=1),
+    "unchanged": arr(R_ID),
 })
 
 plan = {
@@ -83,7 +125,7 @@ plan = {
         "schema_version": {"const": "1.0"},
         "id": PLAN_ID,
         "version": {"type": "integer", "minimum": 1},
-        "status": {"enum": ["draft", "in_review", "proposed", "active", "revising", "complete"]},
+        "status": {"enum": ["draft", "in_review", "proposed", "active", "revising", "complete", "retired"]},
         "overlay": obj({"id": SLUG, "version": {"type": "integer", "minimum": 1}, "hash": HEX}),
         "title": STR,
         "request": obj({"original_text": STR, "restatement": STR,
@@ -108,7 +150,7 @@ plan = {
                              "status": {"enum": ["inspected", "partial", "not_inspected"]},
                              "read_only": {"enum": ["enforced", "instructed_only", "not_applicable"]},
                              "inspected": arr(ANYSTR), "not_inspected": arr(ANYSTR), "reason": ANYSTR})),
-        "access_list": arr(obj({"id": {"type": "string", "pattern": r"^A\d+$"}, "role_key": {"enum": ROLE_KEYS},
+        "access_list": arr(obj({"id": {"type": "string", "pattern": r"^A\d+$"}, "role_key": ROLE,
                                 "system": STR, "instance": STR, "level": STR, "needed_by": arr(TASK_ID, minItems=1)})),
         "phases": arr(obj({"id": PHASE_ID, "order": {"type": "integer", "minimum": 0}, "name": STR, "goal": STR,
                            "state": {"enum": ["outline", "drafted", "reviewed", "approved", "writing", "released"]},
@@ -116,10 +158,12 @@ plan = {
                            "carries_questions": arr(STR)},
                           required=["id", "order", "name", "goal", "state", "depends_on", "task_ids"]), minItems=1),
         "tasks": arr({"$ref": "#/$defs/task"}),
-        "standard_work": arr(obj({"kind": {"enum": ["test", "uat", "cutover", "rollback", "docs", "handoff"]},
+        # v1 kinds plus kinds declared by the plan's pinned traits (GR-09, GR-33)
+        "standard_work": arr(obj({"kind": KIND,
                                   "tasks": arr(TASK_ID), "not_applicable_reason": nullable(ANYSTR)})),
         "review": obj({
-            "validator": nullable(obj({"version": SEMVER, "passed": {"type": "boolean"}, "results": arr({"$ref": "#/$defs/finding"})})),
+            "validator": nullable(obj({"version": SEMVER, "passed": {"type": "boolean"}, "results": arr({"$ref": "#/$defs/finding"}),
+                                       "not_run": arr(STR)}, required=["version", "passed", "results"])),
             "reviewer": nullable(obj({"surface": {"enum": SURFACES}, "model": STR, "view_hash": HEX, "independent": {"type": "boolean"},
                                       "mode": {"enum": ["subagent", "fresh_conversation"]},
                                       "findings": arr({"$ref": "#/$defs/finding"}), "not_performed": arr(ANYSTR)})),
@@ -127,8 +171,15 @@ plan = {
         "approvals": arr(STR),
         "stamps": {"$ref": "#/$defs/stamps"},
         "history": arr(obj({"version": {"type": "integer", "minimum": 1}, "at": TS, "change": STR, "by": STR})),
+        # plan format 2 (planning model): the brief, the traits and the approach. Absent in format-1 plans.
+        "traits": arr(obj({"id": TRAIT_ID, "version": SEMVER, "from_plan_version": {"type": "integer", "minimum": 1}})),
+        "brief": arr({"$ref": "#/$defs/brief_field"}),
+        "approach": {"$ref": "#/$defs/approach"},
     }),
 }
+plan["required"] = [k for k in plan["properties"] if k not in ("traits", "brief", "approach")]
+plan["$defs"]["brief_field"] = brief_field
+plan["$defs"]["approach"] = approach
 
 evidence = {
     "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/evidence/1.0", "title": "Groundwork evidence item",
@@ -214,7 +265,7 @@ review = {
            "findings": arr({"$ref": "#/$defs/finding"}), "not_performed": arr(ANYSTR)}),
 }
 
-ROLE_HOLDER = obj({"role_key": {"enum": ROLE_KEYS}, "display": STR, "handle": nullable(STR), "account_id": nullable(STR)},
+ROLE_HOLDER = obj({"role_key": ROLE, "display": STR, "handle": nullable(STR), "account_id": nullable(STR)},
                   required=["role_key", "display"])
 ACCOUNT = obj({"account_id": STR, "name": STR})
 overlay = {
@@ -244,8 +295,16 @@ overlay = {
                            required=["skill", "version", "field_map"]),
         }),
         "working_day_hours": {"type": "number", "minimum": 1, "maximum": 8},
-        "assumed_executor": {"enum": ["junior_no_context", "junior_with_context", "mid_no_context"]},
-        "roles": arr(obj({"key": {"enum": ROLE_KEYS}, "name": STR}), minItems=1),
+        "assumed_executor": {"enum": EXECUTORS},
+        "roles": arr(obj({"key": ROLE, "name": STR}), minItems=1),
+        # Per-role executor profiles; a role not listed uses assumed_executor (GR-02, GR-06).
+        "executor_profiles": {"type": "object", "patternProperties": {"^(x-)?[a-z][a-z0-9_]*$": {"enum": EXECUTORS}}, "additionalProperties": False},
+        # Org-only traits; they may only add questions, standard work and roles (validate_overlay.py).
+        "traits": arr(obj({"id": {"type": "string", "pattern": "^x-[a-z][a-z0-9_]*$"}, "version": SEMVER, "summary": STR,
+                           "questions": arr(obj({"key": KIND, "text": STR})), "standard_work": arr(KIND), "roles": arr(ROLE),
+                           "conflicts": arr(obj({"with": TRAIT_ID, "about": STR}))})),
+        # Org processes (change freezes, change boards, spend approval) shown in proposals; never asked per run.
+        "org_process": arr(obj({"name": STR, "note": STR})),
         "task_hierarchy": obj({"task_to_epic": {"enum": ["parent", "linked"]}, "steps_as": {"enum": ["checklist", "subtasks"]}}),
         "approval_gates": arr(obj({"id": STR, "applies_to": {"enum": ["all_phases", "one_day_exceptions", "overlay_changes"]},
                                    "approvers": arr(ACCOUNT, minItems=1), "min_approvers": {"type": "integer", "minimum": 1}},

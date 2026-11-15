@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-950546b8",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T32",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read the coordinator guide and docs serving config",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "file",
+    "name": "example-org/volunteer-portal:docs/user-guide/coordinators/signups.md@main"
+  },
+  "facts": {
+    "exists": true,
+    "served_at": "/help",
+    "ships_with_deploy": true,
+    "requires_sign_in": false
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "f573512581599315595da9e3b2112467bc26f72acbd24b3c65c9c7a3a03b8468"
+}

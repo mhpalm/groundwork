@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Micah Palmquist, micah.palmquist@gmail.com
+#
+# Groundwork project traits (planning model, plan format 2). A trait is a small,
+# generic, combinable property of a project. Each pinned trait adds brief
+# questions, standard-work kinds and roles. Traits combine by union only:
+# questions are deduplicated by key, standard-work kinds are unioned. A declared
+# conflict between two pinned traits must be settled by an approach decision
+# (GR-33). Plans pin traits by id and version. Overlays may add x- traits that
+# only add. Nothing here is specific to any org or platform.
+schema_version: "1.0"
+traits:
+  - id: moves_data
+    version: 1.0.0
+    summary: Moves or copies data from one place to another.
+    questions:
+      - {key: data_sources, text: "Which sources does the data come from, and roughly how much is there?"}
+      - {key: data_retention, text: "How long must the old copy be kept, and who decides when it can go?"}
+      - {key: reconciliation_basis, text: "How will anyone know the moved data matches the original (counts, totals, samples)?"}
+    standard_work: [reconciliation]
+    roles: []
+    conflicts:
+      - {with: removes_something, about: "How long the old and new copies run side by side before the old one is switched off"}
+  - id: has_consumers
+    version: 1.0.0
+    summary: Other people, jobs or systems read what this project changes.
+    questions:
+      - {key: consumer_list, text: "Who or what reads what this project changes (people, reports, jobs, other systems)?"}
+      - {key: consumer_notice, text: "How are those consumers told before the change, and by whom?"}
+      - {key: compatibility, text: "Must existing consumers keep working unchanged, and for how long?"}
+    standard_work: [consumer_comms, compat_test]
+    roles: [comms]
+    conflicts: []
+  - id: removes_something
+    version: 1.0.0
+    summary: Switches off, retires or deletes something that exists today.
+    questions:
+      - {key: removal_target, text: "What exactly is being switched off or removed?"}
+      - {key: removal_retention, text: "What must be archived or kept, and for how long?"}
+      - {key: removal_notice, text: "Who will notice it is gone, and how are they told?"}
+    standard_work: [decommission_decision, archive]
+    roles: []
+    conflicts:
+      - {with: moves_data, about: "How long the old and new copies run side by side before the old one is switched off"}
+  - id: changes_how_people_work
+    version: 1.0.0
+    summary: People will do part of their job differently afterwards.
+    questions:
+      - {key: affected_people, text: "Which roles will work differently, and roughly how many people?"}
+      - {key: training_need, text: "What do they need to learn, and how do they prefer to learn it?"}
+      - {key: support_after, text: "Who answers their questions after the change?"}
+    standard_work: [training, support_handoff]
+    roles: [trainer]
+    conflicts: []
+  - id: vendor_or_spend
+    version: 1.0.0
+    summary: Needs an outside vendor, a purchase or new spend.
+    questions:
+      - {key: vendor, text: "Which vendor or product, if already known?"}
+      - {key: contract_status, text: "Is there a contract or purchase order yet, and what is its status?"}
+      - {key: lead_time, text: "How long do purchasing, contracts or vendor onboarding usually take here?"}
+    standard_work: [procurement]
+    roles: [procurement]
+    conflicts: []
+  - id: fixed_external_event
+    version: 1.0.0
+    summary: Must be ready for a fixed event the project does not control.
+    questions:
+      - {key: event, text: "What is the event, and what must be true when it happens?"}
+      - {key: event_condition, text: "How will anyone know the event has happened or has been moved?"}
+    standard_work: [dry_run, event_runbook]
+    roles: [facilitator]
+    conflicts: []
+  - id: outcome_unknown
+    version: 1.0.0
+    summary: The answer is not known yet; the first work is to find it out.
+    questions:
+      - {key: open_question_to_answer, text: "What question must be answered before the rest can be planned?"}
+      - {key: stop_condition, text: "When is the investigation done, even if the answer is 'no'?"}
+    standard_work: [spike, decision_record]
+    roles: []
+    conflicts: []
+  - id: compliance_duty
+    version: 1.0.0
+    summary: Meets a legal, regulatory, audit or policy duty.
+    questions:
+      - {key: duty, text: "Which duty, policy or regulation applies?"}
+      - {key: evidence_required, text: "What evidence must exist afterwards, and who checks it?"}
+      - {key: auditor_role, text: "Which role reviews or signs off that evidence?"}
+    standard_work: [evidence_collection, signoff_prep]
+    roles: [legal]
+    conflicts: []
+  - id: infra_capacity
+    version: 1.0.0
+    summary: Changes how much load, storage or capacity something must handle.
+    questions:
+      - {key: capacity_target, text: "What load or size must it handle, and how was that number found?"}
+      - {key: monitoring_owner, text: "Who watches capacity after the change?"}
+    standard_work: [load_test]
+    roles: []
+    conflicts: []
+  - id: reporting
+    version: 1.0.0
+    summary: Produces or changes a report, dashboard or metric.
+    questions:
+      - {key: report_consumers, text: "Who reads the report, and what decision do they make with it?"}
+      - {key: definitions, text: "Which numbers need agreed definitions, and who agrees them?"}
+      - {key: refresh, text: "How fresh must the data be?"}
+    standard_work: [definition_signoff, reconciliation]
+    roles: [analyst]
+    conflicts: []

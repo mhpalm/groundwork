@@ -1,0 +1,42 @@
+# Structural assertions for golden project GT-moves_data (trait golden: moves_data). Never exact text.
+schema_version: "1.0"
+validator_blockers: 0
+allowed_minors:
+  - GR-20
+min_tasks: 17
+max_tasks: 17
+phases_required:
+  - P0
+standard_work:
+  - consumer_comms
+  - cutover
+  - docs
+  - handoff
+  - reconciliation
+  - rollback
+  - test
+  - uat
+production_change_tasks_min: 1
+roles_used_subset_of:
+  - admin
+  - approver
+  - business_user
+  - comms
+  - developer
+  - maintainer
+every_task:
+  points: 1
+  max_hours: 6
+  has_visible_result: true
+must_wait_on_kinds:
+  - review
+  - approval
+  - availability
+  - access
+no_external_recipients: true
+starting_point: extends_existing
+changes_existing_tasks_min: 1
+changes_justified: true
+traits_pinned:
+  - has_consumers
+  - moves_data

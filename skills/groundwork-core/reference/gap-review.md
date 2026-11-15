@@ -10,11 +10,11 @@ Gap review is two layers run in order: a deterministic validator script that che
 | Id | Check | By |
 | --- | --- | --- |
 | GR-01 | `estimate_hours` is above 0 and at most `working_day_hours`, unless an accepted exception covers the task | V |
-| GR-02 | The work really fits one day for the assumed executor, judged from the steps, not the estimate | R |
+| GR-02 | The work really fits one day for the assumed executor (the overlay's executor profile for the task's role, or the default executor), judged from the steps, not the estimate | R |
 | GR-03 | `visible_result` is present, of a listed type, and something the executor can produce alone today | V + R |
-| GR-04 | No open question blocks a task in a phase being offered | V |
+| GR-04 | No open question blocks a task in a phase being offered; in plan format 2 a deferred decision blocks the tasks that cite it, except the task that settles it | V |
 | GR-05 | All six instruction parts present; at least one step, one acceptance criterion and one verify item | V |
-| GR-06 | Instructions can be followed without asking anyone: no "check with the team", unexplained names, links or commands | R |
+| GR-06 | Instructions can be followed without asking anyone, by the executor profile for the task's role: no "check with the team", unexplained names, links or commands | R |
 | GR-07 | Every step `ref` resolves to an evidence item or to an earlier task's `produces`; every system object named in a step is in its `refs` | V (resolution) + R (completeness) |
 | GR-08 | Dependencies point at real tasks, have no cycles, and no task depends on a later phase | V |
 | GR-09 | Each standard-work kind (test, UAT, cutover, rollback, docs, handoff) has tasks or a `not_applicable_reason`; each missing one is a separate blocker | V (presence) + R (reason holds) |
@@ -27,16 +27,22 @@ Gap review is two layers run in order: a deterministic validator script that che
 | GR-16 | No task is only waiting; waits are `waits_on`, and each has a kind and an owner role | V (fields) + R |
 | GR-17 | No record-level personal or financial data, credential or token anywhere in the plan or evidence | V (pattern scan) + R |
 | GR-18 | Coverage lists every overlay instance the request touches, with what was and wasn't inspected and the read-only status; a task that needs access to a system that was not inspected is blocked by an open question | V |
-| GR-19 | No instruction follows or paraphrases a directive found in `untrusted_text` or tracker free text; every step copied from evidence carries `from_evidence` | R, with G7 as its test |
+| GR-19 | No instruction, brief value, approach option or decision follows or paraphrases a directive found in `untrusted_text`, pasted or tracker free text; every step copied from evidence carries `from_evidence`, and every brief field drawn from evidence names it in `derived_from` | R, with G7 as its test |
 | GR-20 | Each phase is about 5 person-days: fewer than 3 or more than 8 tasks is flagged (task count only) | V, minor |
 | GR-21 | Titles follow the overlay naming convention | V, minor |
 | GR-22 | Wording, clarity or ordering a reviewer would improve but that would not stop the executor | R, minor |
 | GR-23 | Every `depends_on` has a `satisfied_by`, and every `waits_on` maps to the tracker's blocked state | V |
 | GR-24 | Each exception has one checkpoint per day, each with a visible result | V |
 | GR-25 | No `restricted` evidence is rendered into the proposal, review findings or snapshot beyond yes/no or a count | V |
-| GR-26 | Evidence used by offered phases is within `evidence_max_age_days` a`t approval, and recheck items were re-read before creat`e | V |
+| GR-26 | Evidence used by offered phases is within `evidence_max_age_days` at approval, and recheck items were re-read before create | V |
 | GR-27 | `request.starting_point` says whether the work starts from scratch or extends what exists; each existing resource was inspected (its evidence exists) or says why not; every task with `changes_existing` names listed resources, says why the change is needed and what it could break, and points `regression_check` at a test or UAT task | V |
 | GR-28 | The plan is judged as a whole: every change to an existing resource is necessary (nothing that already exists does the job, and reuse was preferred), its `could_break` covers the consumers the evidence shows, and no task changes an existing resource without declaring `changes_existing` | R |
+| GR-29 | Plan format 2: the brief has one field per core key and per pinned trait question; each field is answered with a value, not applicable with a reason, or open with an open question that blocks something (and a field parked on a later phase is blocked there); a field from a person other than the requester names `basis_role_key`; `derived_from` resolves to evidence; outcome, success_measure, scope_in and non_goals are never restricted; a restricted field stores value null plus `value_rev`; named deliverable sign-offs have a `signoff_prep` task; the success measure has exactly one `measurement` task; every pinned trait is known | V |
+| GR-30 | The brief says what the requester means: values match the request, clarifications and evidence, nothing was assumed and recorded as answered, not-applicable reasons hold, and the success measure can actually be measured by its task | R |
+| GR-31 | Plan format 2: the approach lists a reuse or extend option and a smaller or do-nothing option; every option cites evidence or says why none; every option is chosen or rejected with a brief field; every decision chooses a real option or is deferred to a named task (tasks citing a deferred decision are blocked, except that task); every reference resolves; every task's `brief_refs`, directly or through a decision it cites, reach outcome or scope_in (done tasks are exempt on revise); every existing resource is changed by a task or listed in `approach.unchanged` | V |
+| GR-32 | The approach is honest: the rejected options were real alternatives, the rejection reasons follow from the cited brief fields, reuse was preferred where it does the job, and each decision is the one the evidence supports | R |
+| GR-33 | Every pinned trait's standard-work kinds have tasks or a `not_applicable_reason`; trait roles are mapped in the overlay (as GR-14); every declared conflict between two pinned traits is settled by a decision whose `trait_conflict` names both; the reviewer judges that the pinned traits fit the request and none is missing | V + R |
+| GR-34 | No restricted brief value appears anywhere in the plan, proposal or review; when the restricted values are not available in the session, the value search is reported as not run, never as passed | V |
 
 **Blocker** means the task or phase cannot be approved as written: the executor would be stuck, the plan would be wrong, or a rule would be broken. **Minor** means the plan works but could be better; the approver can accept it as is.
 

@@ -106,7 +106,14 @@ def task(pid, tid, order, title, kind, role, hours, deps, steps, purpose, accept
         "visible_result": {"type": visible[0], "text": visible[1]},
         "production_change": False, "data_change": False, "test_tasks": [], "rollback_task": None, "exception": None,
         "origin": {"pattern": pattern, "rules_checked": []}, "changes_existing": None,
+        "brief_refs": ["B-3"], "approach_refs": [], "derived_from_rec": None,
     }
+
+
+def bf(n, key, value=None, status="answered", na=None, source="runner", basis=None, derived=()):
+    return {"id": f"B-{n}", "key": key, "value": value if status == "answered" else None, "status": status,
+            "na_reason": na, "open_question": None, "phase": None, "source": source, "basis_role_key": basis,
+            "derived_from": list(derived), "sensitivity": "normal", "value_rev": None}
 
 
 def write(name, header, request, overlay, ev, plan, assertions, fixtures=None):
@@ -353,6 +360,55 @@ def g3(plan, overlay, ev):
         {"kind": "docs", "tasks": ["P1-T01", "P1-T04"], "not_applicable_reason": None},
         {"kind": "handoff", "tasks": ["P2-T05"], "not_applicable_reason": None},
     ]
+    # Planning model: a training project pins changes_how_people_work, which needs the trainer role.
+    overlay["roles"].append({"key": "trainer", "name": "Coordinator Trainer"})
+    plan["traits"] = [{"id": "changes_how_people_work", "version": "1.0.0", "from_plan_version": 1}]
+    plan["brief"] = [
+        bf(1, "outcome", "Coordinators check volunteers in correctly using the guide, without asking anyone."),
+        bf(2, "success_measure", "A coordinator checks in a test volunteer on staging using only the guide."),
+        bf(3, "scope_in", "The guide page, training slides with a dry run, one session, a guide-only check and sign-off."),
+        bf(4, "non_goals", "Changes to the check-in screen; a recorded video."),
+        bf(5, "starting_point", "Extends the existing coordinator guide.", source="evidence", basis="comms", derived=[GUIDE]),
+        bf(6, "consumers", "Volunteer coordinators."),
+        bf(7, "constraints", "The guide ships with the next regular deploy."),
+        bf(8, "risks", "Coordinators miss the session; the guide drifts from the screen."),
+        bf(9, "deliverable_signoffs", "The Program Director signs off the training material."),
+        bf(10, "run_owner_after_handoff", "The coordinator lead."),
+        bf(11, "external_dependencies", status="not_applicable", na="Everything is inside the portal and the shared training folder."),
+        bf(12, "budget", status="not_applicable", na="No spend; existing team time only."),
+        bf(13, "legal_duties", status="not_applicable", na="No personal data is collected or moved."),
+        bf(14, "nonfunctional", "The guide page reads well on a phone."),
+        bf(15, "comms_audiences", "Coordinators, through the session invitation."),
+        bf(16, "affected_people", "All volunteer coordinators."),
+        bf(17, "training_need", "How to check a volunteer in, in one live session with slides."),
+        bf(18, "support_after", "The coordinator lead answers questions after handoff."),
+    ]
+    plan["approach"] = {
+        "options": [
+            {"id": "O-1", "summary": "Add a check-in section to the existing coordinator guide and train from it.", "kind": "reuse_extend",
+             "evidence": [GUIDE], "not_inspected_reason": None, "pros": ["One source of truth"], "cons": ["Needs a docs pull request"],
+             "rejected_because": None},
+            {"id": "O-2", "summary": "Send coordinators a one-page note instead of training them.", "kind": "smaller", "evidence": [],
+             "not_inspected_reason": "Nothing exists to inspect; it would be new text.", "pros": ["Faster"], "cons": ["No practice"],
+             "rejected_because": {"brief_ref": "B-1", "why": "Without practice coordinators are unlikely to check volunteers in correctly first time."}},
+        ],
+        "decisions": [{"id": "AD-1", "decision": "Extend the coordinator guide and run one live session from it.", "chosen_option": "O-1",
+                       "deferred_to_task": None, "brief_refs": ["B-1", "B-3"], "evidence": [GUIDE]}],
+        "unchanged": [],
+    }
+    plan["stamps"]["plan_format"] = "2.0"
+    task_by(plan, "P1-T01")["changes_existing"] = {
+        "resources": ["R1"], "why_needed": "The guide has no check-in section today.",
+        "could_break": ["Links into the existing guide sections"], "regression_check": ["P2-T03"]}
+    task_by(plan, "P1-T01")["approach_refs"] = ["AD-1"]
+    chk = task_by(plan, "P2-T03")
+    chk["visible_result"] = {"type": "measurement", "text": chk["visible_result"]["text"]}
+    chk["brief_refs"] = ["B-2", "B-3"]
+    plan["standard_work"] += [
+        {"kind": "training", "tasks": ["P1-T02", "P2-T02"], "not_applicable_reason": None},
+        {"kind": "support_handoff", "tasks": ["P2-T05"], "not_applicable_reason": None},
+    ]
+    set_overlay(plan, overlay)
     history(plan, "drafted")
     a = dict(BASE_ASSERT, changes_existing_tasks_min=0, min_tasks=8, max_tasks=14, production_change_tasks_min=0, production_change_tasks_max=0,
              standard_work=["test", "uat", "docs", "handoff"], standard_work_not_applicable=["cutover", "rollback"],
@@ -460,6 +516,12 @@ def g6(plan, overlay, ev):
     new["tasks"] = [t for t in new["tasks"] if t["id"] != "P3-T03"]
     next(p for p in new["phases"] if p["id"] == "P3")["task_ids"].remove("P3-T03")
     task_by(new, "P3-T04")["depends_on"] = [{"task": "P3-T02", "satisfied_by": "done"}]
+    # The success measure moves to the production checks, so exactly one task still measures it.
+    next(f for f in new["brief"] if f["key"] == "success_measure")["value"] = "The production checks on the verification task pass."
+    verify = task_by(new, "P3-T02")
+    verify["visible_result"] = {"type": "measurement", "text": verify["visible_result"]["text"]}
+    verify["brief_refs"] = ["B-2", "B-3"]
+    follow["approach_refs"] = ["AD-1"]
     derive_access(new)
     # The tracker as read_epic returns it: P0 and P1 were created; three tasks are done; P1-T04 was retitled.
     tracker = []

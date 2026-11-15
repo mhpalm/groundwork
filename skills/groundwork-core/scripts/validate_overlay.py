@@ -68,6 +68,18 @@ def problems(ov):
     for rh in ov.get("role_holders", []):
         if rh["role_key"] not in roles:
             out.append(f"role_holders: '{rh['role_key']}' is not a mapped role")
+    for key in ov.get("executor_profiles", {}) or {}:
+        if key not in roles:
+            out.append(f"executor_profiles: '{key}' is not a mapped role")
+    # Overlay traits may only add: they carry x- ids (schema) and may not reuse a core trait id or remove anything.
+    seen = set()
+    for t in ov.get("traits", []) or []:
+        if (t["id"], t["version"]) in seen:
+            out.append(f"traits: {t['id']}@{t['version']} is listed twice")
+        seen.add((t["id"], t["version"]))
+        for role in t["roles"]:
+            if role not in roles:
+                out.append(f"traits.{t['id']}: needs role '{role}', which is not mapped")
     gates = {g["id"]: g for g in ov["approval_gates"]}
     if not ov.get("provisional") and not any(g["applies_to"] == "all_phases" for g in gates.values()):
         out.append("approval_gates: no gate applies to all_phases, so no phase can be approved")

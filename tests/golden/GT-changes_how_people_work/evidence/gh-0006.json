@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "id": "ev-github-gh-0f86b0c8",
+  "run_id": "gw-01JCX7Q3RZ9V4N2T8K5M6P0T30",
+  "overlay_id": "example-org",
+  "system": "github",
+  "instance": "gh",
+  "skill": "groundwork-system-github@1.0.0",
+  "surface": "claude-code-local",
+  "method": "read pull request template",
+  "collected_at": "2026-11-14T19:02:11Z",
+  "recheck": false,
+  "subject": {
+    "type": "file",
+    "name": "example-org/volunteer-portal:.github/pull_request_template.md@main"
+  },
+  "facts": {
+    "sections": [
+      "Summary",
+      "Testing",
+      "Jira"
+    ]
+  },
+  "untrusted_text": [],
+  "sensitivity": "structure",
+  "hash": "6f0b0fc1df36f7a3c605acb630d2daff96dac52835a1a17e9322cee087fbf6b6"
+}

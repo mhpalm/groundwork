@@ -6,8 +6,13 @@ phase_hash  the phase's id, name, goal, order, depends_on and task_ids, plus
             every field of each of its tasks. Never phase state, plan status,
             version, stamps, review, history, coverage, epic.tracker_ref or
             approvals, so moving a phase through its states never changes it.
-plan_hash   every phase_hash, plus scope, epic.title, epic.summary,
-            open_questions and access_list.
+plan_hash   every phase_hash, plus scope, request.starting_point, epic.title,
+            epic.summary, open_questions and access_list; in plan format 2
+            also traits, the full brief (a restricted field contributes its
+            value_rev, never its value) and the full approach.
+basis_hash  informational only, never an approval binding: what a phase
+            relies on without its own tasks (gw_model.basis_subset). Revise
+            compares it at release and now to list "basis changed after release".
 """
 
 import copy
@@ -34,7 +39,7 @@ def phase_hashes(plan):
 
 
 def plan_subset(plan):
-    return {
+    out = {
         "phase_hashes": phase_hashes(plan),
         "scope": plan["scope"],
         "starting_point": plan["request"].get("starting_point"),
@@ -42,10 +47,19 @@ def plan_subset(plan):
         "open_questions": plan["open_questions"],
         "access_list": plan["access_list"],
     }
+    for k in ("traits", "brief", "approach"):
+        if k in plan:
+            out[k] = plan[k]
+    return out
 
 
 def plan_hash(plan):
     return hash_value(plan_subset(plan))
+
+
+def basis_hash(plan, phase_id):
+    from gw_model import basis_subset
+    return hash_value(basis_subset(plan, phase_id))
 
 
 def item_hash(item, field="hash"):
