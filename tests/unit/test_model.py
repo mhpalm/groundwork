@@ -258,6 +258,20 @@ class OverlayModel(unittest.TestCase):
         ov["executor_profiles"] = {"developer": "a senior engineer who knows the codebase"}
         self.assertTrue(validate_overlay.problems(ov))
 
+    def test_reviewed_proposal_does_not_claim_a_missing_review(self):
+        plan, ov, _e = fresh("G1")
+        plan["review"]["reviewer"] = {"mode": "subagent", "surface": "claude-code-local", "model": "reviewer-model",
+                                      "view_hash": "a" * 64, "not_performed": [], "findings": []}
+        text = render_proposal.proposal(plan, ov, [])
+        self.assertNotIn("No independent review is recorded", text)
+        plan["review"]["validator"] = {"version": "1.0.0", "passed": True, "results": [],
+                                       "not_run": ["GR-34 value search: not run"]}
+        text = render_proposal.proposal(plan, ov, [])
+        self.assertNotIn("No independent review is recorded", text)
+        self.assertIn("Checks not run in the session", text)
+        plan["review"]["reviewer"] = None
+        self.assertIn("No independent review is recorded", render_proposal.proposal(plan, ov, []))
+
     def test_org_process_is_shown_in_the_proposal(self):
         plan, ov, _e = fresh("G1")
         ov["org_process"] = [{"name": "Change freeze", "note": "No production changes in exam weeks."}]
