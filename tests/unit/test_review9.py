@@ -138,11 +138,12 @@ class FoundAgainAfterMissing(unittest.TestCase):
         rp = retire.plan_retire(retire_items(self.tr, v2, self.ov, "VOL-1"), {}, m)
         self.assertIn(self.k, [c["key"] for c in rp["closes"]])
 
-    def test_a_person_s_close_of_a_found_item_reads_by_the_tracker(self):
+    def test_a_found_item_closed_with_groundworks_label_is_groundworks_close(self):
         fm = self.ov["skills"]["tracker"]["field_map"]
         w = next(i for i in self.m2["items"] if i["key"] == self.k)
         raw = dict(self.tr.raw(w["tracker_id"]), state="closed", closed_as=["Done"], labels=["gw-closed:not_planned"])
-        self.assertEqual(create_steps.read_status(raw, w, fm)["status"], "done")
+        self.assertEqual(create_steps.read_status(raw, w, fm)["status"], "closed_not_done")  # eleventh review, m1
+        self.assertEqual(create_steps.read_status(dict(raw, labels=[]), w, fm)["status"], "done")
 
     def test_missing_moves_only_forward_with_the_same_reason(self):
         mk = lambda c: create_steps.make_manifest(self.m2, [dict(i, close=c) if i["key"] == self.k else i

@@ -49,12 +49,14 @@ def plan_retire(items, choices, manifest=None):
     when the plan of record no longer has it, so it is closed like any other, never named as a person's
     (seventh review, M1); a recorded key the read didn't find is closed too, listed under missing, and the
     close procedure records it as missing once a project-wide find_by_key confirms it is gone."""
-    closes, left, person, probs = [], [], [], []
+    closes, left, person, probs, reopened = [], [], [], [], []
     recorded = {w["key"]: w for w in (manifest or {}).get("items", [])}
     items = [dict(i, person_added=False) if i.get("person_added") and i["key"] in recorded else i for i in items]
     found = {i["key"] for i in items}
     missing = []
     for k, w in sorted(recorded.items()):
+        # on a resume the verifier rebuilds from the manifest before the status intent (check_hashes.
+        # retire_basis_of), so this retire's own missing records never change the rebuild (eleventh review, M1)
         if k not in found and (w.get("close") or {}).get("state") not in ("closed", "finished", "missing"):
             # a person deleted it: the close procedure records it as missing once a project-wide
             # find_by_key confirms it is gone (eighth review, M3)
@@ -69,6 +71,11 @@ def plan_retire(items, choices, manifest=None):
                          "resume that create first, then retire")
             continue
         if it["status"] in ("done", "closed_not_done"):
+            continue
+        if ((recorded.get(it["key"]) or {}).get("close") or {}).get("state") == "closed":
+            # Groundwork closed it and a person reopened it: the close procedure never closes it twice, so
+            # it is left open and named, never shown as a close that won't happen (eleventh review, m2)
+            reopened.append(it["key"])
             continue
         # a close the manifest already records keeps its reason, so the close procedure never stops on a
         # reason that differs from the recorded one after the status intent is written (tenth review, M1)
@@ -87,16 +94,23 @@ def plan_retire(items, choices, manifest=None):
             for i in sorted(items, key=lambda i: i["key"])]
     closes.sort(key=lambda c: c["key"])
     return {"ok": not probs, "closes": closes, "left_open": left, "person_added": person, "missing": missing,
+            "reopened": reopened,
             "problems": probs, "seen": seen}
 
 
-def recheck(wl, items, seen, manifest=None):
+def recheck(wl, items, seen, manifest=None, warnings=None):
     """At write time, check the items as they are now against the verified retire write list.
 
     wl: the verified write list (its close_item writes and left_open); seen: the statuses the
     proposal showed ({key: status}, from the stored proposal context). Nothing at write time can
     add a close or change a choice: an item finished since is skipped by the close procedure, and
-    anything else the approved set didn't name stops with "propose again"."""
+    anything else the approved set didn't name stops with "propose again".
+
+    Once the retire's status intent is recorded, proposing again is impossible (the gate allows only this
+    retire's resume), so a child a person added since is left open and reported, and an item started since
+    is closed as approved and reported; both go to warnings (eleventh review, M2)."""
+    resuming = bool((manifest or {}).get("status_file"))
+    warnings = warnings if warnings is not None else []
     if wl.get("kind") != "retire":
         return ["recheck takes the verified retire write list"]
     closes = {w["key"] for w in wl["writes"] if w["kind"] == "close_item"}
@@ -110,19 +124,25 @@ def recheck(wl, items, seen, manifest=None):
         k, st = it["key"], it["status"]
         if it.get("person_added"):
             if k not in person and st not in ("done", "closed_not_done"):
-                probs.append(f"{k} was added by a person after the proposal and is not named in it: propose again")
+                if resuming:
+                    warnings.append(f"{k} was added by a person after the proposal; it is left open, as person children are")
+                else:
+                    probs.append(f"{k} was added by a person after the proposal and is not named in it: propose again")
             continue
         if it.get("unrecorded"):
             probs.append(f"{k} is plan-owned but no manifest records it: resume that create first, then propose again")
             continue
         if st in ("done", "closed_not_done"):
             continue
-        if k in left:
+        if k in left or k in set(wl.get("reopened", [])):
             continue
         if k not in closes:
             probs.append(f"{k} is open but the approved retire neither closes it nor leaves it open: propose again")
         elif st == "in_progress" and seen.get(k) != "in_progress":
-            probs.append(f"{k} was started after the retire was approved; closing it needs a new choice: propose again")
+            if resuming:
+                warnings.append(f"{k} was started after the retire was approved; it is closed as approved, so tell its assignee")
+            else:
+                probs.append(f"{k} was started after the retire was approved; closing it needs a new choice: propose again")
     return probs
 
 
@@ -183,7 +203,8 @@ def write_list(plan, overlay, retire_plan, draft_label=False, pending_sets=()):
         w.update(no=i, target=target, scope="plan")
     return {"schema_version": "1.0", "plan_id": plan["id"], "plan_version": plan["version"], "phases": [], "kind": "retire",
             "writes": writes, "left_open": retire_plan["left_open"], "person_added": retire_plan["person_added"],
-            "missing": retire_plan.get("missing", []), "voids_pending": sorted(pending_sets)}
+            "missing": retire_plan.get("missing", []), "reopened": retire_plan.get("reopened", []),
+            "voids_pending": sorted(pending_sets)}
 
 
 def status_state(manifest, status):
@@ -267,8 +288,9 @@ def main(argv=None):
             out = {"ok": False, "problems": ["--plan-id and --manifests required: a key the manifest records is never a person's"]}
         else:
             try:
-                probs = recheck(J(a.files[0]), J(a.files[1]), seen, check_hashes.latest_manifest_of(a.manifests, a.plan_id))
-                out = {"ok": not probs, "problems": probs}
+                warn = []
+                probs = recheck(J(a.files[0]), J(a.files[1]), seen, check_hashes.latest_manifest_of(a.manifests, a.plan_id), warn)
+                out = {"ok": not probs, "problems": probs, "warnings": warn}
             except ValueError as e:
                 out = {"ok": False, "problems": [str(e)]}
     elif a.cmd == "status" and a.n is None:

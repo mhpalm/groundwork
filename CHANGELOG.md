@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed (eleventh review): a retire resume is verified against the last manifest before its status intent (`check_hashes.retire_basis_of`), so its own closes and missing records no longer make the approved set unrebuildable. After the status intent, `retire.py recheck` reports a new person child or a newly started item as a warning instead of asking to propose again, which the gate would refuse. A revise resume accepts the relinks and clears its own write list already landed. A found-again item closed with Groundwork's label is recorded `closed`, not `finished`. An item a person reopened after Groundwork closed it is left open and named in the retire proposal, never listed as a close that won't happen.
+
 - Fixed (tenth review): retire keeps a close reason the manifest already records, so a retire never stops after its status intent on a reason mismatch. A found-again item gets a close intent before its transition, so a crash after the transition still reads as Groundwork's close.
 
 - Fixed (ninth review): a written task a person deleted can be dropped by the next revise (closed as `missing`, no longer refused). An approved update that landed before a crash is recorded on resume even if the task is finished since. An item recorded as `missing` that is found again reads as drift and is closed by the next close procedure (`missing` may move to `closed` or `finished`). A `missing` close keeps the approved reason; the retire proposal lists missing items in their own section; `preflight` and `close` refuse an empty `--manifests` on a written plan.

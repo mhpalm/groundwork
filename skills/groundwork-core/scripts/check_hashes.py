@@ -225,10 +225,18 @@ def rebuilt_write_list_problems(plan, overlay, wl, manifest=None):
         want |= {("clear_blocked", key(t), None) for t in d["unblocks"]}
         got = {(w["kind"], w["key"], w.get("blocked_by")) for w in wl.get("writes", [])
                if w.get("scope") == "plan" and w.get("kind") in ("unlink_dependency", "link_dependency", "clear_blocked")}
-        if want != got:
+        # a write the manifest already shows as landed is this set's own, on a resume (eleventh review, M3)
+        import create_steps
+        written = {w["key"]: w for w in manifest.get("items", [])}
+        links = lambda k: {lk["to_key"] for lk in (written.get(k) or {}).get("links", []) if lk["type"] == "blocked_by"}
+        landed = {g for g in got - want if (g[0] == "unlink_dependency" and g[2] not in links(g[1]))
+                  or (g[0] == "link_dependency" and g[2] in links(g[1]))
+                  or (g[0] == "clear_blocked" and create_steps.blocked_state(written.get(g[1])) == "cleared"
+                      and (written[g[1]].get("blocked_changes") or [{}])[-1].get("plan_version") == plan["version"])}
+        if not want <= got or got - want - landed:
             return ["the write list's relinks and unblocks are not the ones the latest manifest and the plan of record "
                     "imply (missing: " + ", ".join(sorted(f"{k} {i}" for k, i, _ in want - got)) + "; extra: "
-                    + ", ".join(sorted(f"{k} {i}" for k, i, _ in got - want)) + "); diff again and render it again"]
+                    + ", ".join(sorted(f"{k} {i}" for k, i, _ in got - want - landed)) + "); diff again and render it again"]
     task_of = {t["key"]: t["id"] for t in plan["tasks"]}
     closes = [{"key": w["key"], "reason": w["reason"]} for w in wl.get("writes", []) if w.get("kind") == "close_item"]
     edits = [task_of.get(w["key"], w["key"]) for w in wl.get("writes", []) if w.get("kind") == "update_item"]
@@ -257,6 +265,15 @@ def rebuilt_write_list_problems(plan, overlay, wl, manifest=None):
 
 def open_blockers(review):
     return [f["id"] for f in review.get("findings", []) if f.get("severity") == "blocker" and f.get("resolution") != "fixed"]
+
+
+def plan_level_basis(plan_state, wl):
+    """The manifest a plan-level write list is rebuilt from: for a retire, the manifest before its status
+    intent (retire_basis_of); for the others, the latest."""
+    ps = plan_state or {}
+    if wl.get("kind") == "retire" and "retire_basis" in ps:
+        return ps["retire_basis"]
+    return ps.get("manifest")
 
 
 def rebuilt_plan_level_problems(plan, overlay, wl, context, manifest):
@@ -381,7 +398,7 @@ def verify_plan_level(plan, overlay, anchor, comments, proposal_text, wl, review
     if stored is None:
         probs.append("a plan-level set is verified only against its stored proposal context")
     else:
-        probs += rebuilt_plan_level_problems(plan, overlay, wl, stored["context"], (plan_state or {}).get("manifest"))
+        probs += rebuilt_plan_level_problems(plan, overlay, wl, stored["context"], plan_level_basis(plan_state, wl))
         # a set that decides a change request shows that request's assessment (fit, cost, options):
         # approvers never decide one without it (fifth review, finding 8)
         decided = [w["entry"]["id"] for w in wl.get("writes", []) if w.get("kind") == "cr_log_put"]
@@ -502,6 +519,24 @@ def latest_manifest_of(paths, plan_id):
     return latest
 
 
+def retire_basis_of(paths, plan_id):
+    """The manifest a retire's write list is rebuilt from: the latest one, or, once a retire's status intent
+    is recorded, the last manifest before that intent. The retire's own closes are recorded after the
+    intent, so on a resume the latest manifest would show them as Groundwork's earlier closes (a person's
+    reopen) and the rebuild would differ from the approved set (eleventh review, M1 and m2). The chain is
+    verified by latest_manifest_of first."""
+    latest = latest_manifest_of(paths, plan_id)
+    if latest is None or latest.get("status_file") is None:
+        return latest
+    ms = []
+    for p in paths:
+        with open(p, encoding="utf-8") as f:
+            ms.append(json.load(f))
+    ms.sort(key=lambda m: m["seq"])
+    before = [m for m in ms if m["seq"] <= latest["seq"] and m.get("status_file") is None]
+    return before[-1] if before else None
+
+
 def add_manifests_arg(ap):
     ap.add_argument("--manifests", nargs="*", default=None,
                     help="every <plan.id>-manifest-<seq> file in the plan store (with no files when none is written yet); "
@@ -518,7 +553,7 @@ def cli_plan_state(a, plan_id, plan=None):
     if m is None and plan is not None and any(p["state"] in ("writing", "released") for p in plan.get("phases", [])):
         # eighth review, m4: a written plan with no manifest would skip every manifest-derived check
         raise ValueError("the plan has written phases but no manifest was given: pass every manifest file")
-    return {"manifest": m, "status": load(a.status), "epic": a.epic}
+    return {"manifest": m, "retire_basis": retire_basis_of(a.manifests, plan_id), "status": load(a.status), "epic": a.epic}
 
 
 def main(argv=None):

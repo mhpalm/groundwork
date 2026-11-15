@@ -274,7 +274,10 @@ def read_status(raw, written, field_map):
     # a close recorded as finished was a person's: it reads by the tracker's own status
     # an intent with the gw-closed label is Groundwork's close even when the tracker shows Done (a workflow can
     # force a Done resolution); reading it as not done never satisfies a dependent with no work done
-    ours = close["reason"] if close and close["state"] not in ("finished", "missing") and (close["reason"] in labels or close["state"] == "closed") else None
+    # a found-again item closed with Groundwork's own label is Groundwork's close too (eleventh review, m1)
+    ours = close["reason"] if close and close["state"] != "finished" and (
+        (close["reason"] in labels and (close["state"] != "missing" or raw["state"] == "closed"))
+        or close["state"] == "closed") else None
     if raw["state"] == "closed":
         if ours:
             status = "done" if ours == "completed" else "closed_not_done"

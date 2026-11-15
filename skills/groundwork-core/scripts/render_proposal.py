@@ -304,6 +304,9 @@ def plan_level_proposal(plan, overlay, wl, context, assessment=None):
         out += [f"- `{k}`: recorded as missing once a project-wide search confirms it is gone; nothing is written to it"
                 for k in wl.get("missing", [])] or ["None."]
         out.append("")
+        out.append("## Items a person reopened after Groundwork closed them (left open)")
+        out += [f"- `{k}`" for k in wl.get("reopened", [])] or ["None."]
+        out.append("")
         out.append("## Pending phase approvals this retire voids")
         out += [f"- {p}" for p in wl.get("voids_pending", [])] or ["None."]
         out.append("")
