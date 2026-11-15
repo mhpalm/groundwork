@@ -202,10 +202,18 @@ def _same_review(a, b):
     return bool(a) and bool(b) and a.get("view_hash") == b.get("view_hash") and a.get("findings") == b.get("findings")
 
 
-def rebuilt_write_list_problems(plan, overlay, wl):
+def rebuilt_write_list_problems(plan, overlay, wl, manifest=None):
     """A phase write list is rebuilt from the plan of record and the closes, edits and change-request
-    entry it carries, and must come out identical: nothing else can be slipped into it."""
+    entry it carries, and must come out identical: nothing else can be slipped into it. With the latest
+    manifest, it must also close every written task the plan no longer has (seventh review, M1)."""
     import render_proposal
+    if manifest is not None:
+        from revise_diff import required_closes
+        named = {w["key"] for w in wl.get("writes", []) if w.get("kind") == "close_item"}
+        missing = [c["key"] for c in required_closes(plan, manifest) if c["key"] not in named]
+        if missing:
+            return ["the write list leaves open written tasks the plan of record no longer has: " + ", ".join(missing)
+                    + "; diff against the latest manifest and render it again"]
     task_of = {t["key"]: t["id"] for t in plan["tasks"]}
     closes = [{"key": w["key"], "reason": w["reason"]} for w in wl.get("writes", []) if w.get("kind") == "close_item"]
     edits = [task_of.get(w["key"], w["key"]) for w in wl.get("writes", []) if w.get("kind") == "update_item"]
@@ -285,7 +293,7 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
     records, probs = _approval_set(plan, overlay, anchor, comments, proposal_text, wl, review, now, unverified_writer, info,
                                    latest_stored_version, "phases", plan_state)
     import render_proposal
-    probs += rebuilt_write_list_problems(plan, overlay, wl)
+    probs += rebuilt_write_list_problems(plan, overlay, wl, (plan_state or {}).get("manifest"))
     if review != (plan.get("review") or {}).get("reviewer") and not _same_review(review, (plan.get("review") or {}).get("reviewer")):
         probs.append("the review the approvals bind is not the review recorded in the plan of record")
     blockers = open_blockers(review)

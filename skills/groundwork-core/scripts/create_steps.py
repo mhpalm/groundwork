@@ -271,6 +271,8 @@ def read_status(raw, written, field_map):
     labels = {lab[len(prefix):] for lab in raw.get("labels", []) if lab.startswith(prefix)}
     close = (written or {}).get("close")
     # a close recorded as finished was a person's: it reads by the tracker's own status
+    # an intent with the gw-closed label is Groundwork's close even when the tracker shows Done (a workflow can
+    # force a Done resolution); reading it as not done never satisfies a dependent with no work done
     ours = close["reason"] if close and close["state"] != "finished" and (close["reason"] in labels or close["state"] == "closed") else None
     if raw["state"] == "closed":
         if ours:
@@ -396,6 +398,8 @@ def successor_problems(prev, m):
         if m["plan_id"] != prev["plan_id"]:
             raise ValueError(f"names plan {m['plan_id']}, not {prev['plan_id']}")
         status_file_problems(prev.get("status_file"), m.get("status_file"))
+        if prev.get("draft_label_removed") and not m.get("draft_label_removed"):
+            raise ValueError("clears draft_label_removed; it records something already done once")
         item_history_problems(prev["items"], m["items"])
     except ValueError as e:
         return [str(e)]
@@ -420,7 +424,7 @@ def blocked_record(written, state, plan_version):
     ("cleared") write of the write list for plan_version landed. Recording the same state again is a no-op."""
     w = dict(written)
     now = blocked_state(w)
-    if now == state:
+    if now == state or (state == "cleared" and now is None):  # never set by Groundwork: nothing to record
         return w
     if state == "set" and now is None:
         w["blocked_set"] = True
@@ -489,12 +493,14 @@ def unfinished(wl, manifest, cr_log=None):
             why = f"the link to {w['blocked_by']} is still recorded"
         elif k == "set_blocked" and blocked_state(items.get(key)) != "set":
             why = "blocked state not recorded"
-        elif k == "clear_blocked" and blocked_state(items.get(key)) != "cleared":
+        elif k == "clear_blocked" and blocked_state(items.get(key)) == "set":
             why = "the cleared blocked state is not recorded"
         elif k == "update_item" and items.get(key, {}).get("owned_hash") != w["owned_hash"]:
             why = "the approved text is not recorded"
         elif k == "close_item" and (items.get(key, {}).get("close") or {}).get("state") not in ("closed", "finished"):
             why = "not recorded as closed (or as finished by a person first)"
+        elif k == "remove_label" and w.get("on") == "epic" and not (manifest or {}).get("draft_label_removed"):
+            why = "the epic's draft label removal is not recorded"
         elif k == "status_put" and ((manifest or {}).get("status_file") or {}).get("state") != "recorded":
             why = "the status file is not recorded"
         elif k == "cr_log_put":
@@ -508,9 +514,11 @@ def unfinished(wl, manifest, cr_log=None):
     return left
 
 
-def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_KEEP):
+def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_KEEP, draft_label_removed=False):
     """status_file: the retire record to set; by default it is carried forward from prev, so a later
-    manifest can never drop a recorded or intended status file."""
+    manifest can never drop a recorded or intended status file. draft_label_removed: the epic's draft
+    label came off (a remove_label write landed); once recorded it is carried forward and never cleared,
+    so `done` can check that write (seventh review, m5)."""
     m = {"schema_version": "1.0", "plan_id": plan_id, "seq": seq, "prev_hash": prev["hash"] if prev else None,
          "written_at": fmt(now), "run_id": run, "relies_on": relies_on, "items": items}
     prior = (prev or {}).get("status_file")
@@ -518,6 +526,8 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_K
     status_file_problems(prior, sf)
     if sf is not None:
         m["status_file"] = sf
+    if draft_label_removed or (prev or {}).get("draft_label_removed"):
+        m["draft_label_removed"] = True
     if prev:
         item_history_problems(prev["items"], items)
     before = {i["key"]: i for i in (prev or {}).get("items", [])}
@@ -554,6 +564,8 @@ def main(argv=None):
     ap.add_argument("--write-list", help="preflight: the verified write list (its update_item writes)")
     import check_hashes
     check_hashes.add_manifests_arg(ap)
+    ap.add_argument("--draft-label-removed", action="store_true",
+                    help="manifest: the epic's draft label came off (its remove_label write landed or was already done)")
     ap.add_argument("--status-file", help="manifest: the retire status_file entry to set (JSON, from retire.py status "
                                          "or with state recorded); omitted, it is carried forward from the previous manifest")
     a = ap.parse_args(argv)
@@ -625,7 +637,8 @@ def main(argv=None):
                 raise ValueError(f"--seq {a.seq} is not the next sequence ({seq})")
             out = make_manifest(latest, J(a.files[0]), a.plan_id, a.run, seq, ts(a.now),
                                 J(a.relies_on) if a.relies_on else [],
-                                status_file=J(a.status_file) if a.status_file else _KEEP)
+                                status_file=J(a.status_file) if a.status_file else _KEEP,
+                                draft_label_removed=a.draft_label_removed)
         except ValueError as e:
             print(json.dumps({"ok": False, "problems": [str(e)]}, indent=2))
             return 1

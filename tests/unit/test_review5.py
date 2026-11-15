@@ -119,7 +119,7 @@ class CompletionCheck(unittest.TestCase):
         plan, ov, _e = fresh("G1")
         tr = FakeTracker()
         wl0 = render_proposal.write_list(plan, ov, ["P0", "P1"])
-        self.assertTrue(run_create(tr, plan, ov, ["P0", "P1"])["ok"])
+        self.assertTrue(run_create(tr, plan, ov, ["P0", "P1"], write_list=wl0)["ok"])
         self.assertEqual(create_steps.unfinished(wl0, latest_manifest(tr, plan["id"])), [])
         new = repoint_revision(plan)
         report, m = tracker_report(tr, plan, ov)

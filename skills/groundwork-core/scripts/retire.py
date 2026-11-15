@@ -4,7 +4,7 @@
 """Retire a plan, and the gate every later operation passes (planning model section 7).
 
 Usage:
-  retire.py plan ITEMS.json CHOICES.json
+  retire.py plan ITEMS.json CHOICES.json --plan-id ID --manifests M_1.json ... M_n.json
   retire.py write-list PLAN.json --overlay OVERLAY.yaml --plan-out RETIRE_PLAN.json [--draft-label]
             [--pending PHASE_ID ...]
   retire.py status PLAN.json --n N --proposal PROPOSAL.md --at TS   (at write time, under the lock; the
@@ -40,10 +40,20 @@ from gw_hash import item_hash  # noqa: E402
 OPS = ("retire", "create", "resume", "freeze", "release", "revise", "plan_phase", "change_request")
 
 
-def plan_retire(items, choices):
+def plan_retire(items, choices, manifest=None):
     """What happens to each item: todo closes not_planned; in_progress follows the runner's choice;
-    finished items are untouched; children a person added stay open and are named."""
+    finished items are untouched; children a person added stay open and are named.
+
+    manifest: the latest manifest (the CLI always passes it). A key it records is Groundwork's, even
+    when the plan of record no longer has it, so it is closed like any other, never named as a person's
+    (seventh review, M1); a recorded key the read didn't find stops."""
     closes, left, person, probs = [], [], [], []
+    recorded = {w["key"]: w for w in (manifest or {}).get("items", [])}
+    items = [dict(i, person_added=False) if i.get("person_added") and i["key"] in recorded else i for i in items]
+    found = {i["key"] for i in items}
+    for k, w in sorted(recorded.items()):
+        if k not in found and (w.get("close") or {}).get("state") not in ("closed", "finished"):
+            probs.append(f"{k} is recorded in the manifest but the read didn't find it: find it by key, then retire")
     for it in sorted(items, key=lambda i: i["key"]):
         if it.get("person_added"):
             person.append(it["key"])
@@ -211,7 +221,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["plan", "write-list", "status", "rebuild", "recheck", "gate"])
     ap.add_argument("files", nargs="*")
-    for x in ("--overlay", "--plan-out", "--proposal", "--at", "--plan", "--status", "--epic", "--resuming"):
+    for x in ("--plan-id", "--overlay", "--plan-out", "--proposal", "--at", "--plan", "--status", "--epic", "--resuming"):
         ap.add_argument(x)
     import check_hashes
     check_hashes.add_manifests_arg(ap)
@@ -221,7 +231,13 @@ def main(argv=None):
     a = ap.parse_args(argv)
     J = lambda p: None if p in (None, "-") else json.load(open(p, encoding="utf-8"))
     if a.cmd == "plan":
-        out = plan_retire(J(a.files[0]), J(a.files[1]))
+        if not a.plan_id or a.manifests is None:
+            out = {"ok": False, "problems": ["--plan-id and --manifests required: a key the manifest records is never a person's"]}
+        else:
+            try:
+                out = plan_retire(J(a.files[0]), J(a.files[1]), check_hashes.latest_manifest_of(a.manifests, a.plan_id))
+            except ValueError as e:
+                out = {"ok": False, "problems": [str(e)]}
     elif a.cmd == "write-list":
         out = write_list(J(a.files[0]), gw_yaml.load(a.overlay), J(a.plan_out), a.draft_label, a.pending)
     elif a.cmd == "rebuild":

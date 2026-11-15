@@ -111,6 +111,9 @@
         }
       ]
     },
+    "draft_label_removed": {
+      "const": true
+    },
     "items": {
       "type": "array",
       "items": {

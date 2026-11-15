@@ -215,9 +215,12 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
     prev = manifest
     pending = 0
 
+    draft = {"removed": False}
+
     def checkpoint():
         nonlocal seq, prev, pending
-        m = create_steps.make_manifest(prev, sorted(items.values(), key=lambda i: i["key"]), plan["id"], run, seq + 1, tr.clock, [])
+        m = create_steps.make_manifest(prev, sorted(items.values(), key=lambda i: i["key"]), plan["id"], run, seq + 1, tr.clock, [],
+                                       draft_label_removed=draft["removed"])
         tr.put(f"{plan['id']}-manifest-{seq + 1}", m)
         seq += 1
         prev = m
@@ -299,6 +302,12 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
                 if not on_tracker:
                     tr.link_dependency(it["tracker_id"], items[w["blocked_by"]]["tracker_id"])
                 it["links"].append({"type": "blocked_by", "to_key": w["blocked_by"]})
+                pending += 1
+        for w in (write_list or {}).get("writes", []):
+            if w["kind"] == "remove_label" and w.get("on") == "epic" and not (prev or {}).get("draft_label_removed"):
+                if w["label"] in tr.epic_labels.get(epic, set()):  # read the epic first
+                    tr.remove_epic_label(epic, w["label"])
+                draft["removed"] = True
                 pending += 1
         for a in pf["actions"]:
             if a["action"] == "set_blocked" and create_steps.blocked_state(items[a["key"]]) != "set":
@@ -393,13 +402,13 @@ def retire_items(tr, plan, overlay, epic):
     written = {i["key"]: i for i in (manifest or {}).get("items", [])}
     plan_keys = {t["key"] for t in plan["tasks"]}
     found = {it["key"]: it for it in tr.list_children(epic)}
-    for k in sorted(plan_keys - set(found)):  # written but not yet linked under the epic
+    for k in sorted((plan_keys | set(written)) - set(found)):  # written but not yet linked under the epic
         for it in tr.find_by_key(k):
             found[k] = it
     out = []
     for k, it in sorted(found.items()):
         w = written.get(k)
-        out.append({"key": k, "person_added": k not in plan_keys, "unrecorded": k in plan_keys and w is None,
+        out.append({"key": k, "person_added": k not in plan_keys and w is None, "unrecorded": k in plan_keys and w is None,
                     "status": create_steps.read_status(tr.raw(it["tracker_id"]), w, fm)["status"]})
     return out
 
@@ -424,10 +433,12 @@ def run_retire(tr, plan, overlay, approved, proposal_hash, run="run-r", account=
     if decision["decision"] != "held":
         return {"ok": False, "lock": decision}
 
+    draft = {"removed": False}
+
     def put(sf):
         nonlocal manifest
         m = create_steps.make_manifest(manifest, manifest["items"], plan["id"], run, manifest["seq"] + 1, tr.clock, [],
-                                       status_file=sf)
+                                       status_file=sf, draft_label_removed=draft["removed"])
         tr.put(f"{plan['id']}-manifest-{m['seq']}", m)
         manifest = m
 
@@ -438,8 +449,10 @@ def run_retire(tr, plan, overlay, approved, proposal_hash, run="run-r", account=
         put(sf)
     if crash_after == "intent":
         return {"ok": False, "crashed": "intent"}
-    if draft_label and draft_label in tr.epic_labels.get(epic, set()):
-        tr.remove_epic_label(epic, draft_label)
+    if draft_label:
+        if draft_label in tr.epic_labels.get(epic, set()):  # read the epic first
+            tr.remove_epic_label(epic, draft_label)
+        draft["removed"] = True  # recorded with the next manifest
     res = run_close(tr, plan, overlay, approved["closes"], run=run, account=account)
     if not res["ok"]:
         return res
