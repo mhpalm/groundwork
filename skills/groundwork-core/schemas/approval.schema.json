@@ -117,6 +117,27 @@
         "minLength": 1
       }
     },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "finding": {
+            "type": "string",
+            "minLength": 1
+          },
+          "decision": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "finding",
+          "decision"
+        ]
+      }
+    },
     "artifact": {
       "anyOf": [
         {

@@ -216,10 +216,12 @@ approval = {
         "accept_unverified_writer": {"type": "boolean"}, "gate": STR,
         "approver": obj({"account_id": STR, "name": STR}),
         "minors_accepted": arr(STR), "exceptions_accepted": arr(STR),
+        # optional: the approver's decision on each review blocker Resolve handed to a person (needs_person)
+        "decisions": arr(obj({"finding": STR, "decision": STR})),
         "artifact": nullable(obj({"tracker_comment_ref": STR, "author_account_id": STR, "verified_at": TS})),
     }),
 }
-approval["required"] = [k for k in approval["properties"] if k != "scope"]
+approval["required"] = [k for k in approval["properties"] if k not in ("scope", "decisions")]
 
 change_requests = {
     "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "groundwork/change-requests/1.0",

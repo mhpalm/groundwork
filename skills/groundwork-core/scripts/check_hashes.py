@@ -298,8 +298,36 @@ def rebuilt_write_list_problems(plan, overlay, wl, manifest=None):
     return []
 
 
-def open_blockers(review):
-    return [f["id"] for f in review.get("findings", []) if f.get("severity") == "blocker" and f.get("resolution") != "fixed"]
+def open_blockers(review, decidable=False):
+    """Blocker findings not fixed. With decidable, a needs_person blocker is left out: a phase set's records
+    decide it instead (person_decision_problems)."""
+    return [f["id"] for f in review.get("findings", []) if f.get("severity") == "blocker" and f.get("resolution") != "fixed"
+            and not (decidable and f.get("resolution") == "needs_person")]
+
+
+def needs_person_blockers(review):
+    return [f["id"] for f in review.get("findings", []) if f.get("severity") == "blocker" and f.get("resolution") == "needs_person"]
+
+
+def person_decision_problems(records, review):
+    """Resolve hands a blocker the confirm review still finds to a person (needs_person). The person decides it
+    on the approval record itself: every phase-release record in the set carries a decision for each such
+    blocker, from the approver's own unedited comment, and names no other finding (mentor-area run, M16)."""
+    probs = []
+    need = needs_person_blockers(review)
+    for c, rec, _g in records:
+        if rec["kind"] == "exception":
+            continue
+        decided = [d["finding"] for d in rec.get("decisions", []) if d["decision"].strip()]
+        missing = [f for f in need if f not in decided]
+        extra = sorted({d["finding"] for d in rec.get("decisions", [])} - set(need))
+        if missing:
+            probs.append(f"comment {c['ref']}: the record does not decide the blocker(s) handed to a person "
+                         f"({', '.join(missing)}); each approver states their decision in `decisions`")
+        if extra:
+            probs.append(f"comment {c['ref']}: `decisions` names finding(s) that are not blockers handed to a person "
+                         f"({', '.join(extra)})")
+    return probs
 
 
 def plan_level_basis(plan_state, wl):
@@ -368,9 +396,10 @@ def verify_approvals(plan, overlay, anchor, comments, proposal_text, wl, review,
     probs += rebuilt_write_list_problems(plan, overlay, wl, (plan_state or {}).get("manifest"))
     if review != (plan.get("review") or {}).get("reviewer") and not _same_review(review, (plan.get("review") or {}).get("reviewer")):
         probs.append("the review the approvals bind is not the review recorded in the plan of record")
-    blockers = open_blockers(review)
+    blockers = open_blockers(review, decidable=True)
     if blockers:
         probs.append(f"the review has open blocker findings ({', '.join(blockers)}); fix them and review again")
+    probs += person_decision_problems(records, review)
     if not overlay.get("provisional") and proposal_text != render_proposal.proposal(plan, overlay, wl.get("phases", []), wl):
         probs.append("the proposal does not re-render from the plan of record and the write list; approvals bind only "
                      "what Groundwork rendered")
