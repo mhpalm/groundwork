@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed (tenth review): retire keeps a close reason the manifest already records, so a retire never stops after its status intent on a reason mismatch. A found-again item gets a close intent before its transition, so a crash after the transition still reads as Groundwork's close.
+
 - Fixed (ninth review): a written task a person deleted can be dropped by the next revise (closed as `missing`, no longer refused). An approved update that landed before a crash is recorded on resume even if the task is finished since. An item recorded as `missing` that is found again reads as drift and is closed by the next close procedure (`missing` may move to `closed` or `finished`). A `missing` close keeps the approved reason; the retire proposal lists missing items in their own section; `preflight` and `close` refuse an empty `--manifests` on a written plan.
 
 - Fixed (eighth review): the verifier's retire rebuild and the write-time recheck classify items with the manifest, so a recorded key is never a person's (`retire.py recheck` takes `--plan-id --manifests`, and a stored context that flags one is refused). `check_hashes.py approvals` requires exactly the relinks and unblocks the manifest implies (`revise_diff.derived_writes`). A dropped item a person deleted is closed as `missing` (`create_steps.py close --missing`), so revise and retire never dead-end. A new task can't reuse a dropped written key; an approved update that landed unrecorded is adopted, not drift; and an empty `--manifests` is refused while the plan is written.

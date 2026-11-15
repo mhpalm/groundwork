@@ -70,12 +70,15 @@ def plan_retire(items, choices, manifest=None):
             continue
         if it["status"] in ("done", "closed_not_done"):
             continue
+        # a close the manifest already records keeps its reason, so the close procedure never stops on a
+        # reason that differs from the recorded one after the status intent is written (tenth review, M1)
+        reason = ((recorded.get(it["key"]) or {}).get("close") or {}).get("reason", "not_planned")
         if it["status"] == "todo":
-            closes.append({"key": it["key"], "reason": "not_planned"})
+            closes.append({"key": it["key"], "reason": reason})
             continue
         c = choices.get(it["key"])
         if c == "close":
-            closes.append({"key": it["key"], "reason": "not_planned"})
+            closes.append({"key": it["key"], "reason": reason})
         elif isinstance(c, dict) and c.get("leave"):
             left.append({"key": it["key"], "owner_role_key": c["leave"]})
         else:

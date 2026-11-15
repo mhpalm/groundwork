@@ -144,14 +144,32 @@ class FoundAgainAfterMissing(unittest.TestCase):
         raw = dict(self.tr.raw(w["tracker_id"]), state="closed", closed_as=["Done"], labels=["gw-closed:not_planned"])
         self.assertEqual(create_steps.read_status(raw, w, fm)["status"], "done")
 
-    def test_missing_can_only_move_to_a_final_close(self):
-        items = copy.deepcopy(self.m2["items"])
-        next(i for i in items if i["key"] == self.k)["close"] = {"reason": "not_planned", "state": "intent"}
-        with self.assertRaises(ValueError):
-            create_steps.make_manifest(self.m2, items, self.plan["id"], "r", self.m2["seq"] + 1, self.tr.tick(), [])
+    def test_missing_moves_only_forward_with_the_same_reason(self):
+        mk = lambda c: create_steps.make_manifest(self.m2, [dict(i, close=c) if i["key"] == self.k else i
+                                                             for i in self.m2["items"]],
+                                                  self.plan["id"], "r", self.m2["seq"] + 1, self.tr.tick(), [])
+        self.assertEqual(next(i for i in mk({"reason": "not_planned", "state": "intent"})["items"]
+                              if i["key"] == self.k)["close"]["state"], "intent")  # tenth review, m1
+        for bad in ({"reason": "duplicate", "state": "intent"}, {"reason": "duplicate", "state": "closed"}, None):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                mk(bad)
+
+    def test_a_found_again_close_writes_its_intent_first(self):
+        found = [{"key": self.k, "tracker_id": "x", "status": "todo", "close_pending": True}]
+        out = create_steps.close_steps([{"key": self.k, "reason": "not_planned"}], self.m2, found)
+        self.assertEqual(out["steps"][0], {"step": "manifest_intent", "items": [{"key": self.k, "reason": "not_planned"}]})
 
 
 class SmallerGuards(unittest.TestCase):
+    def test_retire_keeps_a_recorded_close_reason(self):
+        tr, plan, ov = created()
+        k = key(plan, "P1-T02")
+        m = latest_manifest(tr, plan["id"])
+        items = [dict(i, close={"reason": "superseded", "state": "intent"}) if i["key"] == k else i for i in m["items"]]
+        m2 = create_steps.make_manifest(m, items, plan["id"], "r", m["seq"] + 1, tr.tick(), [])
+        rp = retire.plan_retire(retire_items(tr, plan, ov, "VOL-1"), {}, m2)
+        self.assertIn({"key": k, "reason": "superseded"}, rp["closes"])  # tenth review, M1
+
     def test_a_missing_close_keeps_the_approved_reason(self):
         tr, plan, ov = created()
         k = key(plan, "P1-T02")

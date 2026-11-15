@@ -343,7 +343,9 @@ def close_steps(closes, manifest, found, missing=()):
                 finished.append(key)  # a person finished it first: record that, never relabel it
             skipped.append({"key": key, "why": f"already {f['status']}"})
             continue
-        if not prior:
+        if not prior or prior["state"] == "missing":
+            # a found-again item gets its intent like any other close, so a crash after its transition still
+            # reads as Groundwork's close (tenth review, m1)
             intents.append({"key": key, "reason": reason})
         per_item.append({"key": key, "tracker_id": f["tracker_id"], "reason": reason})
     steps = []
@@ -487,11 +489,14 @@ def item_history_problems(prev_items, items):
         if why:
             raise ValueError(why)
         pc, nc = p.get("close"), n.get("close")
-        if pc and (not nc or nc["reason"] != pc["reason"] or CLOSE_ORDER[nc["state"]] < CLOSE_ORDER[pc["state"]]
-                   or (CLOSE_ORDER[pc["state"]] == 1 and nc["state"] != pc["state"]
-                       # an item recorded missing that is found again may then be closed (ninth review, M3)
-                       and not (pc["state"] == "missing" and nc["state"] in ("closed", "finished")))):
+        # an item recorded missing that is found again may take a new intent and then a final close
+        # (ninth review M3, tenth review m1); every other recorded close only moves forward to its final state
+        reopened = bool(pc and nc) and pc["state"] == "missing" and nc["state"] in ("intent", "closed", "finished")
+        if pc and not reopened and (not nc or nc["reason"] != pc["reason"] or CLOSE_ORDER[nc["state"]] < CLOSE_ORDER[pc["state"]]
+                                    or (CLOSE_ORDER[pc["state"]] == 1 and nc["state"] != pc["state"])):
             raise ValueError(f"the manifest changes or clears the recorded close of {p['key']}")
+        if reopened and nc["reason"] != pc["reason"]:
+            raise ValueError(f"the manifest changes the reason of the recorded close of {p['key']}")
 
 
 def unfinished(wl, manifest, cr_log=None):
