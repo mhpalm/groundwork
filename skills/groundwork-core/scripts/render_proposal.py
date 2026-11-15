@@ -231,10 +231,10 @@ def proposal(plan, overlay, offer, wl=None):
         out.append(f"Independent review by {how} on {rev['surface']} ({rev['model']}), reviewer view {short(rev['view_hash'])}.")
         if rev["not_performed"]:
             out.append("Checks the reviewer could not perform: " + "; ".join(rev["not_performed"]) + ".")
-    if val and val.get("not_run"):
-        out.append("Checks not run in the session that made this proposal: " + "; ".join(val["not_run"]) + ".")
     else:
         out.append("No independent review is recorded. This plan cannot be approved until one is.")
+    if val and val.get("not_run"):
+        out.append("Checks not run in the session that made this proposal: " + "; ".join(val["not_run"]) + ".")
     minors = [f for f in (val["results"] if val else []) + (rev["findings"] if rev else []) if f["severity"] == "minor"]
     if minors:
         out.append("")
