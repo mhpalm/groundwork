@@ -150,7 +150,7 @@ def task(tid, order, title, kind, role, hours, steps, ac, verify, done, vr_type,
                          "acceptance_criteria": ac, "verify": verify, "done_today": done},
         "visible_result": {"type": vr_type, "text": vr_text},
         "production_change": prod, "data_change": data, "test_tasks": list(tests), "rollback_task": rollback,
-        "exception": None, "origin": {"pattern": pattern, "rules_checked": []},
+        "exception": None, "origin": {"pattern": pattern, "rules_checked": []}, "changes_existing": None,
     }
 
 
@@ -362,6 +362,25 @@ phases = [
     {"id": "P3", "order": 3, "name": "Release and handoff", "goal": "The export is live, confirmed, announced and handed off.", "state": "drafted", "depends_on": ["P2"], "task_ids": [t["id"] for t in T if t["phase"] == "P3"]},
 ]
 
+# D-55: what already exists, and the tasks that change it, each justified.
+STARTING_POINT = {"kind": "extends_existing", "resources": [
+    {"id": "R1", "name": "Volunteer portal app", "kind": "code", "location": f"https://github.com/{R}",
+     "inspected": [E[x] for x in ("gh-0001", "gh-0008", "gh-0009", "gh-0012", "gh-0013")], "not_inspected_reason": None},
+    {"id": "R2", "name": "Coordinator guide", "kind": "doc", "location": f"https://github.com/{R}/blob/main/docs/user-guide/coordinators/signups.md",
+     "inspected": [E["gh-0011"]], "not_inspected_reason": None},
+]}
+CHANGES = {
+    "P1-T02": {"resources": ["R1"], "why_needed": "No route returns sign-ups as a file today; the sign-ups route only renders the page.",
+               "could_break": ["The existing sign-ups route and its coordinator-only check, which the new route sits beside"],
+               "regression_check": ["P1-T05"]},
+    "P1-T03": {"resources": ["R1"], "why_needed": "Coordinators need a visible way to reach the export from the sign-ups page.",
+               "could_break": ["The sign-ups page layout and its existing tests"], "regression_check": ["P1-T05"]},
+    "P1-T04": {"resources": ["R2"], "why_needed": "The guide is where coordinators look; the export and its handling rules must be in it.",
+               "could_break": ["Links into the existing guide section"], "regression_check": ["P2-T02"]},
+}
+for t in T:
+    t["changes_existing"] = CHANGES.get(t["id"])
+
 plan = {
     "schema_version": "1.0", "id": PLAN_ID, "version": 1, "status": "draft",
     "overlay": {"id": "example-org", "version": 1, "hash": ZERO},
@@ -374,7 +393,9 @@ plan = {
                     {"id": "C-3", "question": "File format details?", "answer": "UTF-8 with BOM, comma-separated, RFC 4180 quoting, formula prefix on =, +, -, @.", "answered_by": "acct-program-director", "at": AT},
                     {"id": "C-4", "question": "Database changes or deletion enforcement?", "answer": "No database change; handling guidance only.", "answered_by": "acct-program-director", "at": AT},
                     {"id": "C-5", "question": "Does the announcement need review?", "answer": "No.", "answered_by": "acct-program-director", "at": AT},
-                ]},
+                    {"id": "C-6", "question": "Does anything already exist that this builds on, or is it from scratch?", "answer": "The portal app and the coordinator guide exist; nothing for export has been started.", "answered_by": "acct-program-director", "at": AT},
+                ],
+                "starting_point": STARTING_POINT},
     "scope": {"in": ["CSV serializer, route and button", "Coordinator guide section", "Staging test, UAT, release, rollback, announcement and handoff"],
               "out": ["Enforcing file deletion", "Database changes", "Exports for non-coordinators"],
               "assumptions": [{"text": "Docs ship with each deploy because the app serves docs/user-guide at /help.", "basis": E["gh-0011"]}]},

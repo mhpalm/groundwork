@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Micah Palmquist, micah.palmquist@gmail.com
+import json
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "harness"))
-from common import NOW, fresh  # noqa: E402
+from common import GOLDEN, NOW, fresh, gw_yaml  # noqa: E402
 import validate_plan  # noqa: E402
 from mutations import MUTATIONS  # noqa: E402
 
@@ -64,3 +65,44 @@ class GoldenAssertions(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExistingResources(unittest.TestCase):
+    """D-55: GR-27 catches an unjustified change to something that already exists."""
+
+    def setUp(self):
+        import copy
+        self.plan = json.load(open(os.path.join(GOLDEN, "G1", "expected", "plan.json"), encoding="utf-8"))
+        self.overlay = gw_yaml.load(os.path.join(GOLDEN, "G1", "overlay", "overlay.yaml"))
+        self.ev = validate_plan.load_evidence(os.path.join(GOLDEN, "G1", "evidence"))
+        self.copy = copy.deepcopy
+
+    def gr27(self, plan):
+        return [f for f in validate_plan.check(plan, self.overlay, self.ev, now=NOW).blocking() if f["check"] == "GR-27"]
+
+    def test_golden_passes(self):
+        self.assertEqual(self.gr27(self.plan), [])
+
+    def test_missing_reason_or_risk_is_a_blocker(self):
+        p = self.copy(self.plan)
+        t = next(t for t in p["tasks"] if t["changes_existing"])
+        t["changes_existing"]["why_needed"] = " "
+        self.assertTrue(self.gr27(p))
+
+    def test_regression_check_must_be_a_test_task(self):
+        p = self.copy(self.plan)
+        t = next(t for t in p["tasks"] if t["changes_existing"])
+        t["changes_existing"]["regression_check"] = ["P0-T01"]
+        self.assertTrue(self.gr27(p))
+
+    def test_from_scratch_cannot_change_existing(self):
+        p = self.copy(self.plan)
+        p["request"]["starting_point"] = {"kind": "from_scratch", "resources": []}
+        self.assertTrue(self.gr27(p))
+
+    def test_uninspected_resource_needs_a_reason(self):
+        p = self.copy(self.plan)
+        p["request"]["starting_point"]["resources"][0]["inspected"] = []
+        self.assertTrue(self.gr27(p))
+        p["request"]["starting_point"]["resources"][0]["not_inspected_reason"] = "No skill for this system"
+        self.assertEqual(self.gr27(p), [])

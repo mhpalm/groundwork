@@ -26,8 +26,30 @@
         "answer": "One live session; slides kept for later.",
         "answered_by": "acct-program-director",
         "at": "2026-11-14T19:02:11Z"
+      },
+      {
+        "id": "C-3",
+        "question": "Does anything already exist that this builds on, or is it from scratch?",
+        "answer": "The coordinator guide exists; the training material is new.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
       }
-    ]
+    ],
+    "starting_point": {
+      "kind": "extends_existing",
+      "resources": [
+        {
+          "id": "R1",
+          "name": "Coordinator guide",
+          "kind": "doc",
+          "location": "docs/user-guide/coordinators in the portal repo",
+          "inspected": [
+            "ev-github-gh-950546b8"
+          ],
+          "not_inspected_reason": null
+        }
+      ]
+    }
   },
   "scope": {
     "in": [
@@ -254,7 +276,8 @@
       "origin": {
         "pattern": "core.access-request",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P1-T01",
@@ -346,7 +369,8 @@
       "origin": {
         "pattern": "github.docs-change",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P1-T02",
@@ -433,7 +457,8 @@
       "origin": {
         "pattern": "core.training-material",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P1-T03",
@@ -529,7 +554,8 @@
       "origin": {
         "pattern": "core.dry-run",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P1-T04",
@@ -608,7 +634,8 @@
       "origin": {
         "pattern": "core.revise-material",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P2-T01",
@@ -684,7 +711,8 @@
       "origin": {
         "pattern": "core.announce",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P2-T02",
@@ -765,7 +793,8 @@
       "origin": {
         "pattern": "core.training-session",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P2-T03",
@@ -840,7 +869,8 @@
       "origin": {
         "pattern": "core.uat",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P2-T04",
@@ -919,7 +949,8 @@
       "origin": {
         "pattern": "core.signoff",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P2-T05",
@@ -986,7 +1017,8 @@
       "origin": {
         "pattern": "core.handoff",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     }
   ],
   "standard_work": [

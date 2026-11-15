@@ -70,6 +70,8 @@ task = obj({
     "exception": nullable(obj({"id": STR, "reason": STR, "days": {"type": "integer", "minimum": 2},
                                "checkpoints": arr(obj({"day": {"type": "integer", "minimum": 1}, "visible_result": STR}))})),
     "origin": obj({"pattern": nullable(STR), "rules_checked": arr(STR)}),
+    "changes_existing": nullable(obj({"resources": arr({"type": "string", "pattern": r"^R\d+$"}, minItems=1), "why_needed": STR,
+                                      "could_break": arr(STR, minItems=1), "regression_check": arr(TASK_ID, minItems=1)})),
 })
 
 plan = {
@@ -85,7 +87,12 @@ plan = {
         "overlay": obj({"id": SLUG, "version": {"type": "integer", "minimum": 1}, "hash": HEX}),
         "title": STR,
         "request": obj({"original_text": STR, "restatement": STR,
-                        "clarifications": arr(obj({"id": STR, "question": STR, "answer": STR, "answered_by": STR, "at": TS}))}),
+                        "clarifications": arr(obj({"id": STR, "question": STR, "answer": STR, "answered_by": STR, "at": TS})),
+                        "starting_point": obj({
+                            "kind": {"enum": ["from_scratch", "extends_existing"]},
+                            "resources": arr(obj({"id": {"type": "string", "pattern": r"^R\d+$"}, "name": STR,
+                                                  "kind": {"enum": ["code", "pipeline", "doc", "ticket", "system_object", "other"]},
+                                                  "location": STR, "inspected": arr(EV_ID), "not_inspected_reason": nullable(STR)}))})}),
         "scope": obj({"in": arr(STR), "out": arr(STR),
                       "assumptions": arr(obj({"text": STR, "basis": STR}))}),
         "epic": obj({"key": {"type": "string", "pattern": r"^gw:gw-[0-9A-HJKMNP-TV-Z]{26}:epic$"},

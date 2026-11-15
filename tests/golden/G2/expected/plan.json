@@ -47,8 +47,44 @@
         "answer": "No.",
         "answered_by": "acct-program-director",
         "at": "2026-11-14T19:02:11Z"
+      },
+      {
+        "id": "C-6",
+        "question": "Does anything already exist that this builds on, or is it from scratch?",
+        "answer": "The portal app and the coordinator guide exist; nothing for export has been started.",
+        "answered_by": "acct-program-director",
+        "at": "2026-11-14T19:02:11Z"
       }
-    ]
+    ],
+    "starting_point": {
+      "kind": "extends_existing",
+      "resources": [
+        {
+          "id": "R1",
+          "name": "Volunteer portal app",
+          "kind": "code",
+          "location": "https://github.com/example-org/volunteer-portal",
+          "inspected": [
+            "ev-github-gh-abf252a3",
+            "ev-github-gh-0d0be73a",
+            "ev-github-gh-aaf43453",
+            "ev-github-gh-eaddc074",
+            "ev-github-gh-bd49b4d6"
+          ],
+          "not_inspected_reason": null
+        },
+        {
+          "id": "R2",
+          "name": "Coordinator guide",
+          "kind": "doc",
+          "location": "https://github.com/example-org/volunteer-portal/blob/main/docs/user-guide/coordinators/signups.md",
+          "inspected": [
+            "ev-github-gh-950546b8"
+          ],
+          "not_inspected_reason": null
+        }
+      ]
+    }
   },
   "scope": {
     "in": [
@@ -370,7 +406,8 @@
       "origin": {
         "pattern": "core.access-request",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P0-T02",
@@ -481,7 +518,8 @@
       "origin": {
         "pattern": "github.local-setup",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P1-T01",
@@ -595,7 +633,8 @@
       "origin": {
         "pattern": "github.code-change",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P1-T02",
@@ -747,6 +786,18 @@
       "origin": {
         "pattern": "github.code-change",
         "rules_checked": []
+      },
+      "changes_existing": {
+        "resources": [
+          "R1"
+        ],
+        "why_needed": "No route returns sign-ups as a file today; the sign-ups route only renders the page.",
+        "could_break": [
+          "The existing sign-ups route and its coordinator-only check, which the new route sits beside"
+        ],
+        "regression_check": [
+          "P1-T05"
+        ]
       }
     },
     {
@@ -856,6 +907,18 @@
       "origin": {
         "pattern": "github.code-change",
         "rules_checked": []
+      },
+      "changes_existing": {
+        "resources": [
+          "R1"
+        ],
+        "why_needed": "Coordinators need a visible way to reach the export from the sign-ups page.",
+        "could_break": [
+          "The sign-ups page layout and its existing tests"
+        ],
+        "regression_check": [
+          "P1-T05"
+        ]
       }
     },
     {
@@ -956,6 +1019,18 @@
       "origin": {
         "pattern": "github.docs-change",
         "rules_checked": []
+      },
+      "changes_existing": {
+        "resources": [
+          "R2"
+        ],
+        "why_needed": "The guide is where coordinators look; the export and its handling rules must be in it.",
+        "could_break": [
+          "Links into the existing guide section"
+        ],
+        "regression_check": [
+          "P2-T02"
+        ]
       }
     },
     {
@@ -1073,7 +1148,8 @@
       "origin": {
         "pattern": "github.staging-test",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P2-T01",
@@ -1157,7 +1233,8 @@
       "origin": {
         "pattern": "core.uat-script",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P2-T02",
@@ -1262,7 +1339,8 @@
       "origin": {
         "pattern": "core.uat-run",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P2-T03",
@@ -1361,7 +1439,8 @@
       "origin": {
         "pattern": "github.rollback-rehearsal",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P2-T04",
@@ -1452,7 +1531,8 @@
       "origin": {
         "pattern": "github.docs-change",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P3-T01",
@@ -1586,7 +1666,8 @@
       "origin": {
         "pattern": "github.tag-release",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P3-T02",
@@ -1697,7 +1778,8 @@
       "origin": {
         "pattern": "github.verify-release",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P3-T03",
@@ -1775,7 +1857,8 @@
       "origin": {
         "pattern": "core.prod-confirm",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P3-T04",
@@ -1858,7 +1941,8 @@
       "origin": {
         "pattern": "core.announcement",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     },
     {
       "id": "P3-T05",
@@ -1928,7 +2012,8 @@
       "origin": {
         "pattern": "core.handoff",
         "rules_checked": []
-      }
+      },
+      "changes_existing": null
     }
   ],
   "standard_work": [

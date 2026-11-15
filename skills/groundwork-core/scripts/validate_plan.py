@@ -188,6 +188,22 @@ def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", pr
                   "Discard it and discover again under this org's overlay")
 
     tasks = {t["id"]: t for t in plan["tasks"]}
+    # GR-27 (D-55): what already exists is recorded, and each existing resource was inspected or says why not.
+    sp = plan["request"]["starting_point"]
+    res_ids = {r["id"] for r in sp["resources"]}
+    if sp["kind"] == "extends_existing" and not sp["resources"]:
+        R.add("GR-27", "blocker", None, "plan extends existing work but lists no existing resource",
+              "List each existing resource the runner named")
+    if sp["kind"] == "from_scratch" and sp["resources"]:
+        R.add("GR-27", "blocker", None, "plan starts from scratch but lists existing resources", "Set kind to extends_existing")
+    for r in sp["resources"]:
+        if not r["inspected"] and not (r["not_inspected_reason"] or "").strip():
+            R.add("GR-27", "blocker", r["id"], "existing resource was neither inspected nor marked not inspected with a reason",
+                  "Inspect it read-only, or record why it could not be")
+        for e in r["inspected"]:
+            if e not in ev_by_id:
+                R.add("GR-27", "blocker", r["id"], f"says it was inspected by {e}, which discovery did not find",
+                      "Discover it or remove the reference")
     whd = plan["executor"]["working_day_hours"]
     if overlay.get("working_day_hours") not in (None, whd):
         R.add("EXECUTOR", "blocker", None, "executor.working_day_hours differs from the overlay",
@@ -288,6 +304,24 @@ def check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", pr
         for ref in t["evidence_refs"]:
             if ref not in ev_by_id:
                 R.add("GR-07", "blocker", tid, f"evidence_refs names {ref}, which discovery did not find", "Discover it or remove it", phase=ph)
+        # GR-27 (D-55): a change to something that exists says why it is needed, what it could break,
+        # and which test or UAT task checks for that breakage.
+        ch = t.get("changes_existing")
+        if ch:
+            if sp.get("kind") != "extends_existing":
+                R.add("GR-27", "blocker", tid, "task changes an existing resource, but the plan says it starts from scratch",
+                      "Record the existing resource in request.starting_point", phase=ph)
+            for rid in ch["resources"]:
+                if rid not in res_ids:
+                    R.add("GR-27", "blocker", tid, f"changes {rid}, which request.starting_point does not list",
+                          "List the resource, with the evidence that inspected it", phase=ph)
+            if not ch["why_needed"].strip() or not any(c.strip() for c in ch["could_break"]):
+                R.add("GR-27", "blocker", tid, "change to an existing resource has no reason or no 'could break' entry",
+                      "Say why the change is needed and what it could break", phase=ph)
+            for rc in ch["regression_check"]:
+                if rc not in tasks or tasks[rc]["kind"] not in ("test", "uat"):
+                    R.add("GR-27", "blocker", tid, f"regression check {rc} is not a test or UAT task in this plan",
+                          "Point regression_check at the test or UAT task that checks for the breakage", phase=ph)
         # GR-10 / GR-11
         if t["production_change"]:
             if not t["test_tasks"]:

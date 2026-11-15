@@ -82,6 +82,17 @@ def assert_plan(project, plan):
     for sysname in a.get("coverage_not_inspected", []):
         if not any(c["system"] == sysname and c["status"] == "not_inspected" and c["reason"].strip() for c in plan["coverage"]):
             fails.append(f"coverage should show {sysname} as not inspected, with a reason")
+    sp = plan["request"]["starting_point"]
+    if "starting_point" in a and sp["kind"] != a["starting_point"]:
+        fails.append(f"starting point is {sp['kind']}, expected {a['starting_point']}")
+    changed = [t for t in plan["tasks"] if t.get("changes_existing")]
+    if len(changed) < a.get("changes_existing_tasks_min", 0):
+        fails.append(f"{len(changed)} tasks declare changes to existing resources, expected at least {a['changes_existing_tasks_min']}")
+    if a.get("changes_justified"):
+        for t in changed:
+            ch = t["changes_existing"]
+            if not ch["why_needed"].strip() or not ch["could_break"] or not ch["regression_check"]:
+                fails.append(f"{t['id']} changes an existing resource without a reason, a risk or a regression check")
     return fails
 
 

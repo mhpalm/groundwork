@@ -105,7 +105,7 @@ def task(pid, tid, order, title, kind, role, hours, deps, steps, purpose, accept
                          "verify": verify, "done_today": done_today},
         "visible_result": {"type": visible[0], "text": visible[1]},
         "production_change": False, "data_change": False, "test_tasks": [], "rollback_task": None, "exception": None,
-        "origin": {"pattern": pattern, "rules_checked": []},
+        "origin": {"pattern": pattern, "rules_checked": []}, "changes_existing": None,
     }
 
 
@@ -144,6 +144,7 @@ BASE_ASSERT = {
     "roles_used_subset_of": ["developer", "maintainer", "admin", "business_user", "comms", "approver"],
     "every_task": {"points": 1, "max_hours": 6, "has_visible_result": True},
     "must_wait_on_kinds": ["review", "approval", "availability", "access"], "no_external_recipients": True,
+    "starting_point": "extends_existing", "changes_existing_tasks_min": 1, "changes_justified": True,
 }
 
 
@@ -315,7 +316,12 @@ def g3(plan, overlay, ev):
             {"id": "C-1", "question": "Is the check-in screen already on staging?", "answer": "Yes, it ships next month.",
              "answered_by": DIRECTOR, "at": AT},
             {"id": "C-2", "question": "Live session or recording?", "answer": "One live session; slides kept for later.",
-             "answered_by": DIRECTOR, "at": AT}]}
+             "answered_by": DIRECTOR, "at": AT},
+            {"id": "C-3", "question": "Does anything already exist that this builds on, or is it from scratch?",
+             "answer": "The coordinator guide exists; the training material is new.", "answered_by": DIRECTOR, "at": AT}],
+        "starting_point": {"kind": "extends_existing", "resources": [
+            {"id": "R1", "name": "Coordinator guide", "kind": "doc", "location": "docs/user-guide/coordinators in the portal repo",
+             "inspected": [E["gh-0011"]["id"]], "not_inspected_reason": None}]}}
     plan["scope"] = {"in": ["Guide page", "Training slides, dry run and one session", "Guide-only check and sign-off"],
                      "out": ["Changes to the check-in screen", "A recorded video"],
                      "assumptions": [{"text": "The guide ships with each deploy because the app serves docs at /help.",
@@ -348,7 +354,7 @@ def g3(plan, overlay, ev):
         {"kind": "handoff", "tasks": ["P2-T05"], "not_applicable_reason": None},
     ]
     history(plan, "drafted")
-    a = dict(BASE_ASSERT, min_tasks=8, max_tasks=14, production_change_tasks_min=0, production_change_tasks_max=0,
+    a = dict(BASE_ASSERT, changes_existing_tasks_min=0, min_tasks=8, max_tasks=14, production_change_tasks_min=0, production_change_tasks_max=0,
              standard_work=["test", "uat", "docs", "handoff"], standard_work_not_applicable=["cutover", "rollback"],
              non_dev_share_min=0.8)
     write("G3", "mostly non-development work", plan["request"]["original_text"], overlay, E, plan, a)

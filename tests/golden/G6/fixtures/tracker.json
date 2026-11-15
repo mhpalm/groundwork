@@ -26,7 +26,7 @@
   {
     "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G06:P1-T02",
     "tracker_id": "VOL-203",
-    "owned_hash": "d25b452e9d3140d8b4534b4d7b35867f8233af0ab63c9bca31ff692bed3708ee",
+    "owned_hash": "e715225c919701502e9cb9bf9334999ed41ca89e773c1654ea66fc0b54ee4542",
     "status": "todo",
     "updated_at": "2026-11-16T10:00:00Z",
     "points": 1
@@ -34,7 +34,7 @@
   {
     "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G06:P1-T03",
     "tracker_id": "VOL-204",
-    "owned_hash": "767b98c422c258865ad904759e93258f238084ebcbb40d53e0d58d2708734c94",
+    "owned_hash": "d66d76cc9dcb19e13fcddfebf1ac978d50883dc975606294da8bc2548c34fd48",
     "status": "todo",
     "updated_at": "2026-11-16T10:00:00Z",
     "points": 1
@@ -42,7 +42,7 @@
   {
     "key": "gw:gw-01JCX7Q3RZ9V4N2T8K5M6P0G06:P1-T04",
     "tracker_id": "VOL-205",
-    "owned_hash": "8aaf99ce279e9afb676e04053e0ede59f357a6bcdd686629b4496864997c7445",
+    "owned_hash": "1cec90db6d32586bdd665133e1ba63ea77bd96e142eb803f29bc1dff706ebf31",
     "status": "todo",
     "updated_at": "2026-11-18T10:00:00Z",
     "points": 1

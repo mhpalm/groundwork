@@ -14,3 +14,6 @@ every_task:
   has_visible_result: true
 must_wait_on_kinds: [review, approval, availability, access]
 no_external_recipients: true
+starting_point: extends_existing
+changes_existing_tasks_min: 1
+changes_justified: true

@@ -30,6 +30,9 @@ must_wait_on_kinds:
   - availability
   - access
 no_external_recipients: true
+starting_point: extends_existing
+changes_existing_tasks_min: 0
+changes_justified: true
 production_change_tasks_max: 0
 standard_work_not_applicable:
   - cutover

@@ -58,6 +58,12 @@ def task_body(plan, overlay, t):
         lines.append("**Waits on:** " + "; ".join(f"{w['what']} ({w['kind']}, {role_name(overlay, w['owner_role_key'])})" for w in t["waits_on"]))
     if t["access"]:
         lines.append("**Access needed:** " + ", ".join(t["access"]))
+    if t.get("changes_existing"):
+        ch = t["changes_existing"]
+        names = {r["id"]: r["name"] for r in plan["request"]["starting_point"]["resources"]}
+        lines.append("**Changes existing:** " + ", ".join(f"{r} ({names.get(r, '?')})" for r in ch["resources"])
+                     + f". Why: {ch['why_needed']} Could break: {'; '.join(ch['could_break'])}. "
+                     + f"Checked by: {', '.join(ch['regression_check'])}.")
     lines.append("")
     if ins["prerequisites"]:
         lines.append("**Prerequisites**")
@@ -150,6 +156,16 @@ def proposal(plan, overlay, offer, wl=None):
     out.append("**In scope:** " + "; ".join(plan["scope"]["in"]))
     out.append("")
     out.append("**Out of scope:** " + ("; ".join(plan["scope"]["out"]) or "nothing listed"))
+    out.append("")
+    sp = plan["request"]["starting_point"]
+    out.append("## What already exists")
+    if sp["kind"] == "from_scratch":
+        out.append("Nothing; this project starts from scratch.")
+    for r in sp["resources"]:
+        how = f"inspected ({len(r['inspected'])} evidence item{'s' if len(r['inspected']) != 1 else ''})" if r["inspected"] else f"not inspected: {r['not_inspected_reason']}"
+        changed = [t["id"] for t in plan["tasks"] if t.get("changes_existing") and r["id"] in t["changes_existing"]["resources"]]
+        out.append(f"- **{r['id']} {r['name']}** ({r['kind']}, {r['location']}): {how}. "
+                   + (f"Changed by {', '.join(changed)}." if changed else "Not changed."))
     out.append("")
     out.append("## What was and wasn't inspected")
     out.append("| System | Instance | Status | Read-only | Inspected | Not inspected |")

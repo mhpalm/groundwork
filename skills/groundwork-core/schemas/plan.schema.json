@@ -488,6 +488,53 @@
             "pattern",
             "rules_checked"
           ]
+        },
+        "changes_existing": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "resources": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^R\\d+$"
+                  },
+                  "minItems": 1
+                },
+                "why_needed": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "could_break": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 1
+                },
+                "regression_check": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^P\\d+-T\\d{2,}$"
+                  },
+                  "minItems": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "resources",
+                "why_needed",
+                "could_break",
+                "regression_check"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -515,7 +562,8 @@
         "test_tasks",
         "rollback_task",
         "exception",
-        "origin"
+        "origin",
+        "changes_existing"
       ]
     },
     "stamps": {
@@ -727,13 +775,87 @@
               "at"
             ]
           }
+        },
+        "starting_point": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "from_scratch",
+                "extends_existing"
+              ]
+            },
+            "resources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^R\\d+$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "kind": {
+                    "enum": [
+                      "code",
+                      "pipeline",
+                      "doc",
+                      "ticket",
+                      "system_object",
+                      "other"
+                    ]
+                  },
+                  "location": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "inspected": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^ev-[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{8}$"
+                    }
+                  },
+                  "not_inspected_reason": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "name",
+                  "kind",
+                  "location",
+                  "inspected",
+                  "not_inspected_reason"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "resources"
+          ]
         }
       },
       "additionalProperties": false,
       "required": [
         "original_text",
         "restatement",
-        "clarifications"
+        "clarifications",
+        "starting_point"
       ]
     },
     "scope": {

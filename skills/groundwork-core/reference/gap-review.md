@@ -35,6 +35,8 @@ Gap review is two layers run in order: a deterministic validator script that che
 | GR-24 | Each exception has one checkpoint per day, each with a visible result | V |
 | GR-25 | No `restricted` evidence is rendered into the proposal, review findings or snapshot beyond yes/no or a count | V |
 | GR-26 | Evidence used by offered phases is within `evidence_max_age_days` a`t approval, and recheck items were re-read before creat`e | V |
+| GR-27 | `request.starting_point` says whether the work starts from scratch or extends what exists; each existing resource was inspected (its evidence exists) or says why not; every task with `changes_existing` names listed resources, says why the change is needed and what it could break, and points `regression_check` at a test or UAT task | V |
+| GR-28 | The plan is judged as a whole: every change to an existing resource is necessary (nothing that already exists does the job, and reuse was preferred), its `could_break` covers the consumers the evidence shows, and no task changes an existing resource without declaring `changes_existing` | R |
 
 **Blocker** means the task or phase cannot be approved as written: the executor would be stuck, the plan would be wrong, or a rule would be broken. **Minor** means the plan works but could be better; the approver can accept it as is.
 
