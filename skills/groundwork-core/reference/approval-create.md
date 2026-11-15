@@ -31,7 +31,7 @@ At Proposal the core offers one held write: create the epic with the overlay's d
 1. The proposal offers phases with no unresolved blocker and no blocking open question. Outline phases and phases with open questions are shown but cannot be offered.
 2. With the offer, the core posts the numbered write list for those phases.
 3. Each approver posts one approval record (plan-format.md) as a comment on the epic from their own tracker account. In a Groundwork session, the core shows the approver the phases, the short forms of `plan_hash`, `proposal_hash`, `review_hash` and `write_list_hash`, and the full write list, and posts only after the approver confirms. Elsewhere it gives the exact text to paste.
-4. A gate with `min_approvers` above 1 needs that many records from distinct accounts with the same `plan_hash` and `phase_hashes`. Exceptions need their own record on the `exception` gate; a phase-release record cannot accept an exception.
+4. Every gate whose `applies_to` is `all_phases` must reach its own quorum for each phase: `min_approvers` records from distinct accounts with the same `plan_hash` and `phase_hashes`. Exceptions need their own record on the `exception` gate; a phase-release record cannot accept an exception.
 5. The drafter may approve their own plan, and it is not flagged. The record names the approver's account.
 6. If a write-capable tracker skill is `unverified` on the surface, the proposal and write list say so, and each record must carry `accept_unverified_writer: true` or create refuses.
 7. Any later change to an approved phase changes its `phase_hash` and voids that phase's approvals. Create must start within `create_window_days` (overlay, default 3) of the last approval; after that, approvers post fresh records for the same hashes.
@@ -41,6 +41,7 @@ At Proposal the core offers one held write: create the epic with the overlay's d
 **Lock**, then **verify** (read-only):
 
 - Connect with the runner's own access; confirm the instance and project match the overlay, the epic's overlay id matches, and the runner's overlay hash matches the latest anchored overlay record (setup-mode.md) (CR-12).
+- Only approval records whose `plan_version` equals the plan of record's version count. Records for earlier versions were used or voided when that version was replaced; they are listed as superseded and never stop create, so releasing P2 after P1 was created works.
 - For each approval comment, read through the API that its author's account id is on the gate in the anchored overlay and that the comment has never been edited (its updated time equals its created time). Recompute `plan_hash` and `phase_hashes` from the plan of record, `proposal_hash` by re-rendering, and `write_list_hash`. Rerun `validate_plan.py`. Any mismatch stops create.
 - Re-read evidence marked `recheck`. If a fact changed, stop; the phase goes back through Draft and Gap review as a new plan version.
 

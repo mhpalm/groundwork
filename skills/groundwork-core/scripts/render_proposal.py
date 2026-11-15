@@ -352,7 +352,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     plan = json.load(open(a.plan, encoding="utf-8"))
     overlay = gw_yaml.load(a.overlay)
-    offer = set(x.strip() for x in a.offer.split(",")) if a.offer else {p["id"] for p in plan["phases"] if p["state"] != "outline"}
+    offer = set(x.strip() for x in a.offer.split(",") if x.strip()) if a.offer is not None else {p["id"] for p in plan["phases"] if p["state"] != "outline"}
     if a.what == "proposal":
         if overlay.get("provisional"):
             wl = None
