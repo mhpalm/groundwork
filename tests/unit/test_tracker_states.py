@@ -149,9 +149,17 @@ class Close(unittest.TestCase):
         tr, plan, ov = created()
         tr.close(by_task(tr, "P1-T05")["tracker_id"], "Done")
         r = run_close(tr, plan, ov, [{"key": self.key(plan, "P1-T05"), "reason": "not_planned"}])
-        self.assertEqual(r["steps"], [])
-        self.assertEqual([s["key"] for s in r["skipped"]], [self.key(plan, "P1-T05")])
+        k = self.key(plan, "P1-T05")
+        self.assertEqual(r["steps"], [{"step": "manifest_closed", "keys": [], "finished": [k],
+                                       "records": [{"key": k, "close": {"reason": "not_planned", "state": "finished"}}]}])  # recorded, not relabelled
+        self.assertEqual([s["key"] for s in r["skipped"]], [k])
         self.assertNotIn("gw-closed:not_planned", by_task(tr, "P1-T05")["labels"])
+        w = next(i for i in latest_manifest(tr, plan["id"])["items"] if i["key"] == k)
+        self.assertEqual(w["close"], {"reason": "not_planned", "state": "finished"})
+        fm = ov["skills"]["tracker"]["field_map"]
+        self.assertEqual(create_steps.read_status(tr.raw(by_task(tr, "P1-T05")["tracker_id"]), w, fm)["status"], "done")
+        again = run_close(tr, plan, ov, [{"key": k, "reason": "not_planned"}])
+        self.assertEqual(again["steps"], [])  # a second run changes nothing
 
     def test_close_refuses_unknown_reasons_and_unwritten_items(self):
         tr, plan, _ov = created()

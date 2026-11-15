@@ -118,9 +118,11 @@ class Preflight(unittest.TestCase):
         d = tempfile.mkdtemp()
         P = lambda n: os.path.join(d, n)
         plan, ov, _e = fresh("G1")
-        json.dump([planned("a", phase="P0"), planned("b", phase="P1")], open(P("planned.json"), "w"))
+        wl = render_proposal.write_list(plan, ov, ["P0"])
+        p0 = [planned(w["key"], phase="P0", owned=w["owned_hash"]) for w in wl["writes"] if w["kind"] == "create_item"]
+        json.dump(p0 + [planned("b", phase="P1")], open(P("planned.json"), "w"))
         json.dump([], open(P("found.json"), "w"))
-        json.dump(render_proposal.write_list(plan, ov, ["P0"]), open(P("wl.json"), "w"))
+        json.dump(wl, open(P("wl.json"), "w"))
         for phases, rc in (("P0,P1", 1), ("P1", 1), ("P0", 0)):
             with self.subTest(phases=phases), redirect_stdout(io.StringIO()):
                 self.assertEqual(create_steps.main(["preflight", P("planned.json"), P("found.json"), "--phases", phases,

@@ -203,7 +203,9 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
     for f in found:
         f["status"] = create_steps.read_status(tr.raw(f["tracker_id"]), written.get(f["key"]), fm)["status"]
     pf = create_steps.preflight([{k: p[k] for k in ("key", "phase", "owned_hash", "points", "depends_on", "waits")}
-                                 for p in planned], found, manifest, phases, updates, relies_on)
+                                 for p in planned], found, manifest, phases, updates, relies_on,
+                                {w["key"]: w["owned_hash"] for w in write_list["writes"] if w["kind"] == "create_item"}
+                                if write_list else None)
     if not pf["ok"]:
         tr.comment(account, create_steps.lock_line("release", run, account, tr.clock))
         return pf
@@ -259,40 +261,50 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
                 continue
             it = items[p["key"]]
             if not any(l["type"] == "parent" for l in it["links"]):
-                tr.link_parent(it["tracker_id"], epic)
+                # a link write reads the tracker first: a write that landed before a crash is recorded, not repeated
+                if tr.items[it["tracker_id"]]["parent"] != epic:
+                    tr.link_parent(it["tracker_id"], epic)
                 it["links"].append({"type": "parent", "to_key": plan["epic"]["key"]})
                 pending += 1
             for d in p["task"]["depends_on"]:
                 dk = f"gw:{plan['id']}:{d['task']}"
                 if not any(l["type"] == "blocked_by" and l["to_key"] == dk for l in it["links"]) and dk in items:
-                    tr.link_dependency(it["tracker_id"], items[dk]["tracker_id"])
+                    if items[dk]["tracker_id"] not in tr.items[it["tracker_id"]]["links"]:
+                        tr.link_dependency(it["tracker_id"], items[dk]["tracker_id"])
                     it["links"].append({"type": "blocked_by", "to_key": dk})
                     pending += 1
             if pending >= create_steps.BATCH:
                 checkpoint()
         # the revise's plan-scoped dependency and wait changes on written tasks, each idempotent through the manifest
         for w in (write_list or {}).get("writes", []):
-            if w["kind"] not in ("unlink_dependency", "link_dependency", "clear_blocked") or w.get("scope") != "plan":
+            if w["kind"] not in ("unlink_dependency", "link_dependency", "clear_blocked", "set_blocked") or w.get("scope") != "plan":
                 continue
             it = items[w["key"]]
-            if w["kind"] == "clear_blocked":
-                if tr.items[it["tracker_id"]]["blocked"]:
-                    tr.set_blocked(it["tracker_id"], False)
+            if w["kind"] in ("clear_blocked", "set_blocked"):
+                want = w["kind"] == "set_blocked"
+                if create_steps.blocked_state(it) != ("set" if want else "cleared"):
+                    if tr.items[it["tracker_id"]]["blocked"] != want:  # read the tracker first
+                        tr.set_blocked(it["tracker_id"], want)
+                    items[w["key"]] = create_steps.blocked_record(it, "set" if want else "cleared", write_list["plan_version"])
                     pending += 1
                 continue
             has = any(l["type"] == "blocked_by" and l["to_key"] == w["blocked_by"] for l in it["links"])
+            on_tracker = items[w["blocked_by"]]["tracker_id"] in tr.items[it["tracker_id"]]["links"]
             if w["kind"] == "unlink_dependency" and has:
-                tr.unlink_dependency(it["tracker_id"], items[w["blocked_by"]]["tracker_id"])
+                if on_tracker:
+                    tr.unlink_dependency(it["tracker_id"], items[w["blocked_by"]]["tracker_id"])
                 it["links"] = [l for l in it["links"] if not (l["type"] == "blocked_by" and l["to_key"] == w["blocked_by"])]
                 pending += 1
             elif w["kind"] == "link_dependency" and not has:
-                tr.link_dependency(it["tracker_id"], items[w["blocked_by"]]["tracker_id"])
+                if not on_tracker:
+                    tr.link_dependency(it["tracker_id"], items[w["blocked_by"]]["tracker_id"])
                 it["links"].append({"type": "blocked_by", "to_key": w["blocked_by"]})
                 pending += 1
         for a in pf["actions"]:
-            if a["action"] == "set_blocked" and not items[a["key"]].get("blocked_set"):
-                tr.set_blocked(items[a["key"]]["tracker_id"])
-                items[a["key"]]["blocked_set"] = True
+            if a["action"] == "set_blocked" and create_steps.blocked_state(items[a["key"]]) != "set":
+                if not tr.items[items[a["key"]]["tracker_id"]]["blocked"]:
+                    tr.set_blocked(items[a["key"]]["tracker_id"])
+                items[a["key"]] = create_steps.blocked_record(items[a["key"]], "set", (write_list or plan)["plan_version" if write_list else "version"])
                 pending += 1
                 if pending >= create_steps.BATCH:
                     checkpoint()
@@ -330,7 +342,8 @@ def run_close(tr, plan, overlay, closes, run="run-c", account="acct-dev", crash_
     found = []
     for k, w in written.items():
         st = create_steps.read_status(tr.raw(w["tracker_id"]), w, fm)
-        found.append({"key": k, "tracker_id": w["tracker_id"], "status": st["status"], "close_pending": st["close_pending"]})
+        found.append({"key": k, "tracker_id": w["tracker_id"], "status": st["status"], "close_pending": st["close_pending"],
+                      "closed_by_groundwork": st.get("closed_by_groundwork", False)})
     plan_steps = create_steps.close_steps(closes, manifest, found)
     if not plan_steps["ok"]:
         return plan_steps
@@ -363,8 +376,8 @@ def run_close(tr, plan, overlay, closes, run="run-c", account="acct-dev", crash_
             if crash_after == "transition":
                 return {"ok": False, "crashed": "transition"}
         elif st["step"] == "manifest_closed":
-            for k in st["keys"]:
-                written[k]["close"]["state"] = "closed"
+            for r in st["records"]:
+                written[r["key"]]["close"] = dict(r["close"])
             put()
     return {"ok": True, **plan_steps}
 

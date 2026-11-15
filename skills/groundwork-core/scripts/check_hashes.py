@@ -12,7 +12,7 @@ Usage:
   check_hashes.py approvals PLAN.json --overlay OVERLAY.yaml --anchor ANCHOR.json
                   --comments COMMENTS.json --proposal proposal.md --write-list WL.json
                   --review REVIEW.json --phases P0,P1 --now 2026-11-15T00:00:00Z
-                  --latest-version N --manifest MANIFEST.json|- --status STATUS.json|- --epic open|closed
+                  --latest-version N --manifests M_1.json ... M_n.json --status STATUS.json|- --epic open|closed
                   --evidence DIR [--rules RULES.json ...]
   check_hashes.py plan-level PLAN.json  (the same flags, without --phases, plus --context CONTEXT.json
                   [--assessment A.json]: the stored inputs the proposal is re-rendered from)
@@ -565,7 +565,7 @@ def _run(a, J):
     if a.cmd == "approvals":
         plan = J(a.files[0])
         overlay = gw_yaml.load(a.overlay)
-        proposal_text = open(a.proposal, encoding="utf-8").read()
+        proposal_text = open(a.proposal, encoding="utf-8", newline="").read()
         unverified = any(s["verified"] != "verified" and s["name"] == overlay["skills"]["tracker"]["skill"] for s in plan["stamps"]["skills"])
         info = []
         phases = [x.strip() for x in (a.phases or "").split(",") if x.strip()]
@@ -577,7 +577,7 @@ def _run(a, J):
     if a.cmd == "plan-level":
         plan = J(a.files[0])
         overlay = gw_yaml.load(a.overlay)
-        proposal_text = open(a.proposal, encoding="utf-8").read()
+        proposal_text = open(a.proposal, encoding="utf-8", newline="").read()
         unverified = any(s["verified"] != "verified" and s["name"] == overlay["skills"]["tracker"]["skill"] for s in plan["stamps"]["skills"])
         info = []
         ok, probs, kind = verify_plan_level(plan, overlay, J(a.anchor), J(a.comments), proposal_text, J(a.write_list), J(a.review),

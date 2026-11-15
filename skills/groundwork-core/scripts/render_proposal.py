@@ -113,6 +113,9 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None, rel
     (revise_diff `relinks`): each removed dependency gets an unlink_dependency write and each added one
     a link_dependency write, plan-scoped, so a written task never stays blocked by work the plan dropped.
     unblocks: written task ids whose waits a revise removed; each gets a clear_blocked write.
+    A wait added to a written task (or added back after a clear) changes its body, so its phase is in the
+    offer and that phase's set_blocked write blocks it again; preflight sets it whenever the manifest's
+    blocked state is not "set" (sixth review, M4).
     """
     if overlay.get("provisional"):
         raise ValueError("a provisional overlay has no tracker, so there is no write list (D-54)")
@@ -149,12 +152,13 @@ def write_list(plan, overlay, offer, closes=None, cr_entry=None, edits=None, rel
         tids = [t["id"] for t in sorted(plan["tasks"], key=lambda t: t["order"]) if t["phase"] == pid]
         for tid in tids:
             t = next(x for x in plan["tasks"] if x["id"] == tid)
+            from check_hashes import owned_hash
+            fields = {"title": t["title"], "body_owned": task_body(plan, overlay, t), "role_key": t["role_key"],
+                      "phase": t["phase"], "key": t["key"]}
+            # the create binds the exact text it writes, so preflight can refuse a PLANNED that differs (sixth review, M3)
             writes.append({"kind": "create_item", "key": f"gw:{plan['id']}:{tid}", "phase": pid, "not_ready": True,
-                           "work_type": t["work_type"], "release": release})
+                           "work_type": t["work_type"], "release": release, "owned_hash": owned_hash(fields)})
             if tid in edits:
-                from check_hashes import owned_hash
-                fields = {"title": t["title"], "body_owned": task_body(plan, overlay, t), "role_key": t["role_key"],
-                          "phase": t["phase"], "key": t["key"]}
                 writes.append({"kind": "update_item", "key": t["key"], "phase": pid, "fields": "plan_owned",
                                "owned_hash": owned_hash(fields)})
         for tid in tids:

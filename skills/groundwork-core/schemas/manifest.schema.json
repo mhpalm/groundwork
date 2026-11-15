@@ -158,6 +158,29 @@
           "blocked_set": {
             "type": "boolean"
           },
+          "blocked_changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "state": {
+                  "enum": [
+                    "cleared",
+                    "set"
+                  ]
+                },
+                "plan_version": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "state",
+                "plan_version"
+              ]
+            }
+          },
           "close": {
             "type": "object",
             "properties": {
@@ -172,7 +195,8 @@
               "state": {
                 "enum": [
                   "intent",
-                  "closed"
+                  "closed",
+                  "finished"
                 ]
               }
             },

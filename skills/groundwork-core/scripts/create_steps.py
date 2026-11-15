@@ -15,7 +15,9 @@ Usage:
   create_steps.py manifest ITEMS.json --run RUN_ID --now TS [--relies-on REFS.json]   (seq is the latest + 1)
                   [--status-file STATUS_FILE_ENTRY.json]
   create_steps.py status RAW.json --overlay OVERLAY.yaml
-  create_steps.py close VERIFIED_WRITE_LIST.json FOUND.json   (the closes are the write list's close_item writes)
+  create_steps.py close VERIFIED_WRITE_LIST.json RAW.json --overlay OVERLAY.yaml   (the closes are the write list's
+                  close_item writes; RAW is the tracker's read of each one. A manifest_closed step's records are
+                  set on the manifest items exactly as given)
   create_steps.py done VERIFIED_WRITE_LIST.json [--logs LOG_1.json ...]   (before the lock release: stops with
                   every approved write the manifest or the change-request log doesn't show as done)
   create_steps.py scope COUNT --overlay OVERLAY.yaml [--limit N]
@@ -41,6 +43,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gw_hash import item_hash  # noqa: E402
+from gw_schema import load_schema, validate  # noqa: E402
 
 CLOSE_REASONS = ("not_planned", "superseded", "duplicate")  # never completed: it reads back as done (review 4, item 74)
 DEFAULT_CLOSE_PREFIX = "gw-closed:"
@@ -114,13 +117,18 @@ def lock_decision(comments, run, account, now):
             "post": lock_line("release", run, account, now), "then": "post the release if you posted a claim, then stop"}
 
 
-def preflight(planned, found, manifest, phases, approved_updates=(), relies_on=None):
+def preflight(planned, found, manifest, phases, approved_updates=(), relies_on=None, approved_creates=None):
     """Decide create | skip | adopt | update | adopt_update | link_parent | stop per planned item (spec section 8 table).
 
     approved_updates: {key: owned_hash} from the verified write list's update_item writes. A written
     item whose planned text differs from what the manifest recorded is updated only when the write
     list names it with exactly the planned hash, and only while the item is not finished; otherwise
-    create stops, so an approved edit is never skipped silently and nothing else is ever written."""
+    create stops, so an approved edit is never skipped silently and nothing else is ever written.
+
+    approved_creates: {key: owned_hash} from the verified write list's create_item writes (the CLI always
+    passes it). PLANNED is built by the runner, so every in-scope planned item must be one the write list
+    creates, with exactly the text it binds, and every create the write list holds must be planned; anything
+    else stops create (sixth review, M3)."""
     approved_updates = dict(approved_updates) if isinstance(approved_updates, dict) else {k: None for k in approved_updates}
     # relies_on (revise apply): each item the diff read, with its updated_at then. The first preflight of a
     # revise apply passes it, and any change since the diff stops create: diff again. A resume of that
@@ -166,6 +174,14 @@ def preflight(planned, found, manifest, phases, approved_updates=(), relies_on=N
         if key in dupes:
             report("stop", "more than one item carries this key")
             continue
+        if in_scope and approved_creates is not None:
+            if key not in approved_creates:
+                report("stop", "this item is not in the approved write list; render PLANNED from the plan of record")
+                continue
+            if approved_creates[key] != p.get("owned_hash"):
+                report("stop", "the planned text differs from the text the approved write list creates; "
+                               "render PLANNED again from the plan of record")
+                continue
         if f is not None and f.get("status") not in STATUSES:
             # the finished-work and closed_not_done rules read status; without it they would pass silently
             report("stop", "the found item has no status from create_steps.py status; read it before preflight")
@@ -218,7 +234,7 @@ def preflight(planned, found, manifest, phases, approved_updates=(), relies_on=N
             actions.append({"key": key, "action": "update", "tracker_id": f["tracker_id"]})
         elif in_scope:
             actions.append({"key": key, "action": "skip", "tracker_id": f["tracker_id"]})
-        if in_scope and p.get("waits") and not (w or {}).get("blocked_set"):
+        if in_scope and p.get("waits") and blocked_state(w) != "set":
             # Applied once, keyed (key + "blocked"); never reapplied after a person cleared it.
             actions.append({"key": key, "action": "set_blocked", "tracker_id": f["tracker_id"]})
         if in_scope and not f.get("under_epic", True):
@@ -228,6 +244,12 @@ def preflight(planned, found, manifest, phases, approved_updates=(), relies_on=N
             # Points a person set are never changed.
             actions.append({"key": key, "action": "comment_split", "tracker_id": f["tracker_id"],
                             "why": f"a person set {f['points']} points; keep them and recommend a split"})
+    if approved_creates is not None:
+        planned_keys = {p["key"] for p in planned if p["phase"] in phases}
+        for key in sorted(set(approved_creates) - planned_keys):
+            why = "the approved write list creates this item but PLANNED leaves it out; render PLANNED from the plan of record"
+            stops.append({"key": key, "why": why})
+            actions.append({"key": key, "action": "stop", "why": why})
     stops = moved + stops
     if moved:
         actions = [{"key": m["key"], "action": "stop", "why": m["why"]} for m in moved] + actions
@@ -248,31 +270,35 @@ def read_status(raw, written, field_map):
     prefix = field_map.get("close_label_prefix", DEFAULT_CLOSE_PREFIX)
     labels = {lab[len(prefix):] for lab in raw.get("labels", []) if lab.startswith(prefix)}
     close = (written or {}).get("close")
-    ours = close["reason"] if close and (close["reason"] in labels or close["state"] == "closed") else None
+    # a close recorded as finished was a person's: it reads by the tracker's own status
+    ours = close["reason"] if close and close["state"] != "finished" and (close["reason"] in labels or close["state"] == "closed") else None
     if raw["state"] == "closed":
         if ours:
             status = "done" if ours == "completed" else "closed_not_done"
         else:
             names = set(raw.get("closed_as", []))
             status = "closed_not_done" if names & set(field_map["statuses"]["closed_not_done"]) else "done"
-        return {"key": raw["key"], "status": status, "close_pending": False, "drift": None}
+        return {"key": raw["key"], "status": status, "close_pending": False, "drift": None, "closed_by_groundwork": bool(ours)}
     category = raw.get("category", "todo")
     if close and close["state"] == "closed":
         return {"key": raw["key"], "status": category, "close_pending": False,
                 "drift": "reopened after Groundwork closed it"}
-    return {"key": raw["key"], "status": category, "close_pending": bool(close), "drift": None}
+    return {"key": raw["key"], "status": category, "close_pending": bool(close) and close["state"] == "intent", "drift": None}
 
 
 def close_steps(closes, manifest, found):
     """Ordered steps to close items: intent in the manifest first, as a batch of its own,
     then for each item the gw-closed label and the transition, then the manifest again.
 
-    found: [{key, tracker_id, status, close_pending?}] from status. An item already
-    closed is skipped (a person's close is never relabelled). Close never deletes.
+    found: [{key, tracker_id, status, close_pending?, closed_by_groundwork?}] from status. Close never
+    deletes. An item already closed gets no transition, but its outcome is always recorded, so the
+    completion check can finish (sixth review, M1 and M2): Groundwork's own transition that landed
+    before a crash is recorded as closed; an item a person finished first is recorded as finished
+    (a person's close is never relabelled, and it reads by the tracker's own status).
     """
     written = {i["key"]: i for i in (manifest or {}).get("items", [])}
     by_key = {f["key"]: f for f in found}
-    intents, per_item, skipped, stops = [], [], [], []
+    intents, per_item, skipped, stops, landed, finished = [], [], [], [], [], []
     for c in closes:
         key, reason = c["key"], c["reason"]
         if reason not in CLOSE_REASONS:
@@ -282,12 +308,19 @@ def close_steps(closes, manifest, found):
         if f is None or key not in written:
             stops.append({"key": key, "why": "no written item with this key; only items Groundwork wrote are closed"})
             continue
-        if f["status"] in ("done", "closed_not_done") and not f.get("close_pending"):
-            skipped.append({"key": key, "why": f"already {f['status']}"})
-            continue
         prior = written[key].get("close")
         if prior and prior["reason"] != reason:
             stops.append({"key": key, "why": f"a close as {prior['reason']} is already recorded; finish or revise it first"})
+            continue
+        if prior and prior["state"] in ("closed", "finished"):
+            skipped.append({"key": key, "why": f"its close is already recorded ({prior['state']})"})
+            continue
+        if f["status"] in ("done", "closed_not_done") and not f.get("close_pending"):
+            if f.get("closed_by_groundwork"):
+                landed.append(key)  # our transition landed before the session ended: record it
+            else:
+                finished.append(key)  # a person finished it first: record that, never relabel it
+            skipped.append({"key": key, "why": f"already {f['status']}"})
             continue
         if not prior:
             intents.append({"key": key, "reason": reason})
@@ -300,8 +333,13 @@ def close_steps(closes, manifest, found):
         steps.append({"step": "transition", **it,
                       "then": "if the tracker needs a person (no direct transition, a screen field, more than one hop), "
                               "stop and name the item; it stays close pending"})
-    if per_item:
-        steps.append({"step": "manifest_closed", "keys": [it["key"] for it in per_item]})
+    if per_item or landed or finished:
+        reason_of = {c["key"]: c["reason"] for c in closes}
+        recs = [{"key": k, "close": {"reason": reason_of[k], "state": "closed"}} for k in [it["key"] for it in per_item] + landed]
+        recs += [{"key": k, "close": {"reason": reason_of[k], "state": "finished"}} for k in finished]
+        # records: set each item's manifest close to exactly this, then write the manifest
+        steps.append({"step": "manifest_closed", "keys": [it["key"] for it in per_item] + landed, "finished": finished,
+                      "records": recs})
     return {"ok": not stops, "steps": steps, "skipped": skipped, "stops": stops}
 
 
@@ -335,7 +373,7 @@ def scope_decision(count, overlay, requested=None):
 _KEEP = object()
 
 
-CLOSE_ORDER = {"intent": 0, "closed": 1}
+CLOSE_ORDER = {"intent": 0, "closed": 1, "finished": 1}
 
 
 def status_file_problems(prior, sf):
@@ -364,6 +402,48 @@ def successor_problems(prev, m):
     return []
 
 
+def blocked_state(written):
+    """What the manifest records about the blocked state Groundwork applied: None (never applied), "set"
+    or "cleared". blocked_set says it was applied once; blocked_changes ([{state, plan_version}], append
+    only) records each approved clear and each set after a clear, so a revise that removes a wait and a
+    later one that adds it back are both recorded and checked (sixth review, M4). A person clearing the
+    flag changes nothing here, so Groundwork never reapplies it within the same wait."""
+    w = written or {}
+    changes = w.get("blocked_changes") or []
+    if changes:
+        return changes[-1]["state"]
+    return "set" if w.get("blocked_set") else None
+
+
+def blocked_record(written, state, plan_version):
+    """The manifest fields for an item after an approved set_blocked (state "set") or clear_blocked
+    ("cleared") write of the write list for plan_version landed. Recording the same state again is a no-op."""
+    w = dict(written)
+    now = blocked_state(w)
+    if now == state:
+        return w
+    if state == "set" and now is None:
+        w["blocked_set"] = True
+        return w
+    w["blocked_changes"] = list(w.get("blocked_changes") or []) + [{"state": state, "plan_version": plan_version}]
+    return w
+
+
+def blocked_changes_problems(prev, now):
+    """blocked_changes is append-only, alternates starting with a clear, and moves forward in plan versions."""
+    pc, nc = prev.get("blocked_changes") or [], now.get("blocked_changes") or []
+    if nc[:len(pc)] != pc:
+        return f"the manifest rewrites the recorded blocked changes of {now['key']}"
+    for i, c in enumerate(nc):
+        if c["state"] != ("cleared" if i % 2 == 0 else "set"):
+            return f"the blocked changes of {now['key']} don't alternate from the first clear"
+        if i and c["plan_version"] <= nc[i - 1]["plan_version"]:
+            return f"the blocked changes of {now['key']} don't move forward in plan versions"
+    if nc and not now.get("blocked_set"):
+        return f"{now['key']} records a blocked change but no blocked state was ever applied"
+    return None
+
+
 def item_history_problems(prev_items, items):
     """Third review, finding 7: a manifest is the record of what Groundwork wrote and did once. A later
     manifest keeps every item the previous one records, under the same tracker id, and never forgets a
@@ -378,8 +458,12 @@ def item_history_problems(prev_items, items):
         for flag in ("blocked_set", "split_comment"):
             if p.get(flag) and not n.get(flag):
                 raise ValueError(f"the manifest clears {flag} on {p['key']}; it records something already done once")
+        why = blocked_changes_problems(p, n)
+        if why:
+            raise ValueError(why)
         pc, nc = p.get("close"), n.get("close")
-        if pc and (not nc or nc["reason"] != pc["reason"] or CLOSE_ORDER[nc["state"]] < CLOSE_ORDER[pc["state"]]):
+        if pc and (not nc or nc["reason"] != pc["reason"] or CLOSE_ORDER[nc["state"]] < CLOSE_ORDER[pc["state"]]
+                   or (CLOSE_ORDER[pc["state"]] == 1 and nc["state"] != pc["state"])):
             raise ValueError(f"the manifest changes or clears the recorded close of {p['key']}")
 
 
@@ -403,12 +487,14 @@ def unfinished(wl, manifest, cr_log=None):
             why = f"no link to {w['blocked_by']} recorded"
         elif k == "unlink_dependency" and has(key, "blocked_by", w["blocked_by"]):
             why = f"the link to {w['blocked_by']} is still recorded"
-        elif k == "set_blocked" and not items.get(key, {}).get("blocked_set"):
+        elif k == "set_blocked" and blocked_state(items.get(key)) != "set":
             why = "blocked state not recorded"
+        elif k == "clear_blocked" and blocked_state(items.get(key)) != "cleared":
+            why = "the cleared blocked state is not recorded"
         elif k == "update_item" and items.get(key, {}).get("owned_hash") != w["owned_hash"]:
             why = "the approved text is not recorded"
-        elif k == "close_item" and (items.get(key, {}).get("close") or {}).get("state") != "closed":
-            why = "not recorded as closed"
+        elif k == "close_item" and (items.get(key, {}).get("close") or {}).get("state") not in ("closed", "finished"):
+            why = "not recorded as closed (or as finished by a person first)"
         elif k == "status_put" and ((manifest or {}).get("status_file") or {}).get("state") != "recorded":
             why = "the status file is not recorded"
         elif k == "cr_log_put":
@@ -434,11 +520,20 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on, status_file=_K
         m["status_file"] = sf
     if prev:
         item_history_problems(prev["items"], items)
+    before = {i["key"]: i for i in (prev or {}).get("items", [])}
+    for i in items:
+        if i["key"] not in before:
+            why = blocked_changes_problems({}, i)
+            if why:
+                raise ValueError(why)
     if prev and seq != prev["seq"] + 1:
         raise ValueError("manifest seq must be the previous seq + 1")
     if not prev and seq != 1:
         raise ValueError("the first manifest is seq 1")
     m["hash"] = item_hash(m)
+    errs = validate(m, load_schema("manifest"))  # sixth review, M5: a malformed manifest is never written
+    if errs:
+        raise ValueError("the manifest doesn't match its schema: " + "; ".join(errs[:5]))
     return m
 
 
@@ -486,17 +581,27 @@ def main(argv=None):
                                                         f"list's offer ({','.join(wl.get('phases', [])) or 'none'})"]}))
             return 1
         ups = {w["key"]: w["owned_hash"] for w in wl["writes"] if w["kind"] == "update_item"}
+        creates = {w["key"]: w.get("owned_hash") for w in wl["writes"] if w["kind"] == "create_item"}
         out = preflight(J(a.files[0]), J(a.files[1]), latest, phases, ups,
-                        J(a.relies_on) if a.relies_on else None)
+                        J(a.relies_on) if a.relies_on else None, creates)
     elif a.cmd == "status":
         import gw_yaml
         fm = gw_yaml.load(a.overlay)["skills"]["tracker"]["field_map"]
         written = {i["key"]: i for i in (latest or {}).get("items", [])}
         out = {"items": [read_status(r, written.get(r["key"]), fm) for r in J(a.files[0])]}
     elif a.cmd == "close":
+        # the statuses are read here from the tracker's raw reads, so no runner-built list can drop what
+        # close needs (whose transition an item's close was)
+        import gw_yaml
+        fm = gw_yaml.load(a.overlay)["skills"]["tracker"]["field_map"]
         wl = J(a.files[0])
         closes = [{"key": w["key"], "reason": w["reason"]} for w in wl.get("writes", []) if w.get("kind") == "close_item"]
-        out = close_steps(closes, latest, J(a.files[1]))
+        written = {i["key"]: i for i in (latest or {}).get("items", [])}
+        found = []
+        for r in J(a.files[1]):
+            st = read_status(r, written.get(r["key"]), fm)
+            found.append({"key": r["key"], "tracker_id": (written.get(r["key"]) or {}).get("tracker_id"), **st})
+        out = close_steps(closes, latest, found)
     elif a.cmd == "done":
         wl = J(a.files[0])
         log = None

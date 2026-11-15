@@ -7,7 +7,8 @@ Usage:
   retire.py plan ITEMS.json CHOICES.json
   retire.py write-list PLAN.json --overlay OVERLAY.yaml --plan-out RETIRE_PLAN.json [--draft-label]
             [--pending PHASE_ID ...]
-  retire.py status PLAN.json --n N --proposal-hash HEX --at TS   (at write time, under the lock)
+  retire.py status PLAN.json --n N --proposal PROPOSAL.md --at TS   (at write time, under the lock; the
+            verified proposal file, whose hash is computed here and never typed)
   retire.py rebuild PLAN_ID --manifests M_1.json ... M_n.json   (resume: the status file from the latest manifest's intent)
   retire.py recheck VERIFIED_WRITE_LIST.json ITEMS.json CONTEXT.json   (at write time, before any write)
   retire.py gate OP --plan PLAN.json --manifests M_1.json ... --status STATUS.json|- --epic open|closed
@@ -19,9 +20,9 @@ plus find_by_key for every plan key (status from create_steps.py status). person
 key is not one of the plan's task keys. unrecorded: a plan key no manifest records yet. CHOICES: {key: "close" | {leave:
 owner_role_key}} for every in_progress plan-owned item.
 
-Write order: draft label removal, item closes (close procedure), status intent
-manifest, status file, final manifest recording the status file's hash, snapshot,
-epic close, lock release. Every later create, resume, freeze, release, revise, plan
+Write order: lock claim, status intent manifest (the first write after the lock), draft
+label removal, item closes (close procedure), status file, final manifest recording the
+status file's hash, snapshot, epic close, lock release. Every later create, resume, freeze, release, revise, plan
 phase and change request refuses a retired plan or a closed epic, except the resume
 of the very set named in the status file's set_by.
 """
@@ -210,7 +211,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["plan", "write-list", "status", "rebuild", "recheck", "gate"])
     ap.add_argument("files", nargs="*")
-    for x in ("--overlay", "--plan-out", "--proposal-hash", "--at", "--plan", "--status", "--epic", "--resuming"):
+    for x in ("--overlay", "--plan-out", "--proposal", "--at", "--plan", "--status", "--epic", "--resuming"):
         ap.add_argument(x)
     import check_hashes
     check_hashes.add_manifests_arg(ap)
@@ -236,8 +237,13 @@ def main(argv=None):
         out = {"ok": not probs, "problems": probs}
     elif a.cmd == "status" and a.n is None:
         out = {"ok": False, "problems": ["--n required: the number is allocated under the lock at write time"]}
+    elif a.cmd == "status" and not (a.proposal and a.at):
+        out = {"ok": False, "problems": ["--proposal and --at required: the verified proposal file and the write time"]}
     elif a.cmd == "status":
-        st = status_record(J(a.files[0]), a.n, a.proposal_hash, a.at)
+        # sixth review, M5: the hash comes from the verified proposal file, so a typo or a null can't bind
+        # the status intent to a set nobody approved (which no resume could then match)
+        from gw_canon import sha256_hex
+        st = status_record(J(a.files[0]), a.n, sha256_hex(open(a.proposal, "rb").read()), a.at)
         out = {"status_record": st, "intent": status_intent(st)}
     else:
         res = None

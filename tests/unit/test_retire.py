@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "harness"))
 from common import fresh  # noqa: E402
 import check_hashes  # noqa: E402
 import create_steps  # noqa: E402
+import render_proposal  # noqa: E402
 import retire  # noqa: E402
 from fake_tracker import FakeTracker, latest_manifest, latest_status, retire_items, run_create, run_retire  # noqa: E402
 from gw_schema import load_schema, validate  # noqa: E402
@@ -330,8 +331,13 @@ class Scripts(unittest.TestCase):
             return rc, json.loads(buf.getvalue())
 
         json.dump(plan, open(P("plan.json"), "w"))
-        rc, st = run(retire, ["status", P("plan.json"), "--n", "1", "--proposal-hash", PH_HASH, "--at", AT])
+        open(P("proposal.md"), "w").write("# Retire this plan\n")
+        rc, st = run(retire, ["status", P("plan.json"), "--n", "1", "--proposal", P("proposal.md"), "--at", AT])
         self.assertEqual(rc, 0)
+        self.assertEqual(st["status_record"]["set_by"]["proposal_hash"],
+                         render_proposal.proposal_hash("# Retire this plan\n"))
+        rc, bad = run(retire, ["status", P("plan.json"), "--n", "1", "--at", AT])
+        self.assertFalse(bad["ok"])
         json.dump(st["intent"], open(P("sf.json"), "w"))
         m = latest_manifest(tr, plan["id"])
         chain = []
@@ -347,14 +353,12 @@ class Scripts(unittest.TestCase):
         rc, rb = run(retire, ["rebuild", plan["id"], "--manifests", *chain, P("m2.json")])
         self.assertEqual((rc, rb["status_record"]), (0, st["status_record"]))
         rp = approve(tr, plan, ov)
-        import render_proposal
         json.dump(retire.write_list(plan, ov, rp), open(P("wl.json"), "w"))
         json.dump(retire_items(tr, plan, ov, "VOL-1"), open(P("now.json"), "w"))
         json.dump(render_proposal.proposal_context(plan, "retire", "Retire.", items=rp["seen"]), open(P("ctx.json"), "w"))
         self.assertEqual(run(retire, ["recheck", P("wl.json"), P("now.json"), P("ctx.json")])[0], 0)
 
     def test_retire_proposal_lists_left_open_person_added_and_voided_sets(self):
-        import render_proposal
         tr, plan, ov = created()
         k = item(tr, "P1-T02")["key"]
         item(tr, "P1-T02")["category"] = "in_progress"

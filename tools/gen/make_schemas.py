@@ -279,9 +279,12 @@ manifest = {
                           "split_comment": {"type": "boolean"},
                           # set_blocked applied once at create (key + "blocked"); never reapplied after a person clears it
                           "blocked_set": {"type": "boolean"},
+                          # each approved clear_blocked, and each set_blocked after a clear, in order (append only)
+                          "blocked_changes": arr(obj({"state": {"enum": ["cleared", "set"]},
+                                                      "plan_version": {"type": "integer", "minimum": 1}})),
                           # close intent is recorded before the gw-closed label; state becomes closed after the transition
                           "close": obj({"reason": {"enum": ["not_planned", "superseded", "duplicate", "completed"]},
-                                        "state": {"enum": ["intent", "closed"]}})},
+                                        "state": {"enum": ["intent", "closed", "finished"]}})},
                          required=["key", "tracker_id", "owned_hash", "links", "not_ready"])),
         "hash": HEX,
     }),
