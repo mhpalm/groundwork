@@ -603,7 +603,9 @@ def _check(plan, overlay, evidence, offered_arg=None, now=None, stage="draft", p
         else:
             open_blockers = [f for f in rev["findings"] if f["severity"] == "blocker" and f["resolution"] not in ("fixed",)]
             for f in open_blockers:
-                if f["resolution"] == "exception_requested":
+                # an exception is accepted on the exception gate, and a blocker handed to a person is decided
+                # on each approval record; check_hashes.py approvals enforces both
+                if f["resolution"] in ("exception_requested", "needs_person"):
                     continue
                 R.add("REVIEW", "blocker", f["target"], f"reviewer blocker {f['id']} ({f['check']}) is {f['resolution']}",
                       "Resolve it in stage 6", phase=tasks[f["target"]]["phase"] if f["target"] in tasks else (f["target"] if f["target"] in phases else None))

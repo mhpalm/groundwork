@@ -544,6 +544,14 @@ def proposal(plan, overlay, offer, wl=None):
         out.append("No independent review is recorded. This plan cannot be approved until one is.")
     if val and val.get("not_run"):
         out.append("Checks not run in the session that made this proposal: " + "; ".join(val["not_run"]) + ".")
+    decide = [f for f in (rev["findings"] if rev else []) if f["severity"] == "blocker" and f["resolution"] == "needs_person"]
+    if decide:
+        out.append("")
+        out.append("**Blockers for the approver to decide, by id.** The last review still found these, and Resolve "
+                   "handed them to a person. Each approval record states its decision on every one in `decisions`; "
+                   "a record without them does not count.")
+        for f in decide:
+            out.append(f"- {f['id']} ({f['check']}, {f['target'] or 'plan'}): {f['what']} Suggested fix: {f['suggested_fix']}")
     minors = [f for f in (val["results"] if val else []) + (rev["findings"] if rev else []) if f["severity"] == "minor"]
     if minors:
         out.append("")

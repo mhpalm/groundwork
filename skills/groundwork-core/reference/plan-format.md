@@ -183,6 +183,7 @@ Evidence holds structure, configuration and counts only. Counts are never groupe
   approver: {account_id, name}        # account id is the tracker's immutable user id
   minors_accepted: [finding ids]
   exceptions_accepted: [exception ids]
+  decisions: [{finding: R-1, decision: "the approver's decision, in their words"}]   # optional; one per needs-person blocker
   artifact: {tracker_comment_ref, author_account_id, verified_at}
 ```
 

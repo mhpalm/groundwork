@@ -63,7 +63,7 @@ Each loaded skill's `rules` are added to the reviewer's checklist for that run, 
 
 ## Reviewer output
 
-Each finding is `{id, check: GR-xx or rule id, severity, task or phase id, what is wrong, evidence ids, suggested fix}`. The reviewer also lists the checks it could not perform and why, and the reviewer view hash it worked from. Resolve marks each finding fixed, accepted-minor, exception-requested or needs-person.
+Each finding is `{id, check: GR-xx or rule id, severity, task or phase id, what is wrong, evidence ids, suggested fix}`. The reviewer also lists the checks it could not perform and why, and the reviewer view hash it worked from. Resolve marks each finding fixed, accepted-minor, exception-requested or needs-person. A needs-person blocker is decided by each approver on their approval record (`decisions`), never by editing the finding.
 
 ## Acting as the independent reviewer
 
