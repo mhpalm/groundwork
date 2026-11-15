@@ -17,7 +17,10 @@ Checked 2026-11-14. Atlassian's REST reference pages render client-side, so thes
 | JQL search may lag new issues | search_consistency | no |
 | Team-managed projects name the points field "Story point estimate" | readiness | no |
 | Text field size limits | body size | no |
-| Flagged field marks an issue as impeded | blocked state | no |
+| Flagged field marks an issue as impeded, and can be set by `PUT /rest/api/3/issue/{key}` | blocked state, set_blocked | no |
+| `GET /rest/api/3/issue/{key}/transitions` lists each transition's target status and required fields; a resolution can be set only on transitions whose screen has it | close | no |
+| A label may contain a colon (`gw-closed:not_planned`) | close labels | no; if not, setup sets `close_label_prefix` to `gw-closed-` |
+| `POST /rest/api/3/search/approximate-count` returns a count for a JQL query | read_scope | no |
 | Issue properties set by REST are not JQL-searchable without an app's index module | key slot choice | partly ([entity properties](https://developer.atlassian.com/cloud/jira/platform/jira-entity-properties/)) |
 
 Confirmed: scoped API tokens exist and can be limited to read scopes such as `read:jira-work` ([manage API tokens](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/)).

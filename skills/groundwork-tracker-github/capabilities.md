@@ -13,7 +13,8 @@
 | `steps_as: checklist` | Markdown task list inside the owned body |
 | `steps_as: subtasks` | Sub-issues of the task with no points |
 | Dependencies | "Blocked by" issue dependencies ([issue dependencies API](https://docs.github.com/en/rest/issues/issue-dependencies)) |
-| Blocked state | An open "blocked by" dependency, plus the `gw-blocked` label while any `waits_on` is open |
+| Blocked state | An open "blocked by" dependency, plus the label named by `field_map.blocked` (default `gw-blocked`), set once at create by `set_blocked` for each task with a `waits_on` |
+| Close | `state_reason` `completed`, `not_planned` or `duplicate` ([issues API](https://docs.github.com/en/rest/issues/issues#update-an-issue)); `field_map.statuses` is `{done: [completed], closed_not_done: [not_planned, duplicate]}` |
 | Points | A GitHub Projects number field named in `field_map.points`, or a `points:1` label |
 | Hours | A Projects number field named in `field_map.hours`, or the owned body only |
 | Labels | Yes |
@@ -38,6 +39,7 @@ Read, read-only: labels (`gh label list --limit 500 --json name`), whether sub-i
 | Not-ready label | Label exists | none | Create label `gw-not-ready` |
 | Draft label | Label exists | none | Create label `gw-draft` |
 | Blocked label | Label exists | none | Create label `gw-blocked` |
+| Close labels | The four `gw-closed:` labels exist | none | Create them |
 | Sub-issues | Endpoint answers | `task_to_epic: linked` | Not creatable by Groundwork |
 | Dependencies | Endpoint answers | Dependencies listed in the owned body, blocked label | Not creatable by Groundwork |
 | Points field | Projects field exists | `points:1` label | Projects field, by an admin |

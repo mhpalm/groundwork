@@ -216,7 +216,12 @@ manifest = {
         "relies_on": arr(obj({"ref": STR, "hash": HEX})),
         "items": arr(obj({"key": STR, "tracker_id": STR, "owned_hash": HEX,
                           "links": arr(obj({"type": STR, "to_key": STR})), "not_ready": {"type": "boolean"},
-                          "split_comment": {"type": "boolean"}},
+                          "split_comment": {"type": "boolean"},
+                          # set_blocked applied once at create (key + "blocked"); never reapplied after a person clears it
+                          "blocked_set": {"type": "boolean"},
+                          # close intent is recorded before the gw-closed label; state becomes closed after the transition
+                          "close": obj({"reason": {"enum": ["not_planned", "superseded", "duplicate", "completed"]},
+                                        "state": {"enum": ["intent", "closed"]}})},
                          required=["key", "tracker_id", "owned_hash", "links", "not_ready"])),
         "hash": HEX,
     }),
@@ -290,8 +295,14 @@ overlay = {
                                               "points": STR, "hours": nullable(STR), "phase": STR, "blocked": STR,
                                               "depends_on": STR, "not_ready": STR, "role": nullable(STR),
                                               "work_types": obj({"story": STR, "task": STR}),
-                                              "phase_release": {"enum": ["version", "milestone", "label"]}},
-                                             required=["key", "points", "phase", "blocked", "depends_on", "not_ready"])},
+                                              "phase_release": {"enum": ["version", "milestone", "label"]},
+                                              # Tracker statuses, resolutions or close reasons that mean "closed, not done";
+                                              # required so a person's not-planned close never reads as done (section 2).
+                                              "statuses": obj({"done": arr(STR, minItems=1), "closed_not_done": arr(STR, minItems=1)}),
+                                              "close_label_prefix": {"type": "string", "pattern": "^[a-z][a-z0-9-]*:$"}},
+                                             required=["key", "points", "phase", "blocked", "depends_on", "not_ready", "statuses"]),
+                            # Upper bound on items read_scope returns before the runner must narrow (assess, at most 200).
+                            "read_scope_limit": {"type": "integer", "minimum": 1, "maximum": 200}},
                            required=["skill", "version", "field_map"]),
         }),
         "working_day_hours": {"type": "number", "minimum": 1, "maximum": 8},

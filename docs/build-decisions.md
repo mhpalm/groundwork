@@ -35,3 +35,11 @@ These were settled while building v1 against spec draft 0.3. Each is a candidate
 23. A deferred decision blocks every task that cites it except its `deferred_to_task`, inside the GR-04 computation, so a phase that depends on an unsettled design choice cannot be offered.
 24. `executor_profiles` values use the same enum as `assumed_executor`. Free text was refused because a profile describing an expert would weaken the one-day rule.
 25. Trait goldens are generated from G1 by `tools/gen/make_trait_goldens.py`, with traits pinned in the fixtures so golden runs do not vary on trait choice. GT-combined pins the conflicting pair and settles it with decision AD-2.
+
+## Planning model build 2, 2026-11-15
+
+26. `field_map.statuses` is required, with no default. A missing or short `closed_not_done` list would let a person's not-planned close read as done and satisfy a dependency, and that error is silent.
+27. A Groundwork close counts when the manifest records it and either its `gw-closed:` label is on the item or the manifest records the transition as done. Requiring the label alone would let a person undo a close by removing it; trusting the intent alone would turn a person's real "Done", made after a close crashed before its label, into not done.
+28. The fake tracker applies `set_blocked` after the links, in the same order as the write list, so existing crash-point tests keep their meaning.
+29. The tracker contract stays at 1.0 although `read_scope`, `set_blocked` and `close` are new required sections: no tracker skill has been released, so nothing depends on the old shape.
+

@@ -12,6 +12,8 @@
 | hours, parallel group, depends_on, waits_on, steps, acceptance criteria, verify, done today, visible result | The owned body rendered by the core's `render_proposal.py task` |
 | dependencies | "Blocked by" dependencies to the dependency's issue |
 | not-ready | The overlay's `not_ready` label |
+| waits_on (blocked state) | The `field_map.blocked` label, set once at create |
+| close reason | Label `gw-closed:<reason>` plus `state_reason` |
 | plan-owned hash | Not stored on the item; the core keeps it in the manifest |
 
 ## normalize

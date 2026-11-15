@@ -58,6 +58,14 @@ skills:
       not_ready: label
       work_types: {story: Story, task: Task}   # tracker item type per work_type
       phase_release: version         # version (Jira fix version) | milestone (GitHub) | label
+      statuses:                      # required; what the tracker reports for a closed item
+        done:
+          - Done
+        closed_not_done:             # statuses, resolutions or close reasons that mean closed, not done
+          - "Won't Do"
+          - Duplicate
+      close_label_prefix: "gw-closed:"   # default; Jira sites that refuse a colon use gw-closed-
+    read_scope_limit: 200            # optional; assess reads at most this many items (never above 200)
 working_day_hours: 6                 # default 6; allowed 1 to 8
 assumed_executor: junior_no_context   # enum, see below
 roles:                               # generic key -> org name
@@ -101,6 +109,8 @@ org_process:                        # optional, rendered into proposals, never a
 **Where it is kept.** The org's private repo holds the source. For cloud threads and the Claude app it is uploaded as a skill, provisioned to the org by an owner, or enabled per person on their claude.ai account. For local Claude Code it can also sit in `~/.claude/skills/`.
 
 **The overlay anchor (root of trust).** The overlay file names the approvers, so the file alone cannot be trusted: anyone who can upload a ZIP could add themselves. Setup therefore creates, as a held write, one anchor issue in the tracker (`anchor.tracker_ref`). Every approved overlay version is recorded there as a comment authored by an admin's own account, holding the overlay id, version and the hash of the whole overlay folder (`overlay.yaml` and `SKILL.md`). The first record's author is the founding admin; each later record must be authored by an admin listed in the previous recorded version. At Intake and again at create, the core compares the loaded overlay's version and hash with the latest anchored record and refuses a mismatch, an older version, or an edited record comment. Approver authority is always checked against the anchored version, so removing an approver takes effect at the next run, and two admins cannot both publish a different "version 5". This is also the overlay approval record setup writes in step 7.
+
+**Statuses and closes.** `field_map.statuses` is required: setup reads the tracker's statuses and resolutions (`discover_config`) and the admin picks which ones mean done and which mean closed without being done. GitHub Issues always uses `{done: [completed], closed_not_done: [not_planned, duplicate]}`. A task in `closed_not_done` is never edited and never satisfies a dependency, so a missing or short list would let a person's not-planned close count as done; that is why there is no default. Setup also creates the blocked label (when `field_map.blocked` is a label) and the four `gw-closed:` labels.
 
 **Role holders.** `role_holders` names who fills each role (a person, a team handle or a channel) so tasks can say whom to request access for or mention without guessing. They are not assignees; the team still schedules and assigns work. `tracker_access_assumed` records that setup confirmed every role holder can open and comment on epics, so plans don't request it.
 

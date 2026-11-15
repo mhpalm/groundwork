@@ -26,6 +26,11 @@ skills:
       blocked: Flagged
       depends_on: Blocks
       not_ready: label
+      statuses:
+        done:
+          - Done
+        closed_not_done:
+          - "Won't Do"
       role: label
       work_types:
         story: Story

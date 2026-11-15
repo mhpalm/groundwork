@@ -10,4 +10,4 @@ surfaces:
   claude-code-cloud: {connect: [mcp], coverage: partial}
   claude-app: {connect: [mcp], coverage: partial}
 rule_prefix: github
-sections: [handshake, connect, coverage, capabilities, discover_config, map, readiness, configure, list_children, find_by_key, read_epic, write, plan_store, lock, rules, normalize]
+sections: [handshake, connect, coverage, capabilities, discover_config, map, readiness, configure, list_children, find_by_key, read_epic, read_scope, write, set_blocked, close, plan_store, lock, rules, normalize]

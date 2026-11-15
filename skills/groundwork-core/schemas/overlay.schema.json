@@ -311,6 +311,36 @@
                     "milestone",
                     "label"
                   ]
+                },
+                "statuses": {
+                  "type": "object",
+                  "properties": {
+                    "done": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "minItems": 1
+                    },
+                    "closed_not_done": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "minItems": 1
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "done",
+                    "closed_not_done"
+                  ]
+                },
+                "close_label_prefix": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]*:$"
                 }
               },
               "additionalProperties": false,
@@ -320,8 +350,14 @@
                 "phase",
                 "blocked",
                 "depends_on",
-                "not_ready"
+                "not_ready",
+                "statuses"
               ]
+            },
+            "read_scope_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
             }
           },
           "additionalProperties": false,

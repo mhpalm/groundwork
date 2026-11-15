@@ -12,7 +12,8 @@ Rows marked (verify) are listed in `VERIFY.md`.
 | `steps_as: checklist` | Task list inside the owned description |
 | `steps_as: subtasks` | Sub-task issues with no points |
 | Dependencies | `Blocks` issue links (verify) |
-| Blocked state | The `Flagged` field while any `waits_on` is open, plus open Blocks links (verify) |
+| Blocked state | The field or label named by `field_map.blocked` (`Flagged` by default), set once at create by `set_blocked` for each task with a `waits_on`, plus open Blocks links (verify) |
+| Close | A workflow transition to the status named in `field_map.statuses`, with a resolution where the transition allows it; `closed_not_done` lists the statuses and resolutions that mean not done, such as Won't Do and Duplicate |
 | Points | The field named in `field_map.points` ("Story Points" in company-managed projects; "Story point estimate" in team-managed, verify) |
 | Hours | `timetracking.originalEstimate` when `field_map.hours` is "Original Estimate" |
 | Labels | Yes, no spaces (verify) |

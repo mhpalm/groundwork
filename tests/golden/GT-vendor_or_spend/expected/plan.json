@@ -6,7 +6,7 @@
   "overlay": {
     "id": "example-org",
     "version": 1,
-    "hash": "f9fc0dc1de9d84a1049218654b455b34c39e1bbe4019f782e5dbd0be623c0a78"
+    "hash": "a8bfe16ad62cc215b65f098332233ef389f26976f80e722c90b9664b389b5645"
   },
   "title": "CSV export of event sign-ups",
   "request": {
@@ -2633,7 +2633,7 @@
     "overlay": {
       "id": "example-org",
       "version": 1,
-      "hash": "f9fc0dc1de9d84a1049218654b455b34c39e1bbe4019f782e5dbd0be623c0a78",
+      "hash": "a8bfe16ad62cc215b65f098332233ef389f26976f80e722c90b9664b389b5645",
       "format": "1.0"
     },
     "validator": "1.0.0",

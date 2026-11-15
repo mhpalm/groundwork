@@ -98,6 +98,33 @@
           },
           "split_comment": {
             "type": "boolean"
+          },
+          "blocked_set": {
+            "type": "boolean"
+          },
+          "close": {
+            "type": "object",
+            "properties": {
+              "reason": {
+                "enum": [
+                  "not_planned",
+                  "superseded",
+                  "duplicate",
+                  "completed"
+                ]
+              },
+              "state": {
+                "enum": [
+                  "intent",
+                  "closed"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "reason",
+              "state"
+            ]
           }
         },
         "additionalProperties": false,

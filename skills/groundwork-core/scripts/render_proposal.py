@@ -97,8 +97,12 @@ def release_name(plan, phase):
     return f"{plan['epic']['title']} {phase['id']} {phase['name']}"[:255]
 
 
-def write_list(plan, overlay, offer):
-    """The numbered write list for the offered phases. Hashing it binds approval to exactly these writes."""
+def write_list(plan, overlay, offer, closes=None):
+    """The numbered write list for the offered phases. Hashing it binds approval to exactly these writes.
+
+    closes: [{key, reason}] for items to close (revise); rendered as the close procedure:
+    a close-intent manifest first, then each item's gw-closed label and transition, then a manifest.
+    """
     if overlay.get("provisional"):
         raise ValueError("a provisional overlay has no tracker, so there is no write list (D-54)")
     tr = overlay["skills"]["tracker"]
@@ -120,10 +124,21 @@ def write_list(plan, overlay, offer):
                            "how": overlay["task_hierarchy"]["task_to_epic"]})
             for d in t["depends_on"]:
                 writes.append({"kind": "link_dependency", "key": t["key"], "blocked_by": f"gw:{plan['id']}:{d['task']}"})
+            if t.get("waits_on"):
+                # Once, at create; the assignee or the wait's owner role clears it, and nothing reapplies it.
+                writes.append({"kind": "set_blocked", "key": t["key"], "field": tr["field_map"]["blocked"],
+                               "reason": "; ".join(w["what"] for w in t["waits_on"])})
         writes.append({"kind": "manifest_put", "phase": pid, "note": "after every batch of at most 10 writes"})
         for tid in tids:
             writes.append({"kind": "clear_not_ready", "key": f"gw:{plan['id']}:{tid}"})
         writes.append({"kind": "snapshot_put", "phase": pid})
+    if closes:
+        prefix = tr["field_map"].get("close_label_prefix", "gw-closed:")
+        writes.append({"kind": "manifest_put", "note": "close intent for " + ", ".join(c["key"] for c in closes)})
+        for c in closes:
+            writes.append({"kind": "add_label", "key": c["key"], "label": prefix + c["reason"]})
+            writes.append({"kind": "close_item", "key": c["key"], "reason": c["reason"]})
+        writes.append({"kind": "manifest_put", "note": "closes done"})
     if not any(p["state"] in ("writing", "released") for p in plan["phases"]):
         writes.append({"kind": "remove_label", "on": "epic", "label": overlay.get("labels", {}).get("draft", "gw-draft")})
     writes.append({"kind": "lock_release", "on": "epic"})
@@ -332,6 +347,7 @@ def main(argv=None):
     ap.add_argument("--offer")
     ap.add_argument("--task")
     ap.add_argument("--write-list")
+    ap.add_argument("--closes", help="JSON file of [{key, reason}] to close (revise)")
     ap.add_argument("--out")
     a = ap.parse_args(argv)
     plan = json.load(open(a.plan, encoding="utf-8"))
@@ -348,7 +364,8 @@ def main(argv=None):
     elif a.what == "epic":
         text = epic_description(plan, overlay)
     else:
-        text = json.dumps(write_list(plan, overlay, offer), indent=2)
+        closes = json.load(open(a.closes, encoding="utf-8")) if a.closes else None
+        text = json.dumps(write_list(plan, overlay, offer, closes), indent=2)
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(text)

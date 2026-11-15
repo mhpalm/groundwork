@@ -3,7 +3,7 @@ schema_version: "1.0"
 overlay_format: "1.0"
 id: example-org
 version: 1
-hash: c28ad7e4e0fa8ab7b2ec5c536f2cb409e8b6b961e7315a8b0af01c0c2fac6736
+hash: "9bbc7cd236266fb1e78790a27ea5bb15a12403789988c951ad5c3bc00f0e88ae"
 org_name: Example Org
 admins:
   - account_id: acct-program-director
@@ -50,6 +50,14 @@ skills:
         story: Story
         task: Task
       phase_release: version
+      statuses:
+        done:
+          - Done
+        closed_not_done:
+          - "Won't Do"
+          - Duplicate
+          - Cannot Reproduce
+      close_label_prefix: "gw-closed:"
 working_day_hours: 6
 assumed_executor: junior_no_context
 roles:

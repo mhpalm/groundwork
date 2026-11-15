@@ -10,11 +10,18 @@ Usage:
   create_steps.py lock LOCK_COMMENTS.json --run RUN_ID --account ACCOUNT --now TS
   create_steps.py preflight PLANNED.json FOUND.json MANIFEST.json --phases P1,P2
   create_steps.py manifest PREV_MANIFEST.json|- ITEMS.json --plan-id ID --run RUN_ID --seq N --now TS [--relies-on REFS.json]
+  create_steps.py status RAW.json MANIFEST.json|- --overlay OVERLAY.yaml
+  create_steps.py close CLOSES.json MANIFEST.json|- FOUND.json
+  create_steps.py scope COUNT --overlay OVERLAY.yaml [--limit N]
 
 LOCK_COMMENTS: [{ref, author_account_id, created_at, body}] where body holds
   a gw-lock line: "gw-lock claim|renew|release run=<id> account=<id> expires=<ts>".
-PLANNED: [{key, phase, owned_hash, points, depends_on?: [keys]}]   (owned_hash from check_hashes.py owned)
-FOUND:   [{key, tracker_id, owned_hash, under_epic, points}]   (find_by_key across the project, cross-checked by list_children)
+PLANNED: [{key, phase, owned_hash, points, depends_on?: [keys], waits?: bool}]   (owned_hash from check_hashes.py owned)
+FOUND:   [{key, tracker_id, owned_hash, under_epic, points, status?}]   (find_by_key across the project, cross-checked by
+         list_children; status from `status`)
+RAW:     [{key, state: open|closed, category?: todo|in_progress, closed_as?: [tracker status, resolution or
+         state_reason], labels: [..]}]   (what the tracker skill reads back; labels are untrusted)
+CLOSES:  [{key, reason: not_planned|superseded|duplicate|completed}]
 """
 
 import argparse
@@ -27,6 +34,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gw_hash import item_hash  # noqa: E402
+
+CLOSE_REASONS = ("not_planned", "superseded", "duplicate", "completed")
+DEFAULT_CLOSE_PREFIX = "gw-closed:"
+READ_SCOPE_MAX = 200
 
 LOCK_LINE = re.compile(r"gw-lock (claim|renew|release) run=(\S+) account=(\S+)(?: expires=(\S+))?")
 LOCK_MINUTES = 30
@@ -119,9 +130,16 @@ def preflight(planned, found, manifest, phases):
             report("stop", f"depends on {', '.join(gone)}, which was written and then deleted by hand; "
                            "never recreated silently, so revise the plan first")
             continue
+        dead = sorted(d for d in p.get("depends_on", []) if found_by_key.get(d, {}).get("status") == "closed_not_done")
+        if in_scope and dead:
+            report("stop", f"depends on {', '.join(dead)}, which was closed without being done; "
+                           "a closed_not_done task never satisfies a dependency, so revise to re-point it")
+            continue
         if f is None and w is None:
             if in_scope:
                 actions.append({"key": key, "action": "create"})
+                if p.get("waits"):
+                    actions.append({"key": key, "action": "set_blocked", "tracker_id": None, "why": "after create"})
             continue
         if f is None and w is not None:
             report("stop", "manifest says written but no item has this key: deleted or moved; never recreated silently")
@@ -139,6 +157,9 @@ def preflight(planned, found, manifest, phases):
             continue
         elif in_scope:
             actions.append({"key": key, "action": "skip", "tracker_id": f["tracker_id"]})
+        if in_scope and p.get("waits") and not (w or {}).get("blocked_set"):
+            # Applied once, keyed (key + "blocked"); never reapplied after a person cleared it.
+            actions.append({"key": key, "action": "set_blocked", "tracker_id": f["tracker_id"]})
         if in_scope and not f.get("under_epic", True):
             actions.append({"key": key, "action": "link_parent", "tracker_id": f["tracker_id"], "why": "found outside the epic"})
         if f.get("points", 1) > 1 and w is not None and not w.get("split_comment"):
@@ -147,6 +168,93 @@ def preflight(planned, found, manifest, phases):
             actions.append({"key": key, "action": "comment_split", "tracker_id": f["tracker_id"],
                             "why": f"a person set {f['points']} points; keep them and recommend a split"})
     return {"ok": not stops, "actions": actions, "stops": stops, "warnings": warnings}
+
+
+def read_status(raw, written, field_map):
+    """What a tracker item's state means (section 2 of the planning model).
+
+    A Groundwork close counts only when the manifest records it (an intent or a
+    finished close) and either the gw-closed label for that reason is on the item
+    or the manifest says the transition happened. A gw-closed label with no
+    manifest record is ignored, so a person can't turn a not-planned close into
+    done, or done into not-planned, by adding a label. Any other close reads by
+    the tracker's own status, resolution or close reason against
+    field_map.statuses.closed_not_done.
+    """
+    prefix = field_map.get("close_label_prefix", DEFAULT_CLOSE_PREFIX)
+    labels = {lab[len(prefix):] for lab in raw.get("labels", []) if lab.startswith(prefix)}
+    close = (written or {}).get("close")
+    ours = close["reason"] if close and (close["reason"] in labels or close["state"] == "closed") else None
+    if raw["state"] == "closed":
+        if ours:
+            status = "done" if ours == "completed" else "closed_not_done"
+        else:
+            names = set(raw.get("closed_as", []))
+            status = "closed_not_done" if names & set(field_map["statuses"]["closed_not_done"]) else "done"
+        return {"key": raw["key"], "status": status, "close_pending": False, "drift": None}
+    category = raw.get("category", "todo")
+    if close and close["state"] == "closed":
+        return {"key": raw["key"], "status": category, "close_pending": False,
+                "drift": "reopened after Groundwork closed it"}
+    return {"key": raw["key"], "status": category, "close_pending": bool(close), "drift": None}
+
+
+def close_steps(closes, manifest, found):
+    """Ordered steps to close items: intent in the manifest first, as a batch of its own,
+    then for each item the gw-closed label and the transition, then the manifest again.
+
+    found: [{key, tracker_id, status, close_pending?}] from status. An item already
+    closed is skipped (a person's close is never relabelled). Close never deletes.
+    """
+    written = {i["key"]: i for i in (manifest or {}).get("items", [])}
+    by_key = {f["key"]: f for f in found}
+    intents, per_item, skipped, stops = [], [], [], []
+    for c in closes:
+        key, reason = c["key"], c["reason"]
+        if reason not in CLOSE_REASONS:
+            stops.append({"key": key, "why": f"unknown close reason '{reason}'"})
+            continue
+        f = by_key.get(key)
+        if f is None or key not in written:
+            stops.append({"key": key, "why": "no written item with this key; only items Groundwork wrote are closed"})
+            continue
+        if f["status"] in ("done", "closed_not_done") and not f.get("close_pending"):
+            skipped.append({"key": key, "why": f"already {f['status']}"})
+            continue
+        prior = written[key].get("close")
+        if prior and prior["reason"] != reason:
+            stops.append({"key": key, "why": f"a close as {prior['reason']} is already recorded; finish or revise it first"})
+            continue
+        if not prior:
+            intents.append({"key": key, "reason": reason})
+        per_item.append({"key": key, "tracker_id": f["tracker_id"], "reason": reason})
+    steps = []
+    if intents:
+        steps.append({"step": "manifest_intent", "items": intents})
+    for it in per_item:
+        steps.append({"step": "add_label", **it})
+        steps.append({"step": "transition", **it,
+                      "then": "if the tracker needs a person (no direct transition, a screen field, more than one hop), "
+                              "stop and name the item; it stays close pending"})
+    if per_item:
+        steps.append({"step": "manifest_closed", "keys": [it["key"] for it in per_item]})
+    return {"ok": not stops, "steps": steps, "skipped": skipped, "stops": stops}
+
+
+def scope_limit(overlay, requested=None):
+    """read_scope's limit: at most 200, lowered by the overlay or the runner, never raised."""
+    limit = min(READ_SCOPE_MAX, overlay.get("skills", {}).get("tracker", {}).get("read_scope_limit", READ_SCOPE_MAX))
+    if requested is not None:
+        limit = min(limit, requested)
+    return limit
+
+
+def scope_decision(count, overlay, requested=None):
+    limit = scope_limit(overlay, requested)
+    if count > limit:
+        return {"ok": False, "count": count, "limit": limit,
+                "then": "the scope is too large; ask the runner to narrow it (one epic, or a tighter filter) and read again"}
+    return {"ok": True, "count": count, "limit": limit}
 
 
 def make_manifest(prev, items, plan_id, run, seq, now, relies_on):
@@ -162,7 +270,9 @@ def make_manifest(prev, items, plan_id, run, seq, now, relies_on):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["lock", "preflight", "manifest"])
+    ap.add_argument("cmd", choices=["lock", "preflight", "manifest", "status", "close", "scope"])
+    ap.add_argument("--overlay")
+    ap.add_argument("--limit", type=int)
     ap.add_argument("files", nargs="*")
     ap.add_argument("--run")
     ap.add_argument("--account")
@@ -177,6 +287,16 @@ def main(argv=None):
         out = lock_decision(J(a.files[0]), a.run, a.account, ts(a.now))
     elif a.cmd == "preflight":
         out = preflight(J(a.files[0]), J(a.files[1]), J(a.files[2]), [x.strip() for x in a.phases.split(",")])
+    elif a.cmd == "status":
+        import gw_yaml
+        fm = gw_yaml.load(a.overlay)["skills"]["tracker"]["field_map"]
+        written = {i["key"]: i for i in (J(a.files[1]) or {}).get("items", [])}
+        out = {"items": [read_status(r, written.get(r["key"]), fm) for r in J(a.files[0])]}
+    elif a.cmd == "close":
+        out = close_steps(J(a.files[0]), J(a.files[1]), J(a.files[2]))
+    elif a.cmd == "scope":
+        import gw_yaml
+        out = scope_decision(int(a.files[0]), gw_yaml.load(a.overlay), a.limit)
     else:
         out = make_manifest(J(a.files[0]), J(a.files[1]), a.plan_id, a.run, a.seq, ts(a.now), J(a.relies_on) if a.relies_on else [])
     print(json.dumps(out, indent=2))

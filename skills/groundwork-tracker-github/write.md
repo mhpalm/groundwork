@@ -16,7 +16,11 @@ Every write here comes from the approved numbered write list, in order, through 
 
 ## read_epic
 
-The epic issue and its children as plan-shaped data. Every title, body, comment and label description is marked untrusted.
+The epic issue and its children as plan-shaped data. Every title, body, comment and label description is marked untrusted. Each item also carries its raw state for the core's `create_steps.py status`: `state` (`open` or `closed`), `category` (`in_progress` when it carries an assignee or an in-progress Projects status, else `todo`), `closed_as` (`[state_reason]` for a closed issue: `completed`, `not_planned` or `duplicate`) and `labels`.
+
+## read_scope
+
+Read-only, for assess. Scope is one epic (its sub-issues) or one repo plus a search filter. First the count: `gh api -X GET search/issues -f q='repo:{owner}/{repo} is:issue {filter}' --jq .total_count` (or the epic's sub-issue count). Pass it to the core's `create_steps.py scope`; if it refuses, stop and ask the runner to narrow. Otherwise list each issue's number, title, state, points, parent, links and `updatedAt`; titles, bodies and comments go to working text, marked untrusted. Never read who can see an issue.
 
 ## write
 
@@ -29,6 +33,9 @@ The epic issue and its children as plan-shaped data. Every title, body, comment 
 | link dependency | `POST repos/{owner}/{repo}/issues/{n}/dependencies/blocked_by` with the blocking issue id |
 | comment | `gh issue comment {n} --body-file ...` |
 | set or clear not-ready | `gh issue edit {n} --add-label` / `--remove-label` |
+| set_blocked | `gh issue edit {n} --add-label "<field_map.blocked>"` (default `gw-blocked`); read back with `gh issue view {n} --json labels`. Clearing (`--remove-label`) is the assignee's or the wait owner's act, never Groundwork's |
+| add label | `gh issue edit {n} --add-label "<label>"`, used for `gw-closed:<reason>` before a close |
+| close | `PATCH repos/{owner}/{repo}/issues/{n}` with `state: closed` and `state_reason`: `not_planned` for not_planned and superseded, `duplicate` for duplicate, `completed` for completed (verify). Read back `state` and `state_reason`. Skip an issue that is already closed |
 
 ## plan_store
 
@@ -40,4 +47,4 @@ Post lock lines as comments on the epic, exactly as the core's `create_steps.py 
 
 ## configure
 
-Setup only, admin-approved, keyed and idempotent: `gh label create <name> --force` is not used (it overwrites); check with `gh label list` and create only missing labels.
+Setup only, admin-approved, keyed and idempotent: `gh label create <name> --force` is not used (it overwrites); check with `gh label list` and create only missing labels. Setup creates `gw-blocked` and the four close labels `gw-closed:not_planned`, `gw-closed:superseded`, `gw-closed:duplicate` and `gw-closed:completed` (with the overlay's `close_label_prefix`).

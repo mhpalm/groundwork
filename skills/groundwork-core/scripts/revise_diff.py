@@ -7,15 +7,19 @@ Usage:
   revise_diff.py BASE_PLAN.json NEW_PLAN.json TRACKER.json --overlay OVERLAY.yaml
 
 TRACKER.json is what read_epic returned, normalized by the tracker skill:
-  [{key, tracker_id, owned_hash, status: todo|in_progress|done, updated_at, points}]
-  (owned_hash from check_hashes.py owned on each item's normalized fields)
+  [{key, tracker_id, owned_hash, status: todo|in_progress|done|closed_not_done, updated_at, points, drift?}]
+  (owned_hash from check_hashes.py owned on each item's normalized fields; status and drift from
+  create_steps.py status, so a gw-closed label only counts when the manifest recorded the close)
 
-Prints {ok, added, changed, close, deps_changed, phases_offered, drift, refused, relies_on}.
+Prints {ok, added, changed, close, close_items, deps_changed, phases_offered, drift, refused, relies_on}.
 - drift: a person changed a plan-owned field. The tracker wins: the revised plan
   must carry exactly the tracker's text for that task (marked from_tracker), or the
   diff is refused.
-- Done work is not edited: a changed or removed done task is refused; add a
-  follow-up task with a new id instead.
+- Done work is not edited: a changed or removed done or closed_not_done task is
+  refused; add a follow-up task with a new id instead.
+- A closed_not_done task never satisfies a dependency: a task that isn't finished
+  and depends on one is refused until the dependency is re-pointed.
+- A reopened item that Groundwork closed is drift.
 - Tasks are closed, never deleted.
 - relies_on lists each touched item's updated_at; apply refuses if any changed.
 Exit code 1 when anything is refused.
@@ -32,6 +36,7 @@ from check_hashes import owned_hash  # noqa: E402
 from render_proposal import task_body  # noqa: E402
 
 OWNED = ("title", "role_key", "phase")
+FINISHED = ("done", "closed_not_done")
 
 
 def rendered_hash(plan, overlay, t):
@@ -40,8 +45,8 @@ def rendered_hash(plan, overlay, t):
 
 
 def diff(base, new, tracker, overlay):
-    out = {"added": [], "changed": [], "close": [], "deps_changed": [], "phases_offered": [], "drift": [],
-           "refused": [], "relies_on": []}
+    out = {"added": [], "changed": [], "close": [], "close_items": [], "deps_changed": [], "phases_offered": [],
+           "drift": [], "refused": [], "relies_on": []}
     if new["id"] != base["id"]:
         out["refused"].append({"task": None, "why": "the revised plan has a different plan id; revise keeps the epic's plan id"})
         out["ok"] = False
@@ -52,6 +57,22 @@ def diff(base, new, tracker, overlay):
     nt = {t["id"]: t for t in new["tasks"]}
     tr = {i["key"]: i for i in tracker}
     touched = set()
+
+    def finished(item):
+        return bool(item) and item.get("status") in FINISHED
+
+    for k, item in sorted(tr.items()):
+        if item.get("drift"):
+            task = next((x["id"] for x in base["tasks"] if x["key"] == k), None)
+            out["drift"].append({"task": task, "tracker_id": item["tracker_id"], "why": item["drift"]})
+    dead = {x["id"] for x in base["tasks"] if tr.get(x["key"], {}).get("status") == "closed_not_done"}
+    for tid, t in sorted(nt.items()):
+        if finished(tr.get(t["key"])):
+            continue
+        bad = sorted({d["task"] for d in t["depends_on"]} & dead)
+        if bad:
+            out["refused"].append({"task": tid, "why": f"depends on {', '.join(bad)}, which was closed without being done; "
+                                                       "re-point the dependency or drop it"})
     for tid, t in sorted(nt.items()):
         if tid not in bt:
             out["added"].append(tid)
@@ -70,8 +91,9 @@ def diff(base, new, tracker, overlay):
                                                            "revised plan must adopt that text (marked from_tracker) before other edits"})
             continue
         if new_h != base_h:
-            if item and item.get("status") == "done":
-                out["refused"].append({"task": tid, "why": "done work is not edited; add a follow-up task with a new id"})
+            if finished(item):
+                out["refused"].append({"task": tid, "why": f"{item['status'].replace('_', ' ')} work is not edited; "
+                                                           "add a follow-up task with a new id"})
                 continue
             fields = [f for f in OWNED if t[f] != b[f]]
             if t["instructions"] != b["instructions"] or t["visible_result"] != b["visible_result"]:
@@ -81,8 +103,8 @@ def diff(base, new, tracker, overlay):
         bd = {d["task"] for d in b["depends_on"]}
         nd = {d["task"] for d in t["depends_on"]}
         if bd != nd:
-            if item and item.get("status") == "done":
-                out["refused"].append({"task": tid, "why": "done work is not edited; its dependencies stay as they were"})
+            if finished(item):
+                out["refused"].append({"task": tid, "why": "finished work is not edited; its dependencies stay as they were"})
                 continue
             out["deps_changed"].append({"task": tid, "added": sorted(nd - bd), "removed": sorted(bd - nd)})
             touched.add(b["key"])
@@ -90,10 +112,11 @@ def diff(base, new, tracker, overlay):
         if tid in nt:
             continue
         item = tr.get(b["key"])
-        if item and item.get("status") == "done":
-            out["refused"].append({"task": tid, "why": "a done task cannot be removed from the plan"})
+        if finished(item):
+            out["refused"].append({"task": tid, "why": f"a {item['status'].replace('_', ' ')} task cannot be removed from the plan"})
             continue
         out["close"].append(tid)
+        out["close_items"].append({"key": b["key"], "reason": "not_planned"})
         touched.add(b["key"])
     for tid in out["added"]:
         if any(t["key"] == nt[tid]["key"] for t in base["tasks"]):

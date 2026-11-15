@@ -31,7 +31,7 @@ Gap review is two layers run in order: a deterministic validator script that che
 | GR-20 | Each phase is about 5 person-days: fewer than 3 or more than 8 tasks is flagged (task count only) | V, minor |
 | GR-21 | Titles follow the overlay naming convention | V, minor |
 | GR-22 | Wording, clarity or ordering a reviewer would improve but that would not stop the executor | R, minor |
-| GR-23 | Every `depends_on` has a `satisfied_by`, and every `waits_on` maps to the tracker's blocked state | V |
+| GR-23 | Every `depends_on` has a `satisfied_by`, and every `waits_on` maps to the tracker's blocked state (the write list carries one `set_blocked` per waiting task) | V |
 | GR-24 | Each exception has one checkpoint per day, each with a visible result | V |
 | GR-25 | No `restricted` evidence is rendered into the proposal, review findings or snapshot beyond yes/no or a count | V |
 | GR-26 | Evidence used by offered phases is within `evidence_max_age_days` at approval, and recheck items were re-read before create | V |

@@ -49,7 +49,8 @@ class FakeTracker:
         self._write()
         tid = f"VOL-{next(self.ids)}"
         self.items[tid] = {"tracker_id": tid, "key": key, "title": title, "body": body, "role_key": role_key,
-                           "phase": phase, "points": points, "not_ready": True, "parent": None, "links": []}
+                           "phase": phase, "points": points, "not_ready": True, "parent": None, "links": [],
+                           "state": "open", "category": "todo", "closed_as": [], "labels": [], "blocked": False}
         self._recent.append(key)
         return tid
 
@@ -64,6 +65,31 @@ class FakeTracker:
     def clear_not_ready(self, tid):
         self._write()
         self.items[tid]["not_ready"] = False
+
+    def set_blocked(self, tid, on=True):
+        self._write()
+        self.items[tid]["blocked"] = on
+
+    def add_label(self, tid, label):
+        self._write()
+        if label not in self.items[tid]["labels"]:
+            self.items[tid]["labels"].append(label)
+
+    def close(self, tid, closed_as):
+        """The tracker's own close: GitHub state_reason, or a Jira status or resolution."""
+        self._write()
+        self.items[tid]["state"] = "closed"
+        self.items[tid]["closed_as"] = [closed_as]
+
+    def reopen(self, tid):
+        self._write()
+        self.items[tid]["state"] = "open"
+        self.items[tid]["closed_as"] = []
+
+    def raw(self, tid):
+        i = self.items[tid]
+        return {"key": i["key"], "state": i["state"], "category": i["category"], "closed_as": list(i["closed_as"]),
+                "labels": list(i["labels"])}
 
     def comment(self, account, body):
         self._write()
@@ -107,7 +133,7 @@ def planned_items(plan, overlay, phases):
         fields = {"title": t["title"], "body_owned": body, "role_key": t["role_key"], "phase": t["phase"], "key": t["key"]}
         deps = [f"gw:{plan['id']}:{d['task']}" for d in t["depends_on"]]
         out.append({"key": t["key"], "phase": t["phase"], "owned_hash": owned_hash(fields), "points": 1,
-                    "depends_on": deps, "task": t, "body": body})
+                    "depends_on": deps, "waits": bool(t.get("waits_on")), "task": t, "body": body})
     return out
 
 
@@ -121,6 +147,7 @@ def latest_manifest(tr, plan_id):
 
 
 def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic="VOL-1", hard_crash=False):
+    fm = overlay["skills"]["tracker"]["field_map"]
     """Follow the core's create procedure. Returns the preflight result."""
     decision = create_steps.lock_decision(tr.comments, run, account, tr.clock)
     if decision["decision"] == "claim":
@@ -137,8 +164,11 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
             found.append({"key": h["key"], "tracker_id": h["tracker_id"], "owned_hash": owned_hash(tr.normalize(h)),
                           "under_epic": h["key"] in children, "points": h["points"]})
     manifest = latest_manifest(tr, plan["id"])
-    pf = create_steps.preflight([{k: p[k] for k in ("key", "phase", "owned_hash", "points", "depends_on")} for p in planned],
-                                found, manifest, phases)
+    written = {i["key"]: i for i in (manifest or {}).get("items", [])}
+    for f in found:
+        f["status"] = create_steps.read_status(tr.raw(f["tracker_id"]), written.get(f["key"]), fm)["status"]
+    pf = create_steps.preflight([{k: p[k] for k in ("key", "phase", "owned_hash", "points", "depends_on", "waits")}
+                                 for p in planned], found, manifest, phases)
     if not pf["ok"]:
         tr.comment(account, create_steps.lock_line("release", run, account, tr.clock))
         return pf
@@ -189,6 +219,13 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
                     pending += 1
             if pending >= create_steps.BATCH:
                 checkpoint()
+        for a in pf["actions"]:
+            if a["action"] == "set_blocked" and not items[a["key"]].get("blocked_set"):
+                tr.set_blocked(items[a["key"]]["tracker_id"])
+                items[a["key"]]["blocked_set"] = True
+                pending += 1
+                if pending >= create_steps.BATCH:
+                    checkpoint()
         checkpoint()
         # freeze: flip item by item, recording each in the manifest
         for p in planned:
@@ -211,3 +248,50 @@ def run_create(tr, plan, overlay, phases, run="run-1", account="acct-dev", epic=
         return {"ok": False, "failed": str(e)}
     tr.comment(account, create_steps.lock_line("release", run, account, tr.clock))
     return pf
+
+
+def run_close(tr, plan, overlay, closes, run="run-c", account="acct-dev", crash_after=None):
+    """Follow the core's close procedure. crash_after: 'intent' | 'label' | 'transition' stops the session there."""
+    fm = overlay["skills"]["tracker"]["field_map"]
+    manifest = latest_manifest(tr, plan["id"])
+    written = {i["key"]: copy.deepcopy(i) for i in (manifest or {}).get("items", [])}
+    found = []
+    for k, w in written.items():
+        st = create_steps.read_status(tr.raw(w["tracker_id"]), w, fm)
+        found.append({"key": k, "tracker_id": w["tracker_id"], "status": st["status"], "close_pending": st["close_pending"]})
+    plan_steps = create_steps.close_steps(closes, manifest, found)
+    if not plan_steps["ok"]:
+        return plan_steps
+    seq = (manifest or {}).get("seq", 0)
+    prev = manifest
+
+    def put():
+        nonlocal seq, prev
+        m = create_steps.make_manifest(prev, sorted(written.values(), key=lambda i: i["key"]), plan["id"], run, seq + 1,
+                                       tr.clock, [])
+        tr.put(f"{plan['id']}-manifest-{seq + 1}", m)
+        seq += 1
+        prev = m
+
+    prefix = fm.get("close_label_prefix", create_steps.DEFAULT_CLOSE_PREFIX)
+    tracker_reason = {"not_planned": "not_planned", "superseded": "not_planned", "duplicate": "duplicate", "completed": "completed"}
+    for st in plan_steps["steps"]:
+        if st["step"] == "manifest_intent":
+            for it in st["items"]:
+                written[it["key"]]["close"] = {"reason": it["reason"], "state": "intent"}
+            put()
+            if crash_after == "intent":
+                return {"ok": False, "crashed": "intent"}
+        elif st["step"] == "add_label":
+            tr.add_label(st["tracker_id"], prefix + st["reason"])
+            if crash_after == "label":
+                return {"ok": False, "crashed": "label"}
+        elif st["step"] == "transition":
+            tr.close(st["tracker_id"], tracker_reason[st["reason"]])
+            if crash_after == "transition":
+                return {"ok": False, "crashed": "transition"}
+        elif st["step"] == "manifest_closed":
+            for k in st["keys"]:
+                written[k]["close"]["state"] = "closed"
+            put()
+    return {"ok": True, **plan_steps}
